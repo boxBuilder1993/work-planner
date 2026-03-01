@@ -33,6 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.boxbuilder.workplanner.data.model.Task
 import com.boxbuilder.workplanner.ui.tasklist.components.EmptyState
+import com.boxbuilder.workplanner.ui.tasklist.components.SearchFilterBar
 import com.boxbuilder.workplanner.ui.tasklist.components.TaskCard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +48,7 @@ fun TaskListScreen(
     val themes by viewModel.themes.collectAsStateWithLifecycle()
     val actionableItems by viewModel.actionableItems.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val searchFilters by viewModel.searchFilters.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
 
     Scaffold(
@@ -99,9 +101,11 @@ fun TaskListScreen(
                 )
                 Tab.SEARCH -> SearchTab(
                     query = searchQuery,
+                    filters = searchFilters,
                     results = searchResults,
                     viewModel = viewModel,
                     onQueryChange = viewModel::updateSearchQuery,
+                    onFiltersChange = viewModel::updateSearchFilters,
                     onTaskClick = onTaskClick
                 )
             }
@@ -170,9 +174,11 @@ private fun ActionableTab(
 @Composable
 private fun SearchTab(
     query: String,
+    filters: SearchFilters,
     results: List<Task>,
     viewModel: TaskListViewModel,
     onQueryChange: (String) -> Unit,
+    onFiltersChange: (SearchFilters) -> Unit,
     onTaskClick: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -182,8 +188,14 @@ private fun SearchTab(
             placeholder = { Text("Search tasks...") },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             singleLine = true
+        )
+
+        SearchFilterBar(
+            filters = filters,
+            onFiltersChange = onFiltersChange,
+            modifier = Modifier.padding(bottom = 8.dp)
         )
 
         if (query.isBlank()) {
@@ -194,7 +206,7 @@ private fun SearchTab(
         } else if (results.isEmpty()) {
             EmptyState(
                 title = "No tasks found",
-                subtitle = ""
+                subtitle = "Try adjusting your filters"
             )
         } else {
             LazyColumn(
@@ -210,6 +222,7 @@ private fun SearchTab(
                         task = task,
                         path = path,
                         showPriority = true,
+                        showDueDate = true,
                         onClick = { onTaskClick(task.id) }
                     )
                 }
