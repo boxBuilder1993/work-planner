@@ -50,10 +50,13 @@
 
 ## Phase 7: Google Auth
 
-- [ ] **7.1** Create `auth/GoogleAuthManager.kt` — Credential Manager API wrapper
-- [ ] **7.2** Create `di/AuthModule.kt` — provides GoogleAuthManager
-- [ ] **7.3** Create `ui/auth/AuthViewModel.kt` — sign-in, passphrase, restore state
-- [ ] **7.4** Create `ui/auth/AuthScreen.kt` — sign-in, passphrase creation, passphrase entry
+- [x] **7.1** Create `auth/GoogleAuthManager.kt` — Credential Manager API wrapper
+- [x] **7.1b** Create `auth/EncryptionManager.kt` — PBKDF2 key derivation + Android Keystore storage
+- [x] **7.2** Create `di/AuthModule.kt` — provides GoogleAuthManager, EncryptionManager, SharedPreferences
+- [x] **7.3** Create `ui/auth/AuthViewModel.kt` — sign-in, passphrase, restore state
+- [x] **7.4** Create `ui/auth/AuthScreen.kt` — sign-in, passphrase creation, passphrase entry
+- [x] **7.5** Create `ui/settings/SettingsScreen.kt` — account info + sign out (placeholder for Phase 9)
+- [x] **7.6** Wire Auth and Settings into navigation — Auth as start destination, sign-out returns to Auth
 
 ## Phase 8: KVStore + Backup
 

@@ -6,6 +6,8 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.boxbuilder.workplanner.ui.auth.AuthScreen
+import com.boxbuilder.workplanner.ui.settings.SettingsScreen
 import com.boxbuilder.workplanner.ui.taskdetail.TaskDetailScreen
 import com.boxbuilder.workplanner.ui.tasklist.TaskListScreen
 
@@ -13,8 +15,18 @@ import com.boxbuilder.workplanner.ui.tasklist.TaskListScreen
 fun NavGraph(navController: NavHostController) {
     NavHost(
         navController = navController,
-        startDestination = Screen.TaskList.route
+        startDestination = Screen.Auth.route
     ) {
+        composable(Screen.Auth.route) {
+            AuthScreen(
+                onAuthComplete = {
+                    navController.navigate(Screen.TaskList.route) {
+                        popUpTo(Screen.Auth.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Screen.TaskList.route) {
             TaskListScreen(
                 onTaskClick = { taskId ->
@@ -24,7 +36,7 @@ fun NavGraph(navController: NavHostController) {
                     navController.navigate(Screen.NewTask.createRoute(parentId))
                 },
                 onSettingsClick = {
-                    // TODO: Navigate to settings
+                    navController.navigate(Screen.Settings.route)
                 }
             )
         }
@@ -44,6 +56,17 @@ fun NavGraph(navController: NavHostController) {
                 onNavigateToTask = { taskId ->
                     navController.navigate(Screen.TaskDetail.createRoute(taskId)) {
                         popUpTo(Screen.TaskList.route)
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onSignedOut = {
+                    navController.navigate(Screen.Auth.route) {
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )
