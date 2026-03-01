@@ -13,11 +13,7 @@ class GoogleAuthManager(
     private val prefs: SharedPreferences
 ) {
     companion object {
-        // TODO: Replace with your Web OAuth 2.0 Client ID from Google Cloud Console.
-        // 1. Go to https://console.cloud.google.com/apis/credentials
-        // 2. Create an OAuth 2.0 "Web application" client ID
-        // 3. Also create an "Android" client ID with your app's SHA-1 fingerprint
-        const val WEB_CLIENT_ID = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+        const val WEB_CLIENT_ID = "887974376217-gjbc077ed1s0v79gg6df1oue6sroaq99.apps.googleusercontent.com"
 
         private const val PREF_SIGNED_IN = "signed_in"
         private const val PREF_USER_EMAIL = "user_email"
