@@ -13,7 +13,7 @@ class GoogleAuthManager(
     private val prefs: SharedPreferences
 ) {
     companion object {
-        const val WEB_CLIENT_ID = "887974376217-jubajtv5o3j30pf9e0i5es8ifkmvij0m.apps.googleusercontent.com"
+        const val WEB_CLIENT_ID = "887974376217-gjbc077ed1s0v79gg6df1oue6sroaq99.apps.googleusercontent.com"
 
         private const val PREF_SIGNED_IN = "signed_in"
         private const val PREF_USER_EMAIL = "user_email"
