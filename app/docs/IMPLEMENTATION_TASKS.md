@@ -24,29 +24,29 @@
 
 ## Phase 3: Dependency Injection
 
-- [ ] **3.1** Create `di/AppModule.kt` — provides Database, DAOs, TaskRepository
+- [x] **3.1** Create `di/AppModule.kt` — provides Database, DAOs, TaskRepository
 
 ## Phase 4: Navigation
 
-- [ ] **4.1** Create `ui/navigation/Screen.kt` — sealed class route definitions
-- [ ] **4.2** Create `ui/navigation/NavGraph.kt` — NavHost + route wiring
+- [x] **4.1** Create `ui/navigation/Screen.kt` — sealed class route definitions
+- [x] **4.2** Create `ui/navigation/NavGraph.kt` — NavHost + route wiring
 
 ## Phase 5: Task List Screen
 
-- [ ] **5.1** Create `ui/tasklist/TaskListViewModel.kt` — state, tab switching, data loading
-- [ ] **5.2** Create `ui/tasklist/TaskListScreen.kt` — 3-tab layout (Themes, Actionable, Search)
-- [ ] **5.3** Create `ui/tasklist/components/TaskCard.kt` — reusable task card composable
-- [ ] **5.4** Create `ui/tasklist/components/EmptyState.kt` — empty state composable
-- [ ] **5.5** Create `ui/common/components/LoadingIndicator.kt`
+- [x] **5.1** Create `ui/tasklist/TaskListViewModel.kt` — state, tab switching, data loading
+- [x] **5.2** Create `ui/tasklist/TaskListScreen.kt` — 3-tab layout (Themes, Actionable, Search)
+- [x] **5.3** Create `ui/tasklist/components/TaskCard.kt` — reusable task card composable
+- [x] **5.4** Create `ui/tasklist/components/EmptyState.kt` — empty state composable
+- [x] **5.5** Create `ui/common/components/LoadingIndicator.kt`
 
 ## Phase 6: Task Detail Screen
 
-- [ ] **6.1** Create `ui/taskdetail/TaskDetailViewModel.kt` — view/edit/create state, CRUD operations
-- [ ] **6.2** Create `ui/taskdetail/TaskDetailScreen.kt` — view mode, edit mode, new task mode
-- [ ] **6.3** Create `ui/taskdetail/components/TaskInfoSection.kt` — title, description, status, priority, due date
-- [ ] **6.4** Create `ui/taskdetail/components/CommentSection.kt` — comment list + input
-- [ ] **6.5** Create `ui/taskdetail/components/BreadcrumbBar.kt` — tappable hierarchy path
-- [ ] **6.6** Create `ui/taskdetail/components/ParentPickerDialog.kt` — searchable parent selector
+- [x] **6.1** Create `ui/taskdetail/TaskDetailViewModel.kt` — view/edit/create state, CRUD operations
+- [x] **6.2** Create `ui/taskdetail/TaskDetailScreen.kt` — view mode, edit mode, new task mode
+- [x] **6.3** Create `ui/taskdetail/components/TaskInfoSection.kt` — title, description, status, priority, due date
+- [x] **6.4** Create `ui/taskdetail/components/CommentSection.kt` — comment list + input
+- [x] **6.5** Create `ui/taskdetail/components/BreadcrumbBar.kt` — tappable hierarchy path
+- [ ] **6.6** Create `ui/taskdetail/components/ParentPickerDialog.kt` — searchable parent selector (deferred)
 
 ## Phase 7: Google Auth
 
