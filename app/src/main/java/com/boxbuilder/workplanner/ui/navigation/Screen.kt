@@ -1,6 +1,7 @@
 package com.boxbuilder.workplanner.ui.navigation
 
 sealed class Screen(val route: String) {
+    object Auth : Screen("auth")
     object TaskList : Screen("tasklist")
     object TaskDetail : Screen("taskdetail/{taskId}") {
         fun createRoute(taskId: String) = "taskdetail/$taskId"
