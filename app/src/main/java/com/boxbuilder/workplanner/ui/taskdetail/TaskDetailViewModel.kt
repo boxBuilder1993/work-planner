@@ -49,6 +49,13 @@ class TaskDetailViewModel @Inject constructor(
     private val _editState = MutableStateFlow(EditState())
     val editState: StateFlow<EditState> = _editState.asStateFlow()
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
+
     // UI-controlled state (isEditing, breadcrumbs) — separate from reactive data
     private val _localState = MutableStateFlow(
         LocalState(isEditing = taskId == null, isNewTask = taskId == null)
@@ -160,6 +167,20 @@ class TaskDetailViewModel @Inject constructor(
                 onSaved(task.id)
             } else {
                 val existing = uiState.value.task ?: return@launch
+
+                // Cannot close a task if any children are still open
+                if (edit.status == TaskStatus.CLOSED && existing.status != TaskStatus.CLOSED) {
+                    val openChildren = uiState.value.children.filter {
+                        it.status != TaskStatus.CLOSED
+                    }
+                    if (openChildren.isNotEmpty()) {
+                        _errorMessage.value =
+                            "Close all sub-tasks before closing this task " +
+                            "(${openChildren.size} still open)"
+                        return@launch
+                    }
+                }
+
                 val updated = existing.copy(
                     title = edit.title,
                     description = edit.description,
