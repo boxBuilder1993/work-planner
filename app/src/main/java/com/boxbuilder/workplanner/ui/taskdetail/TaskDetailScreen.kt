@@ -23,16 +23,23 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.boxbuilder.workplanner.data.model.Task
 import com.boxbuilder.workplanner.ui.common.components.LoadingIndicator
 import com.boxbuilder.workplanner.ui.taskdetail.components.BreadcrumbBar
 import com.boxbuilder.workplanner.ui.taskdetail.components.CommentSection
+import com.boxbuilder.workplanner.ui.taskdetail.components.ParentPickerDialog
 import com.boxbuilder.workplanner.ui.taskdetail.components.TaskInfoEditMode
 import com.boxbuilder.workplanner.ui.taskdetail.components.TaskInfoViewMode
 import com.boxbuilder.workplanner.ui.tasklist.components.TaskCard
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +52,20 @@ fun TaskDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val editState by viewModel.editState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    // Parent picker state
+    var showParentPicker by remember { mutableStateOf(false) }
+    var allTasks by remember { mutableStateOf(emptyList<Task>()) }
+    var descendantIds by remember { mutableStateOf(emptySet<String>()) }
+
+    // Resolve parent name from editState.parentId (try allTasks first, fall back to breadcrumbs)
+    val parentName = remember(editState.parentId, allTasks, uiState.breadcrumbs) {
+        editState.parentId?.let { pid ->
+            allTasks.find { it.id == pid }?.title
+                ?: uiState.breadcrumbs.find { it.id == pid }?.title
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -117,6 +138,16 @@ fun TaskDetailScreen(
                         onStatusChange = viewModel::updateStatus,
                         onPriorityChange = viewModel::updatePriority,
                         onDueDateChange = viewModel::updateDueDate,
+                        onChangeParentClick = {
+                            scope.launch {
+                                allTasks = viewModel.getAllTasksForPicker()
+                                uiState.task?.let { task ->
+                                    descendantIds = viewModel.getDescendantIds(task.id)
+                                }
+                                showParentPicker = true
+                            }
+                        },
+                        parentName = parentName,
                         modifier = Modifier.padding(top = 16.dp)
                     )
                 } else {
@@ -172,6 +203,21 @@ fun TaskDetailScreen(
                     )
                 }
             }
+        }
+
+        // Parent picker dialog
+        if (showParentPicker) {
+            ParentPickerDialog(
+                tasks = allTasks,
+                currentParentId = editState.parentId,
+                excludeTaskId = uiState.task?.id,
+                excludeDescendantIds = descendantIds,
+                onParentSelected = { newParentId ->
+                    viewModel.updateParentId(newParentId)
+                    showParentPicker = false
+                },
+                onDismiss = { showParentPicker = false }
+            )
         }
     }
 }

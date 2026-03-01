@@ -39,6 +39,9 @@ class TaskRepository(
     fun searchTasks(query: String): Flow<List<Task>> =
         taskDao.searchTasks(query).map { list -> list.map { it.toDomain() } }
 
+    suspend fun getAllTasks(): List<Task> =
+        taskDao.getAllTasks().map { it.toDomain() }
+
     // ── Task mutations ───────────────────────────────────────
 
     suspend fun createTask(
