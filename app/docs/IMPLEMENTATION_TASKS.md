@@ -3,9 +3,9 @@
 ## Phase 1: Project Setup
 
 - [x] **1.1** Add dependencies to `gradle/libs.versions.toml` and `app/build.gradle.kts` — Compose, Room, Hilt, Navigation, KSP, Kotlin Serialization, WorkManager, Credential Manager, Google Drive API
-- [ ] **1.2** Create `WorkPlannerApp.kt` — `@HiltAndroidApp` Application class
-- [ ] **1.3** Create `MainActivity.kt` — single-activity, `setContent {}` with Compose theme
-- [ ] **1.4** Set up Material3 theme — `ui/theme/Color.kt`, `Type.kt`, `Theme.kt`
+- [x] **1.2** Create `WorkPlannerApp.kt` — `@HiltAndroidApp` Application class
+- [x] **1.3** Create `MainActivity.kt` — single-activity, `setContent {}` with Compose theme
+- [x] **1.4** Set up Material3 theme — `ui/theme/Color.kt`, `Type.kt`, `Theme.kt`
 
 ## Phase 2: Data Layer
 
