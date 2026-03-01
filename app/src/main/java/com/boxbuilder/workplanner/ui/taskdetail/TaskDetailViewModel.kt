@@ -180,6 +180,24 @@ class TaskDetailViewModel @Inject constructor(
         }
     }
 
+    suspend fun getAllTasksForPicker(): List<Task> {
+        return repository.getAllTasks()
+    }
+
+    suspend fun getDescendantIds(rootId: String): Set<String> {
+        val allTasks = repository.getAllTasks()
+        val childrenMap = allTasks.groupBy { it.parentId }
+        val descendants = mutableSetOf<String>()
+        fun collect(id: String) {
+            childrenMap[id]?.forEach { child ->
+                descendants.add(child.id)
+                collect(child.id)
+            }
+        }
+        collect(rootId)
+        return descendants
+    }
+
     fun addComment(text: String) {
         val id = taskId ?: return
         if (text.isBlank()) return

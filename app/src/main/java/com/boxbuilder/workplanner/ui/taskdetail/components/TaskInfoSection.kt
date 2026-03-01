@@ -1,5 +1,6 @@
 package com.boxbuilder.workplanner.ui.taskdetail.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,15 +8,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +86,8 @@ fun TaskInfoEditMode(
     onStatusChange: (TaskStatus) -> Unit,
     onPriorityChange: (Int) -> Unit,
     onDueDateChange: (Long?) -> Unit,
+    onChangeParentClick: () -> Unit,
+    parentName: String?,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -116,6 +128,20 @@ fun TaskInfoEditMode(
             dueDate = editState.dueDate,
             onDueDateChange = onDueDateChange
         )
+
+        // Parent picker (not on new tasks — parent is set by navigation)
+        if (!isNewTask) {
+            OutlinedTextField(
+                value = parentName ?: "None (root-level theme)",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Parent") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onChangeParentClick),
+                enabled = false
+            )
+        }
     }
 }
 
@@ -177,11 +203,14 @@ private fun PriorityDropdown(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DueDateField(
     dueDate: Long?,
     onDueDateChange: (Long?) -> Unit
 ) {
+    var showDatePicker by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -193,9 +222,41 @@ private fun DueDateField(
             readOnly = true,
             label = { Text("Due date") },
             placeholder = { Text("No due date") },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .clickable { showDatePicker = true },
+            trailingIcon = {
+                Row {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(Icons.Default.DateRange, contentDescription = "Pick date")
+                    }
+                    if (dueDate != null) {
+                        IconButton(onClick = { onDueDateChange(null) }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear date")
+                        }
+                    }
+                }
+            },
+            enabled = false
         )
-        // TODO: Add date picker dialog trigger and clear button
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dueDate)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDueDateChange(datePickerState.selectedDateMillis)
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 }
 

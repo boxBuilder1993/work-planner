@@ -46,7 +46,7 @@
 - [x] **6.3** Create `ui/taskdetail/components/TaskInfoSection.kt` — title, description, status, priority, due date
 - [x] **6.4** Create `ui/taskdetail/components/CommentSection.kt` — comment list + input
 - [x] **6.5** Create `ui/taskdetail/components/BreadcrumbBar.kt` — tappable hierarchy path
-- [ ] **6.6** Create `ui/taskdetail/components/ParentPickerDialog.kt` — searchable parent selector (deferred)
+- [x] **6.6** Create `ui/taskdetail/components/ParentPickerDialog.kt` — searchable parent selector
 
 ## Phase 7: Google Auth
 
