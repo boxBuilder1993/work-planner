@@ -2,7 +2,7 @@
 
 ## Phase 1: Project Setup
 
-- [ ] **1.1** Add dependencies to `gradle/libs.versions.toml` and `app/build.gradle.kts` — Compose, Room, Hilt, Navigation, KSP, Kotlin Serialization, WorkManager, Credential Manager, Google Drive API
+- [x] **1.1** Add dependencies to `gradle/libs.versions.toml` and `app/build.gradle.kts` — Compose, Room, Hilt, Navigation, KSP, Kotlin Serialization, WorkManager, Credential Manager, Google Drive API
 - [ ] **1.2** Create `WorkPlannerApp.kt` — `@HiltAndroidApp` Application class
 - [ ] **1.3** Create `MainActivity.kt` — single-activity, `setContent {}` with Compose theme
 - [ ] **1.4** Set up Material3 theme — `ui/theme/Color.kt`, `Type.kt`, `Theme.kt`
@@ -74,4 +74,15 @@
 
 - [ ] **10.1** Update `AndroidManifest.xml` — permissions (INTERNET), MainActivity, Application class
 - [ ] **10.2** Wire start destination logic — Auth vs TaskList based on sign-in state
-- [ ] **10.3** End-to-end test — create theme, add sub-tasks, add comments, close task, search
+
+## Phase 11: Tests
+
+- [ ] **11.1** Add test dependencies — JUnit, Turbine (Flow testing), Compose test, Room test
+- [ ] **11.2** Create fake DAOs — `FakeTaskDao`, `FakeCommentDao` implementing plain interfaces
+- [ ] **11.3** Unit tests — mappers (`TaskMapper`, `CommentMapper`)
+- [ ] **11.4** Unit tests — `TaskRepository` (with fake DAOs)
+- [ ] **11.5** Unit tests — `TaskListViewModel`
+- [ ] **11.6** Unit tests — `TaskDetailViewModel`
+- [ ] **11.7** Instrumented tests — Room DAO queries (in-memory DB)
+- [ ] **11.8** Instrumented tests — Compose UI tests (screen rendering, navigation flows)
+- [ ] **11.9** End-to-end test — create theme, add sub-tasks, add comments, close task, search
