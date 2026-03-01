@@ -18,10 +18,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.boxbuilder.workplanner.data.model.Task
+import com.boxbuilder.workplanner.data.model.TaskStatus
 import com.boxbuilder.workplanner.ui.common.components.LoadingIndicator
 import com.boxbuilder.workplanner.ui.taskdetail.components.BreadcrumbBar
 import com.boxbuilder.workplanner.ui.taskdetail.components.CommentSection
@@ -52,7 +56,17 @@ fun TaskDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val editState by viewModel.editState.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Show error message as snackbar
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
 
     // Parent picker state
     var showParentPicker by remember { mutableStateOf(false) }
@@ -68,6 +82,7 @@ fun TaskDetailScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {},
@@ -179,16 +194,19 @@ fun TaskDetailScreen(
                     )
                 }
 
-                item {
-                    Button(
-                        onClick = {
-                            uiState.task?.let { onNewChild(it.id) }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text("+ Add Child")
+                // Hide "+ Add Child" for closed tasks
+                if (uiState.task?.status != TaskStatus.CLOSED) {
+                    item {
+                        Button(
+                            onClick = {
+                                uiState.task?.let { onNewChild(it.id) }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text("+ Add Child")
+                        }
                     }
                 }
 

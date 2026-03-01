@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.boxbuilder.workplanner.data.model.Task
+import com.boxbuilder.workplanner.data.model.TaskStatus
 
 @Composable
 fun ParentPickerDialog(
@@ -38,10 +39,11 @@ fun ParentPickerDialog(
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
-    // Filter out the task itself and its descendants (can't re-parent to self or children)
+    // Filter out the task itself, its descendants, and closed tasks
     val availableTasks = tasks.filter { task ->
         task.id != excludeTaskId &&
         task.id !in excludeDescendantIds &&
+        task.status != TaskStatus.CLOSED &&
         (searchQuery.isBlank() ||
          task.title.contains(searchQuery, ignoreCase = true))
     }
