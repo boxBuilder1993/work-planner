@@ -9,18 +9,18 @@
 
 ## Phase 2: Data Layer
 
-- [ ] **2.1** Create `data/entity/TaskEntity.kt` — `@Entity` + `@Serializable`
-- [ ] **2.2** Create `data/entity/CommentEntity.kt` — `@Entity` + `@Serializable`
-- [ ] **2.3** Create `data/model/Task.kt`, `TaskStatus.kt`, `TaskWithDetails.kt` — domain models
-- [ ] **2.4** Create `data/model/Comment.kt` — domain model
-- [ ] **2.5** Create `data/mapper/TaskMapper.kt` — `toDomain()` / `toEntity()` extensions
-- [ ] **2.6** Create `data/mapper/CommentMapper.kt` — `toDomain()` / `toEntity()` extensions
-- [ ] **2.7** Create `data/dao/TaskDao.kt` — plain Kotlin interface (no Room annotations)
-- [ ] **2.8** Create `data/dao/CommentDao.kt` — plain Kotlin interface
-- [ ] **2.9** Create `data/room/RoomTaskDao.kt` — extends TaskDao, Room annotations
-- [ ] **2.10** Create `data/room/RoomCommentDao.kt` — extends CommentDao, Room annotations
-- [ ] **2.11** Create `data/room/WorkPlannerDatabase.kt` — `@Database`, exposes Room DAOs
-- [ ] **2.12** Create `data/TaskRepository.kt` — wraps DAOs, maps to domain, hierarchy helpers
+- [x] **2.1** Create `data/entity/TaskEntity.kt` — `@Entity` + `@Serializable`
+- [x] **2.2** Create `data/entity/CommentEntity.kt` — `@Entity` + `@Serializable`
+- [x] **2.3** Create `data/model/Task.kt`, `TaskStatus.kt`, `TaskWithDetails.kt` — domain models
+- [x] **2.4** Create `data/model/Comment.kt` — domain model
+- [x] **2.5** Create `data/mapper/TaskMapper.kt` — `toDomain()` / `toEntity()` extensions
+- [x] **2.6** Create `data/mapper/CommentMapper.kt` — `toDomain()` / `toEntity()` extensions
+- [x] **2.7** Create `data/dao/TaskDao.kt` — plain Kotlin interface (no Room annotations)
+- [x] **2.8** Create `data/dao/CommentDao.kt` — plain Kotlin interface
+- [x] **2.9** Create `data/room/RoomTaskDao.kt` — extends TaskDao, Room annotations
+- [x] **2.10** Create `data/room/RoomCommentDao.kt` — extends CommentDao, Room annotations
+- [x] **2.11** Create `data/room/WorkPlannerDatabase.kt` — `@Database`, exposes Room DAOs
+- [x] **2.12** Create `data/TaskRepository.kt` — wraps DAOs, maps to domain, hierarchy helpers
 
 ## Phase 3: Dependency Injection
 
