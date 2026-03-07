@@ -1,5 +1,9 @@
 package com.boxbuilder.workplanner.ui.auth
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,9 +38,32 @@ fun AuthScreen(
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
+    // Launcher for Drive consent PendingIntent
+    val consentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        viewModel.onDriveConsentResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    // Launch consent dialog when ViewModel provides a PendingIntent
+    LaunchedEffect(uiState.driveConsentIntent) {
+        uiState.driveConsentIntent?.let { pendingIntent ->
+            consentLauncher.launch(
+                IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+            )
+        }
+    }
+
+    // Complete auth when ready
     LaunchedEffect(uiState.isReady) {
         if (uiState.isReady) onAuthComplete()
+    }
+
+    // If signed in but needs Drive auth (deferred from init), trigger it now
+    LaunchedEffect(uiState.isSignedIn, uiState.isLoading) {
+        viewModel.requestDriveAuthorizationIfNeeded(context)
     }
 
     Box(
@@ -59,8 +86,7 @@ fun AuthScreen(
                 PassphraseEntryContent(
                     error = uiState.passphraseError,
                     onEnterPassphrase = { passphrase ->
-                        // Phase 8: salt will be downloaded from Drive
-                        // For now this path isn't reachable in Phase 7
+                        viewModel.enterPassphrase(passphrase)
                     },
                     onSkip = viewModel::skipRestore
                 )

@@ -1,5 +1,6 @@
 package com.boxbuilder.workplanner.ui.auth
 
+import android.app.PendingIntent
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -26,7 +27,8 @@ data class AuthUiState(
     val error: String? = null,
     val userName: String? = null,
     val userEmail: String? = null,
-    val isReady: Boolean = false
+    val isReady: Boolean = false,
+    val driveConsentIntent: PendingIntent? = null
 )
 
 @HiltViewModel
@@ -40,10 +42,12 @@ class AuthViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
+    private var remoteSalt: ByteArray? = null
+    private var pendingActivityContext: Context? = null
+
     init {
         if (authManager.isSignedIn) {
             if (encryptionManager.hasEncryptionKey) {
-                // Fully set up — schedule sync and go
                 SyncWorker.schedule(context)
                 _uiState.value = AuthUiState(
                     isSignedIn = true,
@@ -52,10 +56,12 @@ class AuthViewModel @Inject constructor(
                     userEmail = authManager.userEmail
                 )
             } else {
-                // Signed in but no encryption key — need passphrase setup
+                // Signed in but no encryption key — need to authorize Drive and check backup.
+                // Drive authorization requires an Activity context, so we defer until
+                // the UI calls requestDriveAuthorizationIfNeeded().
                 _uiState.value = AuthUiState(
                     isSignedIn = true,
-                    needsPassphraseCreation = true,
+                    isLoading = true,
                     userName = authManager.userName,
                     userEmail = authManager.userEmail
                 )
@@ -63,19 +69,34 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Called by the UI once an Activity context is available, to complete the
+     * Drive authorization + backup check flow that was deferred from init.
+     */
+    fun requestDriveAuthorizationIfNeeded(activityContext: Context) {
+        val state = _uiState.value
+        if (state.isSignedIn && state.isLoading && !state.isReady &&
+            !state.needsPassphraseCreation && !state.needsPassphraseEntry
+        ) {
+            pendingActivityContext = activityContext
+            viewModelScope.launch {
+                requestDriveAuthAndCheckBackup(activityContext)
+            }
+        }
+    }
+
     fun signIn(activityContext: Context) {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        pendingActivityContext = activityContext
         viewModelScope.launch {
             authManager.signIn(activityContext).fold(
                 onSuccess = {
                     _uiState.value = _uiState.value.copy(
                         isSignedIn = true,
-                        isLoading = false,
                         userName = authManager.userName,
                         userEmail = authManager.userEmail
                     )
-                    // Check Drive for existing backup
-                    checkForExistingBackup()
+                    requestDriveAuthAndCheckBackup(activityContext)
                 },
                 onFailure = { e ->
                     _uiState.value = _uiState.value.copy(
@@ -87,18 +108,65 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    private suspend fun checkForExistingBackup() {
+    private suspend fun requestDriveAuthAndCheckBackup(activityContext: Context) {
+        _uiState.value = _uiState.value.copy(isLoading = true)
         try {
-            // Need a temporary encryption key to check Drive — but we can't create
-            // a BackupProcessor without one. The hasRemoteBackup() check only needs
-            // Drive access (file existence check), not decryption. However, our
-            // BackupProcessorFactory requires an encryption key.
-            // For now, default to passphrase creation. The user can restore from
-            // Settings after setup if they have an existing backup.
-            _uiState.value = _uiState.value.copy(needsPassphraseCreation = true)
+            when (val result = authManager.requestDriveAuthorization(activityContext)) {
+                is GoogleAuthManager.DriveAuthResult.Authorized -> {
+                    checkForExistingBackup()
+                }
+                is GoogleAuthManager.DriveAuthResult.NeedsConsent -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        driveConsentIntent = result.pendingIntent
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Drive authorization failed", e)
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = "Drive authorization failed: ${e.message}"
+            )
+        }
+    }
+
+    fun onDriveConsentResult(granted: Boolean) {
+        _uiState.value = _uiState.value.copy(driveConsentIntent = null)
+        if (granted) {
+            viewModelScope.launch {
+                checkForExistingBackup()
+            }
+        } else {
+            _uiState.value = _uiState.value.copy(
+                error = "Drive access is required for backup. Please try again."
+            )
+        }
+    }
+
+    private suspend fun checkForExistingBackup() {
+        _uiState.value = _uiState.value.copy(isLoading = true)
+        try {
+            val hasBackup = backupProcessorFactory.hasRemoteBackup()
+            if (hasBackup) {
+                remoteSalt = backupProcessorFactory.downloadSalt()
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    needsPassphraseEntry = true,
+                    hasCloudBackup = true
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    needsPassphraseCreation = true
+                )
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Backup check failed, defaulting to passphrase creation", e)
-            _uiState.value = _uiState.value.copy(needsPassphraseCreation = true)
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                needsPassphraseCreation = true
+            )
         }
     }
 
@@ -116,7 +184,14 @@ class AuthViewModel @Inject constructor(
             return
         }
 
-        encryptionManager.createKeyFromPassphrase(passphrase)
+        val salt = encryptionManager.createKeyFromPassphrase(passphrase)
+        viewModelScope.launch {
+            try {
+                backupProcessorFactory.uploadSalt(salt)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to upload salt to Drive", e)
+            }
+        }
         SyncWorker.schedule(context)
         _uiState.value = _uiState.value.copy(
             needsPassphraseCreation = false,
@@ -125,10 +200,18 @@ class AuthViewModel @Inject constructor(
         )
     }
 
-    fun enterPassphrase(passphrase: String, salt: ByteArray) {
+    fun enterPassphrase(passphrase: String) {
         if (passphrase.isBlank()) {
             _uiState.value = _uiState.value.copy(
                 passphraseError = "Passphrase cannot be empty"
+            )
+            return
+        }
+
+        val salt = remoteSalt
+        if (salt == null) {
+            _uiState.value = _uiState.value.copy(
+                passphraseError = "Could not retrieve encryption salt from Drive"
             )
             return
         }
@@ -148,7 +231,6 @@ class AuthViewModel @Inject constructor(
                     isReady = true
                 )
             } catch (e: Exception) {
-                // Decryption failure likely means wrong passphrase
                 encryptionManager.clearKey()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
