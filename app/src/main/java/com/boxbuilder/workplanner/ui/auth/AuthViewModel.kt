@@ -40,6 +40,8 @@ class AuthViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
+    private var remoteSalt: ByteArray? = null
+
     init {
         if (authManager.isSignedIn) {
             if (encryptionManager.hasEncryptionKey) {
@@ -52,13 +54,16 @@ class AuthViewModel @Inject constructor(
                     userEmail = authManager.userEmail
                 )
             } else {
-                // Signed in but no encryption key — need passphrase setup
+                // Signed in but no encryption key — check Drive for existing backup
                 _uiState.value = AuthUiState(
                     isSignedIn = true,
-                    needsPassphraseCreation = true,
+                    isLoading = true,
                     userName = authManager.userName,
                     userEmail = authManager.userEmail
                 )
+                viewModelScope.launch {
+                    checkForExistingBackup()
+                }
             }
         }
     }
@@ -70,7 +75,6 @@ class AuthViewModel @Inject constructor(
                 onSuccess = {
                     _uiState.value = _uiState.value.copy(
                         isSignedIn = true,
-                        isLoading = false,
                         userName = authManager.userName,
                         userEmail = authManager.userEmail
                     )
@@ -88,17 +92,28 @@ class AuthViewModel @Inject constructor(
     }
 
     private suspend fun checkForExistingBackup() {
+        _uiState.value = _uiState.value.copy(isLoading = true)
         try {
-            // Need a temporary encryption key to check Drive — but we can't create
-            // a BackupProcessor without one. The hasRemoteBackup() check only needs
-            // Drive access (file existence check), not decryption. However, our
-            // BackupProcessorFactory requires an encryption key.
-            // For now, default to passphrase creation. The user can restore from
-            // Settings after setup if they have an existing backup.
-            _uiState.value = _uiState.value.copy(needsPassphraseCreation = true)
+            val hasBackup = backupProcessorFactory.hasRemoteBackup()
+            if (hasBackup) {
+                remoteSalt = backupProcessorFactory.downloadSalt()
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    needsPassphraseEntry = true,
+                    hasCloudBackup = true
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    needsPassphraseCreation = true
+                )
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Backup check failed, defaulting to passphrase creation", e)
-            _uiState.value = _uiState.value.copy(needsPassphraseCreation = true)
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                needsPassphraseCreation = true
+            )
         }
     }
 
@@ -116,7 +131,14 @@ class AuthViewModel @Inject constructor(
             return
         }
 
-        encryptionManager.createKeyFromPassphrase(passphrase)
+        val salt = encryptionManager.createKeyFromPassphrase(passphrase)
+        viewModelScope.launch {
+            try {
+                backupProcessorFactory.uploadSalt(salt)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to upload salt to Drive", e)
+            }
+        }
         SyncWorker.schedule(context)
         _uiState.value = _uiState.value.copy(
             needsPassphraseCreation = false,
@@ -125,10 +147,18 @@ class AuthViewModel @Inject constructor(
         )
     }
 
-    fun enterPassphrase(passphrase: String, salt: ByteArray) {
+    fun enterPassphrase(passphrase: String) {
         if (passphrase.isBlank()) {
             _uiState.value = _uiState.value.copy(
                 passphraseError = "Passphrase cannot be empty"
+            )
+            return
+        }
+
+        val salt = remoteSalt
+        if (salt == null) {
+            _uiState.value = _uiState.value.copy(
+                passphraseError = "Could not retrieve encryption salt from Drive"
             )
             return
         }

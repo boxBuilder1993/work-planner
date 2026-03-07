@@ -59,8 +59,7 @@ fun AuthScreen(
                 PassphraseEntryContent(
                     error = uiState.passphraseError,
                     onEnterPassphrase = { passphrase ->
-                        // Phase 8: salt will be downloaded from Drive
-                        // For now this path isn't reachable in Phase 7
+                        viewModel.enterPassphrase(passphrase)
                     },
                     onSkip = viewModel::skipRestore
                 )
