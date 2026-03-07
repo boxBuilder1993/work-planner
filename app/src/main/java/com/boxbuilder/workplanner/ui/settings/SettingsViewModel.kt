@@ -14,9 +14,9 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val isSyncing: Boolean = false,
-    val syncResult: String? = null,
     val isRestoring: Boolean = false,
-    val restoreResult: String? = null
+    val statusMessage: String? = null,
+    val isStatusError: Boolean = false
 )
 
 @HiltViewModel
@@ -29,36 +29,36 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     fun syncNow() {
-        _uiState.value = _uiState.value.copy(isSyncing = true, syncResult = null)
+        _uiState.value = _uiState.value.copy(isSyncing = true, statusMessage = null)
         viewModelScope.launch {
             try {
                 val processor = backupProcessorFactory.create()
                 processor.performBackup()
-                _uiState.value = _uiState.value.copy(isSyncing = false, syncResult = "Backup completed successfully")
+                _uiState.value = _uiState.value.copy(isSyncing = false, statusMessage = "Backup completed successfully", isStatusError = false)
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isSyncing = false, syncResult = "Backup failed: ${e.message}")
+                _uiState.value = _uiState.value.copy(isSyncing = false, statusMessage = "Backup failed: ${e.message}", isStatusError = true)
             }
         }
     }
 
     fun restoreFromBackup() {
-        _uiState.value = _uiState.value.copy(isRestoring = true, restoreResult = null)
+        _uiState.value = _uiState.value.copy(isRestoring = true, statusMessage = null)
         viewModelScope.launch {
             try {
                 val processor = backupProcessorFactory.create()
                 val found = processor.performRestore()
-                _uiState.value = if (found) {
-                    _uiState.value.copy(isRestoring = false, restoreResult = "Restore completed successfully")
-                } else {
-                    _uiState.value.copy(isRestoring = false, restoreResult = "No backup found on Drive")
-                }
+                _uiState.value = _uiState.value.copy(
+                    isRestoring = false,
+                    statusMessage = if (found) "Restore completed successfully" else "No backup found on Drive",
+                    isStatusError = !found
+                )
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isRestoring = false, restoreResult = "Restore failed: ${e.message}")
+                _uiState.value = _uiState.value.copy(isRestoring = false, statusMessage = "Restore failed: ${e.message}", isStatusError = true)
             }
         }
     }
 
     fun clearResult() {
-        _uiState.value = _uiState.value.copy(syncResult = null, restoreResult = null)
+        _uiState.value = _uiState.value.copy(statusMessage = null)
     }
 }

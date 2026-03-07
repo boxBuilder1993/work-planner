@@ -1,5 +1,6 @@
 package com.boxbuilder.workplanner.ui.auth
 
+import android.app.PendingIntent
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -26,7 +27,8 @@ data class AuthUiState(
     val error: String? = null,
     val userName: String? = null,
     val userEmail: String? = null,
-    val isReady: Boolean = false
+    val isReady: Boolean = false,
+    val driveConsentIntent: PendingIntent? = null
 )
 
 @HiltViewModel
@@ -41,11 +43,11 @@ class AuthViewModel @Inject constructor(
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     private var remoteSalt: ByteArray? = null
+    private var pendingActivityContext: Context? = null
 
     init {
         if (authManager.isSignedIn) {
             if (encryptionManager.hasEncryptionKey) {
-                // Fully set up — schedule sync and go
                 SyncWorker.schedule(context)
                 _uiState.value = AuthUiState(
                     isSignedIn = true,
@@ -54,22 +56,38 @@ class AuthViewModel @Inject constructor(
                     userEmail = authManager.userEmail
                 )
             } else {
-                // Signed in but no encryption key — check Drive for existing backup
+                // Signed in but no encryption key — need to authorize Drive and check backup.
+                // Drive authorization requires an Activity context, so we defer until
+                // the UI calls requestDriveAuthorizationIfNeeded().
                 _uiState.value = AuthUiState(
                     isSignedIn = true,
                     isLoading = true,
                     userName = authManager.userName,
                     userEmail = authManager.userEmail
                 )
-                viewModelScope.launch {
-                    checkForExistingBackup()
-                }
+            }
+        }
+    }
+
+    /**
+     * Called by the UI once an Activity context is available, to complete the
+     * Drive authorization + backup check flow that was deferred from init.
+     */
+    fun requestDriveAuthorizationIfNeeded(activityContext: Context) {
+        val state = _uiState.value
+        if (state.isSignedIn && state.isLoading && !state.isReady &&
+            !state.needsPassphraseCreation && !state.needsPassphraseEntry
+        ) {
+            pendingActivityContext = activityContext
+            viewModelScope.launch {
+                requestDriveAuthAndCheckBackup(activityContext)
             }
         }
     }
 
     fun signIn(activityContext: Context) {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        pendingActivityContext = activityContext
         viewModelScope.launch {
             authManager.signIn(activityContext).fold(
                 onSuccess = {
@@ -78,8 +96,7 @@ class AuthViewModel @Inject constructor(
                         userName = authManager.userName,
                         userEmail = authManager.userEmail
                     )
-                    // Check Drive for existing backup
-                    checkForExistingBackup()
+                    requestDriveAuthAndCheckBackup(activityContext)
                 },
                 onFailure = { e ->
                     _uiState.value = _uiState.value.copy(
@@ -87,6 +104,42 @@ class AuthViewModel @Inject constructor(
                         error = e.message ?: "Sign-in failed"
                     )
                 }
+            )
+        }
+    }
+
+    private suspend fun requestDriveAuthAndCheckBackup(activityContext: Context) {
+        _uiState.value = _uiState.value.copy(isLoading = true)
+        try {
+            when (val result = authManager.requestDriveAuthorization(activityContext)) {
+                is GoogleAuthManager.DriveAuthResult.Authorized -> {
+                    checkForExistingBackup()
+                }
+                is GoogleAuthManager.DriveAuthResult.NeedsConsent -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        driveConsentIntent = result.pendingIntent
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Drive authorization failed", e)
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = "Drive authorization failed: ${e.message}"
+            )
+        }
+    }
+
+    fun onDriveConsentResult(granted: Boolean) {
+        _uiState.value = _uiState.value.copy(driveConsentIntent = null)
+        if (granted) {
+            viewModelScope.launch {
+                checkForExistingBackup()
+            }
+        } else {
+            _uiState.value = _uiState.value.copy(
+                error = "Drive access is required for backup. Please try again."
             )
         }
     }
@@ -178,7 +231,6 @@ class AuthViewModel @Inject constructor(
                     isReady = true
                 )
             } catch (e: Exception) {
-                // Decryption failure likely means wrong passphrase
                 encryptionManager.clearKey()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,

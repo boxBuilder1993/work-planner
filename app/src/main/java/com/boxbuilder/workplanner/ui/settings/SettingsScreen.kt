@@ -132,25 +132,15 @@ fun SettingsScreen(
                         }
                     }
 
-                    // Result messages
-                    settingsState.syncResult?.let { result ->
+                    // Status message
+                    settingsState.statusMessage?.let { message ->
                         Text(
-                            text = result,
+                            text = message,
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (result.startsWith("Backup completed"))
-                                MaterialTheme.colorScheme.primary
-                            else
+                            color = if (settingsState.isStatusError)
                                 MaterialTheme.colorScheme.error
-                        )
-                    }
-                    settingsState.restoreResult?.let { result ->
-                        Text(
-                            text = result,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (result.startsWith("Restore completed"))
-                                MaterialTheme.colorScheme.primary
                             else
-                                MaterialTheme.colorScheme.error
+                                MaterialTheme.colorScheme.primary
                         )
                     }
                 }

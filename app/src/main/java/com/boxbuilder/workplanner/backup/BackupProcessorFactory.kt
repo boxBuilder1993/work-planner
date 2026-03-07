@@ -1,5 +1,6 @@
 package com.boxbuilder.workplanner.backup
 
+import android.accounts.Account
 import android.content.Context
 import com.boxbuilder.workplanner.auth.EncryptionManager
 import com.boxbuilder.workplanner.auth.GoogleAuthManager
@@ -30,12 +31,17 @@ class BackupProcessorFactory @Inject constructor(
     private val commentDao: CommentDao
 ) {
     private fun createDriveService(): Drive {
+        val email = authManager.userEmail
+            ?: throw IllegalStateException("User not signed in")
+
+        // Use setSelectedAccount(Account) instead of setSelectedAccountName(String).
+        // setSelectedAccountName looks up the account in AccountManager and silently
+        // sets it to null if the account isn't registered on the device. With Credential
+        // Manager sign-in, the Google account may not be in AccountManager.
         val credential = GoogleAccountCredential.usingOAuth2(
             context, listOf(DriveScopes.DRIVE_APPDATA)
-        ).apply {
-            selectedAccountName = authManager.userEmail
-                ?: throw IllegalStateException("User not signed in")
-        }
+        )
+        credential.selectedAccount = Account(email, "com.google")
 
         return Drive.Builder(
             NetHttpTransport(), GsonFactory.getDefaultInstance(), credential
