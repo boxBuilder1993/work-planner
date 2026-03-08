@@ -184,20 +184,27 @@ class AuthViewModel @Inject constructor(
             return
         }
 
+        _uiState.value = _uiState.value.copy(isLoading = true, passphraseError = null)
         val salt = encryptionManager.createKeyFromPassphrase(passphrase)
         viewModelScope.launch {
             try {
                 backupProcessorFactory.uploadSalt(salt)
+                SyncWorker.schedule(context)
+                _uiState.value = _uiState.value.copy(
+                    needsPassphraseCreation = false,
+                    isLoading = false,
+                    passphraseError = null,
+                    isReady = true
+                )
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to upload salt to Drive", e)
+                Log.e(TAG, "Failed to upload salt to Drive", e)
+                encryptionManager.clearKey()
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    passphraseError = "Failed to upload encryption salt to Drive: ${e.message}"
+                )
             }
         }
-        SyncWorker.schedule(context)
-        _uiState.value = _uiState.value.copy(
-            needsPassphraseCreation = false,
-            passphraseError = null,
-            isReady = true
-        )
     }
 
     fun enterPassphrase(passphrase: String) {

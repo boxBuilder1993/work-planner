@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -22,16 +23,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.boxbuilder.workplanner.backup.SyncWorker
 import com.boxbuilder.workplanner.ui.auth.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,7 +47,33 @@ fun SettingsScreen(
 ) {
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    var showWipeConfirmation by remember { mutableStateOf(false) }
+
+    if (showWipeConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showWipeConfirmation = false },
+            title = { Text("Wipe Everything") },
+            text = { Text("This will delete all local data and Drive backups. This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWipeConfirmation = false
+                        settingsViewModel.wipeEverything(onComplete = onSignedOut)
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Wipe Everything")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWipeConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -107,7 +136,7 @@ fun SettingsScreen(
                     ) {
                         Button(
                             onClick = { settingsViewModel.syncNow() },
-                            enabled = !settingsState.isSyncing && !settingsState.isRestoring
+                            enabled = !settingsState.isSyncing && !settingsState.isRestoring && !settingsState.isWiping
                         ) {
                             Text("Sync Now")
                         }
@@ -123,7 +152,7 @@ fun SettingsScreen(
                     ) {
                         OutlinedButton(
                             onClick = { settingsViewModel.restoreFromBackup() },
-                            enabled = !settingsState.isSyncing && !settingsState.isRestoring
+                            enabled = !settingsState.isSyncing && !settingsState.isRestoring && !settingsState.isWiping
                         ) {
                             Text("Restore from Backup")
                         }
@@ -148,17 +177,34 @@ fun SettingsScreen(
 
             // Sign out
             Button(
-                onClick = {
-                    SyncWorker.cancel(context)
-                    authViewModel.signOut()
-                    onSignedOut()
-                },
+                onClick = { settingsViewModel.signOut(onComplete = onSignedOut) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error
                 )
             ) {
                 Text("Sign Out")
+            }
+
+            // Wipe everything
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedButton(
+                    onClick = { showWipeConfirmation = true },
+                    enabled = !settingsState.isWiping,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text(if (settingsState.isWiping) "Wiping..." else "Wipe Everything")
+                }
+                if (settingsState.isWiping) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
             }
         }
     }
