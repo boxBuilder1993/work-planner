@@ -1,0 +1,132 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--primary);
+  color: white;
+}
+
+.backButton {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  padding: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+}
+
+.topBarTitle {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
+.content {
+  flex: 1;
+  padding: var(--spacing-lg);
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.cardTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+}
+
+.accountInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.accountName {
+  font-size: var(--font-size-lg);
+  font-weight: 500;
+}
+
+.accountEmail {
+  font-size: var(--font-size-md);
+  color: var(--on-surface-secondary);
+}
+
+.backupButtons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.backupButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--primary);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.backupButton:hover {
+  background: var(--primary-light);
+}
+
+.backupButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.statusMessage {
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: var(--spacing-xs);
+}
+
+.statusSuccess {
+  color: var(--success);
+}
+
+.statusError {
+  color: var(--error);
+}
+
+.signOutButton {
+  width: 100%;
+  padding: 14px;
+  background: var(--error);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-lg);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.signOutButton:hover {
+  opacity: 0.9;
+}

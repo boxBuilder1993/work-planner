@@ -1,0 +1,102 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--primary);
+  color: white;
+}
+
+.topBarTitle {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
+.settingsButton {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  padding: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+}
+
+.tabBar {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--divider);
+}
+
+.tab {
+  flex: 1;
+  padding: 12px 0;
+  text-align: center;
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--on-surface-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: var(--primary);
+}
+
+.tabActive {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.content {
+  flex: 1;
+  padding: var(--spacing-md);
+  overflow-y: auto;
+}
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.empty {
+  text-align: center;
+  color: var(--on-surface-secondary);
+  padding: var(--spacing-xl);
+  font-size: var(--font-size-md);
+}
+
+.fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  border: none;
+  font-size: 28px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.fab:hover {
+  background: var(--primary-dark);
+}

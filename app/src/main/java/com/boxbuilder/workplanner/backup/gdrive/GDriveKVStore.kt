@@ -29,7 +29,10 @@ class GDriveKVStore(
 
     private val serializers = mutableMapOf<String, KSerializer<*>>()
 
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
 
     override fun <T : Any> registerEntity(entityName: String, registration: EntityRegistration<T>) {
         super.registerEntity(entityName, registration)

@@ -1,0 +1,269 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import type { TaskEntity } from '../types';
+import { useTasks } from '../hooks/useTasks';
+import { formatDate, isOverdue } from '../utils';
+import BreadcrumbBar from './BreadcrumbBar';
+import TaskForm from './TaskForm';
+import TaskItem from './TaskItem';
+import CommentSection from './CommentSection';
+import PriorityBadge from './PriorityBadge';
+import styles from './TaskDetail.module.css';
+
+export default function TaskDetail() {
+  const { taskId } = useParams<{ taskId: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const {
+    getTaskById,
+    getBreadcrumbs,
+    getChildTasks,
+    createTask,
+    updateTask,
+    deleteTask,
+  } = useTasks();
+
+  const isNew = !taskId;
+  const parentIdParam = searchParams.get('parentId');
+
+  const existingTask = taskId ? getTaskById(taskId) : undefined;
+  const [isEditing, setIsEditing] = useState(isNew);
+  const [error, setError] = useState<string | null>(null);
+  const [editedTask, setEditedTask] = useState<TaskEntity>(() =>
+    existingTask ?? {
+      id: '',
+      parentId: parentIdParam ?? null,
+      title: '',
+      description: '',
+      status: 'PENDING' as const,
+      priority: 3,
+      dueDate: null,
+      createdAt: 0,
+      updatedAt: 0,
+    },
+  );
+
+  // Reset state when route changes (e.g., create→view, or parent→new child)
+  useEffect(() => {
+    setError(null);
+    if (taskId) {
+      // Viewing/editing existing task
+      setIsEditing(false);
+      const task = getTaskById(taskId);
+      if (task) setEditedTask(task);
+    } else {
+      // Creating new task
+      setIsEditing(true);
+      setEditedTask({
+        id: '',
+        parentId: parentIdParam ?? null,
+        title: '',
+        description: '',
+        status: 'PENDING',
+        priority: 3,
+        dueDate: null,
+        createdAt: 0,
+        updatedAt: 0,
+      });
+    }
+  }, [taskId, parentIdParam, getTaskById]);
+
+  const breadcrumbs = existingTask ? getBreadcrumbs(existingTask.id) : [];
+  const children = existingTask ? getChildTasks(existingTask.id) : [];
+
+  const handleSave = () => {
+    if (!editedTask.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+
+    // Check if trying to close with open children
+    if (existingTask && editedTask.status === 'CLOSED') {
+      const pendingChildren = children.filter((c) => c.status === 'PENDING');
+      if (pendingChildren.length > 0) {
+        setError(
+          `Close all sub-tasks before closing this task (${pendingChildren.length} still open)`,
+        );
+        return;
+      }
+    }
+
+    setError(null);
+
+    if (isNew) {
+      const created = createTask({
+        title: editedTask.title.trim(),
+        description: editedTask.description,
+        parentId: editedTask.parentId,
+        priority: editedTask.priority,
+        dueDate: editedTask.dueDate,
+      });
+      navigate(`/tasks/${created.id}`, { replace: true });
+    } else {
+      updateTask({ ...editedTask, title: editedTask.title.trim() });
+      setIsEditing(false);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!existingTask) return;
+    const childCount = children.length;
+    const message = childCount > 0
+      ? `Delete this task and its ${childCount} sub-task(s)?`
+      : 'Delete this task?';
+    if (window.confirm(message)) {
+      deleteTask(existingTask.id);
+      navigate(-1);
+    }
+  };
+
+  const handleCancel = () => {
+    if (isNew) {
+      navigate(-1);
+    } else {
+      setEditedTask(existingTask!);
+      setIsEditing(false);
+      setError(null);
+    }
+  };
+
+  const handleEdit = () => {
+    setEditedTask(existingTask!);
+    setIsEditing(true);
+    setError(null);
+  };
+
+  // If task not found (and not new)
+  if (!isNew && !existingTask) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.topBar}>
+          <button className={styles.backButton} onClick={() => navigate(-1)}>
+            &larr;
+          </button>
+          <span className={styles.topBarTitle}>Task Not Found</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.topBar}>
+        <button className={styles.backButton} onClick={() => navigate(-1)}>
+          &larr;
+        </button>
+        <span className={styles.topBarTitle}>
+          {isNew ? 'New Task' : existingTask?.title ?? 'Task'}
+        </span>
+        <div className={styles.topBarActions}>
+          {isEditing ? (
+            <>
+              <button className={styles.actionButton} onClick={handleCancel}>
+                Cancel
+              </button>
+              <button className={styles.actionButton} onClick={handleSave}>
+                Save
+              </button>
+            </>
+          ) : (
+            <>
+              <button className={styles.actionButton} onClick={handleEdit}>
+                Edit
+              </button>
+              <button
+                className={`${styles.actionButton} ${styles.deleteButton}`}
+                onClick={handleDelete}
+              >
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.content}>
+        {/* Breadcrumbs */}
+        {breadcrumbs.length > 0 && <BreadcrumbBar breadcrumbs={breadcrumbs} />}
+
+        {error && <div className={styles.error}>{error}</div>}
+
+        {isEditing ? (
+          <div className={styles.viewSection}>
+            <TaskForm
+              task={editedTask}
+              isNew={isNew}
+              onChange={setEditedTask}
+            />
+          </div>
+        ) : existingTask ? (
+          <div className={styles.viewSection}>
+            <h1 className={styles.taskTitle}>{existingTask.title}</h1>
+            {existingTask.description && (
+              <p className={styles.taskDescription}>
+                {existingTask.description}
+              </p>
+            )}
+            <div className={styles.chips}>
+              <span
+                className={`${styles.chip} ${
+                  existingTask.status === 'PENDING'
+                    ? styles.statusChipPending
+                    : styles.statusChip
+                }`}
+              >
+                {existingTask.status === 'PENDING' ? 'Pending' : 'Closed'}
+              </span>
+              <span className={styles.chip}>
+                <PriorityBadge priority={existingTask.priority} />
+                Priority {existingTask.priority}
+              </span>
+              {existingTask.dueDate != null && (
+                <span
+                  className={`${styles.chip} ${
+                    isOverdue(existingTask.dueDate) && existingTask.status === 'PENDING'
+                      ? styles.dueDateChipOverdue
+                      : styles.dueDateChip
+                  }`}
+                >
+                  {formatDate(existingTask.dueDate)}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Sub-tasks section */}
+        {!isNew && existingTask && (
+          <div className={styles.subtasksSection}>
+            <div className={styles.subtasksHeader}>
+              <span className={styles.subtasksTitle}>
+                Sub-tasks ({children.length})
+              </span>
+              {existingTask.status === 'PENDING' && (
+                <button
+                  className={styles.addChildButton}
+                  onClick={() =>
+                    navigate(`/tasks/new?parentId=${existingTask.id}`)
+                  }
+                >
+                  + Add Child
+                </button>
+              )}
+            </div>
+            <div className={styles.subtaskList}>
+              {children.map((child) => (
+                <TaskItem key={child.id} task={child} showDescription />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Comments section */}
+        {!isNew && existingTask && (
+          <CommentSection taskId={existingTask.id} />
+        )}
+      </div>
+    </div>
+  );
+}

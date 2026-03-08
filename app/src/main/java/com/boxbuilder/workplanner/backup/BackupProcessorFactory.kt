@@ -69,6 +69,11 @@ class BackupProcessorFactory @Inject constructor(
         !result.files.isNullOrEmpty()
     }
 
+    suspend fun ensureSaltUploaded() = withContext(Dispatchers.IO) {
+        val salt = encryptionManager.salt ?: return@withContext
+        uploadSalt(salt)
+    }
+
     suspend fun uploadSalt(salt: ByteArray) = withContext(Dispatchers.IO) {
         val driveService = createDriveService()
         val fileName = "workplanner_salt.bin"
