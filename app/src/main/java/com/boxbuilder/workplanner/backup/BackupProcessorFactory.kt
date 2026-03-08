@@ -101,6 +101,17 @@ class BackupProcessorFactory @Inject constructor(
         outputStream.toByteArray()
     }
 
+    suspend fun deleteAllDriveFiles() = withContext(Dispatchers.IO) {
+        val driveService = createDriveService()
+        val fileNames = listOf("workplanner_tasks.enc", "workplanner_comments.enc", "workplanner_salt.bin")
+        for (name in fileNames) {
+            val fileId = findFileId(driveService, name)
+            if (fileId != null) {
+                driveService.files().delete(fileId).execute()
+            }
+        }
+    }
+
     private fun findFileId(driveService: Drive, fileName: String): String? {
         val result = driveService.files().list()
             .setQ("name = '$fileName'")
