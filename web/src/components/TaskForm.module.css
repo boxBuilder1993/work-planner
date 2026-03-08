@@ -1,0 +1,110 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--on-surface-secondary);
+}
+
+.input {
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--primary);
+}
+
+.textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  outline: none;
+  min-height: 100px;
+  resize: vertical;
+}
+
+.textarea:focus {
+  border-color: var(--primary);
+}
+
+.select {
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  outline: none;
+  background: var(--surface);
+}
+
+.select:focus {
+  border-color: var(--primary);
+}
+
+.row {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.row > * {
+  flex: 1;
+}
+
+.dateRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-sm);
+}
+
+.dateRow > .field {
+  flex: 1;
+}
+
+.clearButton {
+  background: none;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: var(--font-size-sm);
+  color: var(--on-surface-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.clearButton:hover {
+  background: var(--background);
+}
+
+.parentButton {
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  background: var(--surface);
+  color: var(--on-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.parentButton:hover {
+  border-color: var(--primary);
+}
+
+.parentButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

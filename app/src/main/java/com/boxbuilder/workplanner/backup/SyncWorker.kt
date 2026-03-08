@@ -25,6 +25,7 @@ class SyncWorker @AssistedInject constructor(
         return try {
             val processor = backupProcessorFactory.create()
             processor.performBackup()
+            backupProcessorFactory.ensureSaltUploaded()
             Log.d(TAG, "Backup completed successfully")
             Result.success()
         } catch (e: Exception) {

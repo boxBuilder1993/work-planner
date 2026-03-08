@@ -1,0 +1,42 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: var(--spacing-sm) 0;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.bar::-webkit-scrollbar {
+  display: none;
+}
+
+.crumb {
+  color: var(--primary);
+  background: none;
+  border: none;
+  font-size: var(--font-size-sm);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.crumb:hover {
+  background: var(--primary-light);
+}
+
+.crumbCurrent {
+  color: var(--on-surface);
+  cursor: default;
+  font-weight: 500;
+}
+
+.crumbCurrent:hover {
+  background: transparent;
+}
+
+.separator {
+  color: var(--on-surface-secondary);
+}

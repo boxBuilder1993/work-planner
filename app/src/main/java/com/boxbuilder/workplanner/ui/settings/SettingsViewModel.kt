@@ -34,6 +34,7 @@ class SettingsViewModel @Inject constructor(
             try {
                 val processor = backupProcessorFactory.create()
                 processor.performBackup()
+                backupProcessorFactory.ensureSaltUploaded()
                 _uiState.value = _uiState.value.copy(isSyncing = false, statusMessage = "Backup completed successfully", isStatusError = false)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(isSyncing = false, statusMessage = "Backup failed: ${e.message}", isStatusError = true)
