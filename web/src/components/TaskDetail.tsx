@@ -21,14 +21,24 @@ export default function TaskDetail() {
     createTask,
     updateTask,
     deleteTask,
+    getRepeatingTaskForTask,
+    setRepeatingTask,
+    removeRepeatingTask,
   } = useTasks();
 
   const isNew = !taskId;
   const parentIdParam = searchParams.get('parentId');
 
   const existingTask = taskId ? getTaskById(taskId) : undefined;
+  const existingRepeat = taskId ? getRepeatingTaskForTask(taskId) : undefined;
   const [isEditing, setIsEditing] = useState(isNew);
   const [error, setError] = useState<string | null>(null);
+  const [editRepeatInterval, setEditRepeatInterval] = useState<number | null>(
+    existingRepeat?.intervalDays ?? null,
+  );
+  const [editRepeatStartDate, setEditRepeatStartDate] = useState<number | null>(
+    existingRepeat?.startDate ?? null,
+  );
   const [editedTask, setEditedTask] = useState<TaskEntity>(() =>
     existingTask ?? {
       id: '',
@@ -38,6 +48,7 @@ export default function TaskDetail() {
       status: 'PENDING' as const,
       priority: 3,
       dueDate: null,
+      taskDate: null,
       createdAt: 0,
       updatedAt: 0,
     },
@@ -51,6 +62,9 @@ export default function TaskDetail() {
       setIsEditing(false);
       const task = getTaskById(taskId);
       if (task) setEditedTask(task);
+      const repeat = getRepeatingTaskForTask(taskId);
+      setEditRepeatInterval(repeat?.intervalDays ?? null);
+      setEditRepeatStartDate(repeat?.startDate ?? null);
     } else {
       // Creating new task
       setIsEditing(true);
@@ -62,11 +76,14 @@ export default function TaskDetail() {
         status: 'PENDING',
         priority: 3,
         dueDate: null,
+        taskDate: null,
         createdAt: 0,
         updatedAt: 0,
       });
+      setEditRepeatInterval(null);
+      setEditRepeatStartDate(null);
     }
-  }, [taskId, parentIdParam, getTaskById]);
+  }, [taskId, parentIdParam, getTaskById, getRepeatingTaskForTask]);
 
   const breadcrumbs = existingTask ? getBreadcrumbs(existingTask.id) : [];
   const children = existingTask ? getChildTasks(existingTask.id) : [];
@@ -98,9 +115,23 @@ export default function TaskDetail() {
         priority: editedTask.priority,
         dueDate: editedTask.dueDate,
       });
+      // Set repeating rule on newly created task
+      if (editRepeatInterval && editRepeatInterval > 0) {
+        setRepeatingTask(created.id, editRepeatInterval, editRepeatStartDate ?? Date.now());
+      }
       navigate(`/tasks/${created.id}`, { replace: true });
     } else {
       updateTask({ ...editedTask, title: editedTask.title.trim() });
+      // Update repeating rule
+      if (editRepeatInterval && editRepeatInterval > 0) {
+        setRepeatingTask(
+          existingTask!.id,
+          editRepeatInterval,
+          editRepeatStartDate ?? existingRepeat?.startDate ?? Date.now(),
+        );
+      } else if (existingRepeat) {
+        removeRepeatingTask(existingTask!.id);
+      }
       setIsEditing(false);
     }
   };
@@ -129,6 +160,8 @@ export default function TaskDetail() {
 
   const handleEdit = () => {
     setEditedTask(existingTask!);
+    setEditRepeatInterval(existingRepeat?.intervalDays ?? null);
+    setEditRepeatStartDate(existingRepeat?.startDate ?? null);
     setIsEditing(true);
     setError(null);
   };
@@ -194,6 +227,10 @@ export default function TaskDetail() {
               task={editedTask}
               isNew={isNew}
               onChange={setEditedTask}
+              repeatIntervalDays={editRepeatInterval}
+              repeatStartDate={editRepeatStartDate}
+              onRepeatIntervalChange={setEditRepeatInterval}
+              onRepeatStartDateChange={setEditRepeatStartDate}
             />
           </div>
         ) : existingTask ? (
@@ -230,6 +267,20 @@ export default function TaskDetail() {
                 </span>
               )}
             </div>
+            {existingTask.taskDate != null && (
+              <div className={styles.chips}>
+                <span className={styles.chip}>
+                  Task date: {formatDate(existingTask.taskDate)}
+                </span>
+              </div>
+            )}
+            {existingRepeat && (
+              <div className={styles.chips}>
+                <span className={styles.chip}>
+                  Repeats every {existingRepeat.intervalDays} day{existingRepeat.intervalDays !== 1 ? 's' : ''} · starts {formatDate(existingRepeat.startDate)}
+                </span>
+              </div>
+            )}
           </div>
         ) : null}
 

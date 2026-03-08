@@ -1,19 +1,24 @@
 package com.boxbuilder.workplanner.data
 
 import com.boxbuilder.workplanner.data.dao.CommentDao
+import com.boxbuilder.workplanner.data.dao.RepeatingTaskDao
 import com.boxbuilder.workplanner.data.dao.TaskDao
 import com.boxbuilder.workplanner.data.entity.CommentEntity
+import com.boxbuilder.workplanner.data.entity.RepeatingTaskEntity
 import com.boxbuilder.workplanner.data.entity.TaskEntity
 import com.boxbuilder.workplanner.data.mapper.toDomain
 import com.boxbuilder.workplanner.data.mapper.toEntity
 import com.boxbuilder.workplanner.data.model.Comment
+import com.boxbuilder.workplanner.data.model.RepeatingTask
 import com.boxbuilder.workplanner.data.model.Task
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 
 class TaskRepository(
     private val taskDao: TaskDao,
-    private val commentDao: CommentDao
+    private val commentDao: CommentDao,
+    private val repeatingTaskDao: RepeatingTaskDao
 ) {
 
     // ── Task queries ─────────────────────────────────────────
@@ -109,6 +114,41 @@ class TaskRepository(
 
     suspend fun deleteComment(comment: Comment) {
         commentDao.deleteComment(comment.toEntity())
+    }
+
+    // ── Repeating task queries ────────────────────────────────
+
+    fun getRepeatingTaskForTask(taskId: String): Flow<RepeatingTask?> =
+        repeatingTaskDao.getByTaskId(taskId).map { it?.toDomain() }
+
+    suspend fun getAllRepeatingTasks(): List<RepeatingTaskEntity> =
+        repeatingTaskDao.getAll()
+
+    // ── Repeating task mutations ─────────────────────────────
+
+    suspend fun setRepeatingTask(taskId: String, intervalDays: Int, startDate: Long) {
+        val existing = repeatingTaskDao.getByTaskId(taskId).firstOrNull()
+        if (existing != null) {
+            repeatingTaskDao.update(
+                existing.copy(
+                    intervalDays = intervalDays,
+                    startDate = startDate,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        } else {
+            repeatingTaskDao.insert(
+                RepeatingTaskEntity(
+                    taskId = taskId,
+                    intervalDays = intervalDays,
+                    startDate = startDate
+                )
+            )
+        }
+    }
+
+    suspend fun removeRepeatingTask(taskId: String) {
+        repeatingTaskDao.deleteByTaskId(taskId)
     }
 
     // ── Hierarchy helpers ────────────────────────────────────

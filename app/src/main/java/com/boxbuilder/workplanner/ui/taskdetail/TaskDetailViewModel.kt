@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.boxbuilder.workplanner.data.TaskRepository
 import com.boxbuilder.workplanner.data.model.Comment
+import com.boxbuilder.workplanner.data.model.RepeatingTask
 import com.boxbuilder.workplanner.data.model.Task
 import com.boxbuilder.workplanner.data.model.TaskStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,6 +23,7 @@ data class TaskDetailUiState(
     val children: List<Task> = emptyList(),
     val comments: List<Comment> = emptyList(),
     val breadcrumbs: List<Task> = emptyList(),
+    val repeatingTask: RepeatingTask? = null,
     val isEditing: Boolean = false,
     val isNewTask: Boolean = false,
     val isLoading: Boolean = true
@@ -33,7 +35,9 @@ data class EditState(
     val status: TaskStatus = TaskStatus.PENDING,
     val priority: Int = 3,
     val dueDate: Long? = null,
-    val parentId: String? = null
+    val parentId: String? = null,
+    val repeatIntervalDays: Int? = null,
+    val repeatStartDate: Long? = null
 )
 
 @HiltViewModel
@@ -70,13 +74,15 @@ class TaskDetailViewModel @Inject constructor(
                 repository.getTaskById(taskId),
                 repository.getChildTasks(taskId),
                 repository.getCommentsForTask(taskId),
+                repository.getRepeatingTaskForTask(taskId),
                 _localState
-            ) { task, children, comments, local ->
+            ) { task, children, comments, repeatingTask, local ->
                 TaskDetailUiState(
                     task = task,
                     children = children,
                     comments = comments,
                     breadcrumbs = local.breadcrumbs,
+                    repeatingTask = repeatingTask,
                     isEditing = local.isEditing,
                     isNewTask = false,
                     isLoading = false
@@ -112,13 +118,16 @@ class TaskDetailViewModel @Inject constructor(
 
     fun startEditing() {
         val task = uiState.value.task ?: return
+        val repeating = uiState.value.repeatingTask
         _editState.value = EditState(
             title = task.title,
             description = task.description,
             status = task.status,
             priority = task.priority,
             dueDate = task.dueDate,
-            parentId = task.parentId
+            parentId = task.parentId,
+            repeatIntervalDays = repeating?.intervalDays,
+            repeatStartDate = repeating?.startDate
         )
         _localState.value = _localState.value.copy(isEditing = true)
     }
@@ -151,6 +160,14 @@ class TaskDetailViewModel @Inject constructor(
         _editState.value = _editState.value.copy(parentId = parentId)
     }
 
+    fun updateRepeatIntervalDays(days: Int?) {
+        _editState.value = _editState.value.copy(repeatIntervalDays = days)
+    }
+
+    fun updateRepeatStartDate(startDate: Long?) {
+        _editState.value = _editState.value.copy(repeatStartDate = startDate)
+    }
+
     fun save(onSaved: (String) -> Unit) {
         val edit = _editState.value
         if (edit.title.isBlank()) return
@@ -164,6 +181,11 @@ class TaskDetailViewModel @Inject constructor(
                     priority = edit.priority,
                     dueDate = edit.dueDate
                 )
+                // Set repeating rule on the newly created task
+                if (edit.repeatIntervalDays != null && edit.repeatIntervalDays > 0) {
+                    val startDate = edit.repeatStartDate ?: System.currentTimeMillis()
+                    repository.setRepeatingTask(task.id, edit.repeatIntervalDays, startDate)
+                }
                 onSaved(task.id)
             } else {
                 val existing = uiState.value.task ?: return@launch
@@ -190,6 +212,18 @@ class TaskDetailViewModel @Inject constructor(
                     parentId = edit.parentId
                 )
                 repository.updateTask(updated)
+
+                // Update repeating rule
+                val currentRepeating = uiState.value.repeatingTask
+                if (edit.repeatIntervalDays != null && edit.repeatIntervalDays > 0) {
+                    val startDate = edit.repeatStartDate
+                        ?: currentRepeating?.startDate
+                        ?: System.currentTimeMillis()
+                    repository.setRepeatingTask(existing.id, edit.repeatIntervalDays, startDate)
+                } else if (currentRepeating != null) {
+                    repository.removeRepeatingTask(existing.id)
+                }
+
                 _localState.value = _localState.value.copy(isEditing = false)
 
                 // Refresh breadcrumbs if parent changed

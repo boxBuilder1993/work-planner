@@ -24,11 +24,13 @@ export default function Settings() {
     try {
       const tasksRecord = taskStore.getTasksRecord();
       const commentsRecord = taskStore.getCommentsRecord();
+      const repeatingTasksRecord = taskStore.getRepeatingTasksRecord();
       await performBackup(
         auth.getToken(),
         auth.encryptionKey!,
         tasksRecord,
         commentsRecord,
+        repeatingTasksRecord,
         auth.salt!,
       );
       setStatus({ message: 'Backup completed successfully', type: 'success' });
@@ -54,11 +56,12 @@ export default function Settings() {
         auth.getToken(),
         auth.encryptionKey!,
       );
-      taskStore.loadFromRestore(restored.tasks, restored.comments);
+      taskStore.loadFromRestore(restored.tasks, restored.comments, restored.repeatingTasks);
       const taskCount = Object.keys(restored.tasks).length;
       const commentCount = Object.keys(restored.comments).length;
+      const repeatingCount = Object.keys(restored.repeatingTasks).length;
       setStatus({
-        message: `Restored ${taskCount} task${taskCount !== 1 ? 's' : ''} and ${commentCount} comment${commentCount !== 1 ? 's' : ''}`,
+        message: `Restored ${taskCount} task${taskCount !== 1 ? 's' : ''}, ${commentCount} comment${commentCount !== 1 ? 's' : ''}, and ${repeatingCount} repeating rule${repeatingCount !== 1 ? 's' : ''}`,
         type: 'success',
       });
     } catch (err) {

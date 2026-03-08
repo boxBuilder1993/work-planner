@@ -12,6 +12,7 @@ fun TaskEntity.toDomain() = Task(
     status = TaskStatus.valueOf(status),
     priority = priority,
     dueDate = dueDate,
+    taskDate = taskDate,
     createdAt = createdAt,
     updatedAt = updatedAt
 )
@@ -24,6 +25,7 @@ fun Task.toEntity() = TaskEntity(
     status = status.name,
     priority = priority,
     dueDate = dueDate,
+    taskDate = taskDate,
     createdAt = createdAt,
     updatedAt = updatedAt
 )

@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.boxbuilder.workplanner.data.model.RepeatingTask
 import com.boxbuilder.workplanner.data.model.Task
 import com.boxbuilder.workplanner.data.model.TaskStatus
 import com.boxbuilder.workplanner.ui.taskdetail.EditState
@@ -42,6 +43,7 @@ import com.boxbuilder.workplanner.ui.taskdetail.EditState
 @Composable
 fun TaskInfoViewMode(
     task: Task,
+    repeatingTask: RepeatingTask?,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -73,6 +75,26 @@ fun TaskInfoViewMode(
                 )
             }
         }
+        if (task.taskDate != null) {
+            Text(
+                text = "Task date: ${formatDate(task.taskDate)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (repeatingTask != null) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Text(
+                    text = "Repeats every ${repeatingTask.intervalDays} day${if (repeatingTask.intervalDays != 1) "s" else ""} · starts ${formatDate(repeatingTask.startDate)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
     }
 }
 
@@ -86,6 +108,8 @@ fun TaskInfoEditMode(
     onStatusChange: (TaskStatus) -> Unit,
     onPriorityChange: (Int) -> Unit,
     onDueDateChange: (Long?) -> Unit,
+    onRepeatIntervalChange: (Int?) -> Unit,
+    onRepeatStartDateChange: (Long?) -> Unit,
     onChangeParentClick: () -> Unit,
     parentName: String?,
     modifier: Modifier = Modifier
@@ -128,6 +152,20 @@ fun TaskInfoEditMode(
             dueDate = editState.dueDate,
             onDueDateChange = onDueDateChange
         )
+
+        // Repeat interval (days)
+        RepeatIntervalField(
+            intervalDays = editState.repeatIntervalDays,
+            onIntervalChange = onRepeatIntervalChange
+        )
+
+        // Repeat start date (only shown when repeat is set)
+        if (editState.repeatIntervalDays != null && editState.repeatIntervalDays > 0) {
+            RepeatStartDateField(
+                startDate = editState.repeatStartDate,
+                onStartDateChange = onRepeatStartDateChange
+            )
+        }
 
         // Parent picker (not on new tasks — parent is set by navigation)
         if (!isNewTask) {
@@ -300,6 +338,91 @@ private fun PriorityChip(priority: Int) {
             color = Color.White,
             modifier = Modifier.padding(4.dp)
         )
+    }
+}
+
+@Composable
+private fun RepeatIntervalField(
+    intervalDays: Int?,
+    onIntervalChange: (Int?) -> Unit
+) {
+    OutlinedTextField(
+        value = intervalDays?.toString() ?: "",
+        onValueChange = { text ->
+            if (text.isEmpty()) {
+                onIntervalChange(null)
+            } else {
+                text.toIntOrNull()?.let { if (it >= 0) onIntervalChange(it) }
+            }
+        },
+        label = { Text("Repeat every (days)") },
+        placeholder = { Text("Off") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        trailingIcon = {
+            if (intervalDays != null) {
+                IconButton(onClick = { onIntervalChange(null) }) {
+                    Icon(Icons.Default.Clear, contentDescription = "Clear repeat")
+                }
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RepeatStartDateField(
+    startDate: Long?,
+    onStartDateChange: (Long?) -> Unit
+) {
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = startDate?.let { formatDate(it) } ?: "",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Repeat start date") },
+            placeholder = { Text("Now") },
+            modifier = Modifier
+                .weight(1f)
+                .clickable { showDatePicker = true },
+            trailingIcon = {
+                Row {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(Icons.Default.DateRange, contentDescription = "Pick start date")
+                    }
+                    if (startDate != null) {
+                        IconButton(onClick = { onStartDateChange(null) }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear start date")
+                        }
+                    }
+                }
+            },
+            enabled = false
+        )
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = startDate)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onStartDateChange(datePickerState.selectedDateMillis)
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 }
 

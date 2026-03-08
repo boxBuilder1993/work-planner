@@ -9,27 +9,24 @@ import java.util.UUID
 
 @Serializable
 @Entity(
-    tableName = "tasks",
+    tableName = "repeating_tasks",
     foreignKeys = [
         ForeignKey(
             entity = TaskEntity::class,
             parentColumns = ["id"],
-            childColumns = ["parentId"],
+            childColumns = ["taskId"],
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index(value = ["parentId"])]
+    indices = [Index(value = ["taskId"])]
 )
-data class TaskEntity(
+data class RepeatingTaskEntity(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),
-    val parentId: String? = null,
-    val title: String,
-    val description: String = "",
-    val status: String = "PENDING",
-    val priority: Int = 3,
-    val dueDate: Long? = null,
-    val taskDate: Long? = null,
+    val taskId: String,
+    val intervalDays: Int,
+    val startDate: Long,
+    val lastCreatedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

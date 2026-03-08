@@ -6,6 +6,7 @@ export interface TaskEntity {
   status: TaskStatus;
   priority: number;
   dueDate: number | null;
+  taskDate: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -14,6 +15,16 @@ export interface CommentEntity {
   id: string;
   taskId: string;
   text: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RepeatingTaskEntity {
+  id: string;
+  taskId: string;
+  intervalDays: number;
+  startDate: number;
+  lastCreatedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -50,4 +61,5 @@ export const PRIORITY_COLORS: Record<number, string> = {
 
 export const DRIVE_FILE_TASKS = 'workplanner_tasks.enc';
 export const DRIVE_FILE_COMMENTS = 'workplanner_comments.enc';
+export const DRIVE_FILE_REPEATING_TASKS = 'workplanner_repeating_tasks.enc';
 export const DRIVE_FILE_SALT = 'workplanner_salt.bin';

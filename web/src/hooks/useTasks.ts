@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createElement } from 'react';
-import type { TaskEntity, CommentEntity } from '../types';
+import type { TaskEntity, CommentEntity, RepeatingTaskEntity } from '../types';
 
 interface TasksContextValue {
   // Task queries
@@ -19,6 +19,11 @@ interface TasksContextValue {
   getDescendantIds: (rootId: string) => Set<string>;
   getAllTasks: () => Map<string, TaskEntity>;
   getAllComments: () => Map<string, CommentEntity>;
+
+  // Repeating tasks
+  getRepeatingTaskForTask: (taskId: string) => RepeatingTaskEntity | undefined;
+  setRepeatingTask: (taskId: string, intervalDays: number, startDate: number) => void;
+  removeRepeatingTask: (taskId: string) => void;
 
   // Task mutations
   createTask: (params: {
@@ -40,12 +45,14 @@ interface TasksContextValue {
   loadFromRestore: (
     tasks: Record<string, TaskEntity>,
     comments: Record<string, CommentEntity>,
+    repeatingTasks?: Record<string, RepeatingTaskEntity>,
   ) => void;
   clearAll: () => void;
 
   // Serialization for backup
   getTasksRecord: () => Record<string, TaskEntity>;
   getCommentsRecord: () => Record<string, CommentEntity>;
+  getRepeatingTasksRecord: () => Record<string, RepeatingTaskEntity>;
 }
 
 const TasksContext = createContext<TasksContextValue | null>(null);
@@ -63,6 +70,9 @@ function generateUUID(): string {
 export function TasksProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Map<string, TaskEntity>>(new Map());
   const [comments, setComments] = useState<Map<string, CommentEntity>>(
+    new Map(),
+  );
+  const [repeatingTasks, setRepeatingTasks] = useState<Map<string, RepeatingTaskEntity>>(
     new Map(),
   );
 
@@ -180,6 +190,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         status: 'PENDING',
         priority: params.priority ?? 3,
         dueDate: params.dueDate ?? null,
+        taskDate: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -236,6 +247,17 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         }
         return next;
       });
+
+      // Delete repeating task rules for all deleted tasks
+      setRepeatingTasks((prev) => {
+        const next = new Map(prev);
+        for (const [id, rt] of next) {
+          if (toDelete.has(rt.taskId)) {
+            next.delete(id);
+          }
+        }
+        return next;
+      });
     },
     [],
   );
@@ -281,15 +303,81 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const getRepeatingTaskForTask = useCallback(
+    (taskId: string): RepeatingTaskEntity | undefined => {
+      for (const rt of repeatingTasks.values()) {
+        if (rt.taskId === taskId) return rt;
+      }
+      return undefined;
+    },
+    [repeatingTasks],
+  );
+
+  const setRepeatingTask = useCallback(
+    (taskId: string, intervalDays: number, startDate: number) => {
+      setRepeatingTasks((prev) => {
+        const next = new Map(prev);
+        // Find existing rule for this task
+        let existingId: string | null = null;
+        for (const [id, rt] of next) {
+          if (rt.taskId === taskId) {
+            existingId = id;
+            break;
+          }
+        }
+        const now = Date.now();
+        if (existingId) {
+          const existing = next.get(existingId)!;
+          next.set(existingId, { ...existing, intervalDays, startDate, updatedAt: now });
+        } else {
+          const id = generateUUID();
+          next.set(id, {
+            id,
+            taskId,
+            intervalDays,
+            startDate,
+            lastCreatedAt: null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const removeRepeatingTask = useCallback(
+    (taskId: string) => {
+      setRepeatingTasks((prev) => {
+        const next = new Map(prev);
+        for (const [id, rt] of next) {
+          if (rt.taskId === taskId) {
+            next.delete(id);
+            break;
+          }
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
   const loadFromRestore = useCallback(
     (
       restoredTasks: Record<string, TaskEntity>,
       restoredComments: Record<string, CommentEntity>,
+      restoredRepeatingTasks?: Record<string, RepeatingTaskEntity>,
     ) => {
       const taskMap = new Map(Object.entries(restoredTasks));
       const commentMap = new Map(Object.entries(restoredComments));
       setTasks(taskMap);
       setComments(commentMap);
+      if (restoredRepeatingTasks) {
+        setRepeatingTasks(new Map(Object.entries(restoredRepeatingTasks)));
+      } else {
+        setRepeatingTasks(new Map());
+      }
     },
     [],
   );
@@ -297,6 +385,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const clearAll = useCallback(() => {
     setTasks(new Map());
     setComments(new Map());
+    setRepeatingTasks(new Map());
   }, []);
 
   const getTasksRecord = useCallback((): Record<string, TaskEntity> => {
@@ -306,6 +395,10 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const getCommentsRecord = useCallback((): Record<string, CommentEntity> => {
     return Object.fromEntries(comments);
   }, [comments]);
+
+  const getRepeatingTasksRecord = useCallback((): Record<string, RepeatingTaskEntity> => {
+    return Object.fromEntries(repeatingTasks);
+  }, [repeatingTasks]);
 
   const value: TasksContextValue = {
     getPendingRootTasks,
@@ -323,10 +416,14 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     getCommentsForTask,
     addComment,
     deleteComment,
+    getRepeatingTaskForTask,
+    setRepeatingTask,
+    removeRepeatingTask,
     loadFromRestore,
     clearAll,
     getTasksRecord,
     getCommentsRecord,
+    getRepeatingTasksRecord,
   };
 
   return createElement(TasksContext.Provider, { value }, children);

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.boxbuilder.workplanner.auth.EncryptionManager
 import com.boxbuilder.workplanner.auth.GoogleAuthManager
 import com.boxbuilder.workplanner.backup.BackupProcessorFactory
+import com.boxbuilder.workplanner.backup.RecurringTaskWorker
 import com.boxbuilder.workplanner.backup.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -49,6 +50,7 @@ class AuthViewModel @Inject constructor(
         if (authManager.isSignedIn) {
             if (encryptionManager.hasEncryptionKey) {
                 SyncWorker.schedule(context)
+                RecurringTaskWorker.schedule(context)
                 _uiState.value = AuthUiState(
                     isSignedIn = true,
                     isReady = true,
@@ -190,6 +192,7 @@ class AuthViewModel @Inject constructor(
             try {
                 backupProcessorFactory.uploadSalt(salt)
                 SyncWorker.schedule(context)
+                RecurringTaskWorker.schedule(context)
                 _uiState.value = _uiState.value.copy(
                     needsPassphraseCreation = false,
                     isLoading = false,
@@ -231,6 +234,7 @@ class AuthViewModel @Inject constructor(
                 val processor = backupProcessorFactory.create()
                 processor.performRestore()
                 SyncWorker.schedule(context)
+                RecurringTaskWorker.schedule(context)
                 _uiState.value = _uiState.value.copy(
                     needsPassphraseEntry = false,
                     isLoading = false,
@@ -258,6 +262,7 @@ class AuthViewModel @Inject constructor(
     fun signOut() {
         viewModelScope.launch {
             SyncWorker.cancel(context)
+            RecurringTaskWorker.cancel(context)
             authManager.signOut()
             encryptionManager.clearKey()
             _uiState.value = AuthUiState()
