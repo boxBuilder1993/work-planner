@@ -7,9 +7,10 @@ import {
 import {
   DRIVE_FILE_TASKS,
   DRIVE_FILE_COMMENTS,
+  DRIVE_FILE_REPEATING_TASKS,
   DRIVE_FILE_SALT,
 } from '../types';
-import type { TaskEntity, CommentEntity } from '../types';
+import type { TaskEntity, CommentEntity, RepeatingTaskEntity } from '../types';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -45,12 +46,14 @@ export async function performRestore(
 ): Promise<{
   tasks: Record<string, TaskEntity>;
   comments: Record<string, CommentEntity>;
+  repeatingTasks: Record<string, RepeatingTaskEntity>;
 }> {
-  const [tasks, comments] = await Promise.all([
+  const [tasks, comments, repeatingTasks] = await Promise.all([
     downloadEntityMap<TaskEntity>(token, DRIVE_FILE_TASKS, key),
     downloadEntityMap<CommentEntity>(token, DRIVE_FILE_COMMENTS, key),
+    downloadEntityMap<RepeatingTaskEntity>(token, DRIVE_FILE_REPEATING_TASKS, key),
   ]);
-  return { tasks, comments };
+  return { tasks, comments, repeatingTasks };
 }
 
 export async function performBackup(
@@ -58,11 +61,13 @@ export async function performBackup(
   key: Uint8Array,
   tasks: Record<string, TaskEntity>,
   comments: Record<string, CommentEntity>,
+  repeatingTasks: Record<string, RepeatingTaskEntity>,
   salt: Uint8Array,
 ): Promise<void> {
   await Promise.all([
     uploadEntityMap(token, DRIVE_FILE_TASKS, tasks, key),
     uploadEntityMap(token, DRIVE_FILE_COMMENTS, comments, key),
+    uploadEntityMap(token, DRIVE_FILE_REPEATING_TASKS, repeatingTasks, key),
     uploadOrUpdateFile(token, DRIVE_FILE_SALT, salt),
   ]);
 }

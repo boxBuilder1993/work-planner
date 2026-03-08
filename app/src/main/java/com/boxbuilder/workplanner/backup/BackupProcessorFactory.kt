@@ -6,6 +6,7 @@ import com.boxbuilder.workplanner.auth.EncryptionManager
 import com.boxbuilder.workplanner.auth.GoogleAuthManager
 import com.boxbuilder.workplanner.backup.gdrive.GDriveKVStore
 import com.boxbuilder.workplanner.data.dao.CommentDao
+import com.boxbuilder.workplanner.data.dao.RepeatingTaskDao
 import com.boxbuilder.workplanner.data.dao.TaskDao
 import com.boxbuilder.workplanner.generic.kvstore.EncryptionConfig
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
@@ -28,7 +29,8 @@ class BackupProcessorFactory @Inject constructor(
     private val authManager: GoogleAuthManager,
     private val encryptionManager: EncryptionManager,
     private val taskDao: TaskDao,
-    private val commentDao: CommentDao
+    private val commentDao: CommentDao,
+    private val repeatingTaskDao: RepeatingTaskDao
 ) {
     private fun createDriveService(): Drive {
         val email = authManager.userEmail
@@ -56,7 +58,7 @@ class BackupProcessorFactory @Inject constructor(
         val config = EncryptionConfig(key)
 
         val kvStore = GDriveKVStore(driveService, config, "workplanner")
-        return BackupProcessor(taskDao, commentDao, kvStore)
+        return BackupProcessor(taskDao, commentDao, repeatingTaskDao, kvStore)
     }
 
     suspend fun hasRemoteBackup(): Boolean = withContext(Dispatchers.IO) {
@@ -103,7 +105,7 @@ class BackupProcessorFactory @Inject constructor(
 
     suspend fun deleteAllDriveFiles() = withContext(Dispatchers.IO) {
         val driveService = createDriveService()
-        val fileNames = listOf("workplanner_tasks.enc", "workplanner_comments.enc", "workplanner_salt.bin")
+        val fileNames = listOf("workplanner_tasks.enc", "workplanner_comments.enc", "workplanner_repeating_tasks.enc", "workplanner_salt.bin")
         for (name in fileNames) {
             val fileId = findFileId(driveService, name)
             if (fileId != null) {

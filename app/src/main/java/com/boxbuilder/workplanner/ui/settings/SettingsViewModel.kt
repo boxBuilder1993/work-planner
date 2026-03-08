@@ -6,8 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.boxbuilder.workplanner.auth.EncryptionManager
 import com.boxbuilder.workplanner.auth.GoogleAuthManager
 import com.boxbuilder.workplanner.backup.BackupProcessorFactory
+import com.boxbuilder.workplanner.backup.RecurringTaskWorker
 import com.boxbuilder.workplanner.backup.SyncWorker
 import com.boxbuilder.workplanner.data.dao.CommentDao
+import com.boxbuilder.workplanner.data.dao.RepeatingTaskDao
 import com.boxbuilder.workplanner.data.dao.TaskDao
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -30,6 +32,7 @@ class SettingsViewModel @Inject constructor(
     private val backupProcessorFactory: BackupProcessorFactory,
     private val taskDao: TaskDao,
     private val commentDao: CommentDao,
+    private val repeatingTaskDao: RepeatingTaskDao,
     private val encryptionManager: EncryptionManager,
     private val authManager: GoogleAuthManager,
     @ApplicationContext private val context: Context
@@ -72,6 +75,8 @@ class SettingsViewModel @Inject constructor(
     fun signOut(onComplete: () -> Unit) {
         viewModelScope.launch {
             SyncWorker.cancel(context)
+            RecurringTaskWorker.cancel(context)
+            repeatingTaskDao.deleteAll()
             taskDao.deleteAllTasks()
             commentDao.deleteAllComments()
             encryptionManager.clearKey()
@@ -85,6 +90,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 SyncWorker.cancel(context)
+                RecurringTaskWorker.cancel(context)
+                repeatingTaskDao.deleteAll()
                 taskDao.deleteAllTasks()
                 commentDao.deleteAllComments()
                 backupProcessorFactory.deleteAllDriveFiles()

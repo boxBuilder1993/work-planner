@@ -153,6 +153,8 @@ fun TaskDetailScreen(
                         onStatusChange = viewModel::updateStatus,
                         onPriorityChange = viewModel::updatePriority,
                         onDueDateChange = viewModel::updateDueDate,
+                        onRepeatIntervalChange = viewModel::updateRepeatIntervalDays,
+                        onRepeatStartDateChange = viewModel::updateRepeatStartDate,
                         onChangeParentClick = {
                             scope.launch {
                                 allTasks = viewModel.getAllTasksForPicker()
@@ -169,6 +171,7 @@ fun TaskDetailScreen(
                     uiState.task?.let { task ->
                         TaskInfoViewMode(
                             task = task,
+                            repeatingTask = uiState.repeatingTask,
                             modifier = Modifier.padding(top = 16.dp)
                         )
                     }

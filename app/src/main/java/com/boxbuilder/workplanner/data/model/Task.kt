@@ -8,6 +8,7 @@ data class Task(
     val status: TaskStatus,
     val priority: Int,
     val dueDate: Long?,
+    val taskDate: Long?,
     val createdAt: Long,
     val updatedAt: Long
 )

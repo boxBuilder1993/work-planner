@@ -111,6 +111,7 @@ function PassphraseEntry({
   onRestored: (
     tasks: Record<string, import('../types').TaskEntity>,
     comments: Record<string, import('../types').CommentEntity>,
+    repeatingTasks?: Record<string, import('../types').RepeatingTaskEntity>,
   ) => void;
 }) {
   const { enterPassphrase, skipRestore, error, isLoading } = useAuth();
@@ -120,7 +121,7 @@ function PassphraseEntry({
     e.preventDefault();
     try {
       const restored = await enterPassphrase(passphrase);
-      onRestored(restored.tasks, restored.comments);
+      onRestored(restored.tasks, restored.comments, restored.repeatingTasks);
     } catch {
       // Error state is handled by AuthContext
     }

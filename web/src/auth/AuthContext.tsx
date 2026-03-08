@@ -9,7 +9,7 @@ import { requestAccessToken, revokeToken, fetchUserInfo } from './GoogleAuth';
 import { deriveKey, generateSalt } from '../crypto/encryption';
 import { downloadSalt, uploadSalt, hasRemoteBackup, performRestore } from '../backup/backupProcessor';
 import { UnauthorizedError } from '../drive/driveApi';
-import type { TaskEntity, CommentEntity } from '../types';
+import type { TaskEntity, CommentEntity, RepeatingTaskEntity } from '../types';
 
 interface AuthState {
   accessToken: string | null;
@@ -30,6 +30,7 @@ interface AuthContextValue extends AuthState {
   enterPassphrase: (passphrase: string) => Promise<{
     tasks: Record<string, TaskEntity>;
     comments: Record<string, CommentEntity>;
+    repeatingTasks: Record<string, RepeatingTaskEntity>;
   }>;
   skipRestore: () => void;
   signOut: () => Promise<void>;
@@ -153,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (passphrase: string): Promise<{
       tasks: Record<string, TaskEntity>;
       comments: Record<string, CommentEntity>;
+      repeatingTasks: Record<string, RepeatingTaskEntity>;
     }> => {
       if (!state.salt) throw new Error('No salt file found on Drive. Please sync from your Android device first, then try again.');
 
@@ -175,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (err instanceof UnauthorizedError) {
           handleUnauthorized();
-          return { tasks: {}, comments: {} };
+          return { tasks: {}, comments: {}, repeatingTasks: {} };
         }
         setState((s) => ({
           ...s,

@@ -9,9 +9,21 @@ interface Props {
   task: TaskEntity;
   isNew: boolean;
   onChange: (task: TaskEntity) => void;
+  repeatIntervalDays: number | null;
+  repeatStartDate: number | null;
+  onRepeatIntervalChange: (days: number | null) => void;
+  onRepeatStartDateChange: (date: number | null) => void;
 }
 
-export default function TaskForm({ task, isNew, onChange }: Props) {
+export default function TaskForm({
+  task,
+  isNew,
+  onChange,
+  repeatIntervalDays,
+  repeatStartDate,
+  onRepeatIntervalChange,
+  onRepeatStartDateChange,
+}: Props) {
   const { getTaskById } = useTasks();
   const [showParentPicker, setShowParentPicker] = useState(false);
 
@@ -99,6 +111,55 @@ export default function TaskForm({ task, isNew, onChange }: Props) {
           </button>
         )}
       </div>
+
+      <div className={styles.field}>
+        <label className={styles.label}>Repeat every (days)</label>
+        <div className={styles.dateRow}>
+          <input
+            className={styles.input}
+            type="number"
+            min="0"
+            placeholder="Off"
+            value={repeatIntervalDays ?? ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              onRepeatIntervalChange(val === '' ? null : Math.max(0, Number(val)));
+            }}
+          />
+          {repeatIntervalDays != null && (
+            <button
+              className={styles.clearButton}
+              onClick={() => onRepeatIntervalChange(null)}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {repeatIntervalDays != null && repeatIntervalDays > 0 && (
+        <div className={styles.field}>
+          <label className={styles.label}>Repeat start date</label>
+          <div className={styles.dateRow}>
+            <input
+              className={styles.input}
+              type="date"
+              value={repeatStartDate ? toDateInputValue(repeatStartDate) : ''}
+              onChange={(e) =>
+                onRepeatStartDateChange(fromDateInputValue(e.target.value))
+              }
+            />
+            {repeatStartDate != null && (
+              <button
+                className={styles.clearButton}
+                onClick={() => onRepeatStartDateChange(null)}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {!isNew && (
         <div className={styles.field}>
