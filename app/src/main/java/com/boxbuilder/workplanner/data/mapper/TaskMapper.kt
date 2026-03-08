@@ -13,6 +13,8 @@ fun TaskEntity.toDomain() = Task(
     priority = priority,
     dueDate = dueDate,
     taskDate = taskDate,
+    plannedTime = plannedTime,
+    duration = duration,
     createdAt = createdAt,
     updatedAt = updatedAt
 )
@@ -26,6 +28,8 @@ fun Task.toEntity() = TaskEntity(
     priority = priority,
     dueDate = dueDate,
     taskDate = taskDate,
+    plannedTime = plannedTime,
+    duration = duration,
     createdAt = createdAt,
     updatedAt = updatedAt
 )

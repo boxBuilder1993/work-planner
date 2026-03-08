@@ -7,6 +7,8 @@ export interface TaskEntity {
   priority: number;
   dueDate: number | null;
   taskDate: number | null;
+  plannedTime: number | null;
+  duration: number | null;
   createdAt: number;
   updatedAt: number;
 }

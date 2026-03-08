@@ -30,6 +30,8 @@ data class TaskEntity(
     val priority: Int = 3,
     val dueDate: Long? = null,
     val taskDate: Long? = null,
+    val plannedTime: Long? = null,
+    val duration: Double? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

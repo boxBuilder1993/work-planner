@@ -14,6 +14,8 @@ class TaskEntity(BaseModel):
     priority: int = 0
     due_date: int | None = Field(None, alias="dueDate")
     task_date: int | None = Field(None, alias="taskDate")
+    planned_time: int | None = Field(None, alias="plannedTime")
+    duration: float | None = Field(None, alias="duration")
     created_at: int = Field(0, alias="createdAt")
     updated_at: int = Field(0, alias="updatedAt")
 

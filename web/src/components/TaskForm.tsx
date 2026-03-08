@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { TaskEntity, TaskStatus } from '../types';
 import { useTasks } from '../hooks/useTasks';
-import { toDateInputValue, fromDateInputValue } from '../utils';
+import { toDateInputValue, fromDateInputValue, toDateTimeInputValue, fromDateTimeInputValue } from '../utils';
 import ParentPicker from './ParentPicker';
 import styles from './TaskForm.module.css';
 
@@ -106,6 +106,60 @@ export default function TaskForm({
           <button
             className={styles.clearButton}
             onClick={() => onChange({ ...task, dueDate: null })}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className={styles.dateRow}>
+        <div className={styles.field}>
+          <label className={styles.label}>Planned Time</label>
+          <input
+            className={styles.input}
+            type="datetime-local"
+            value={toDateTimeInputValue(task.plannedTime)}
+            onChange={(e) =>
+              onChange({
+                ...task,
+                plannedTime: fromDateTimeInputValue(e.target.value),
+              })
+            }
+          />
+        </div>
+        {task.plannedTime !== null && (
+          <button
+            className={styles.clearButton}
+            onClick={() => onChange({ ...task, plannedTime: null })}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className={styles.dateRow}>
+        <div className={styles.field}>
+          <label className={styles.label}>Duration (hours)</label>
+          <input
+            className={styles.input}
+            type="number"
+            min="0"
+            step="0.25"
+            placeholder="Not set"
+            value={task.duration ?? ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              onChange({
+                ...task,
+                duration: val === '' ? null : Math.max(0, Number(val)),
+              });
+            }}
+          />
+        </div>
+        {task.duration !== null && (
+          <button
+            className={styles.clearButton}
+            onClick={() => onChange({ ...task, duration: null })}
           >
             Clear
           </button>
