@@ -54,14 +54,18 @@ class TaskRepository(
         description: String,
         parentId: String?,
         priority: Int = 3,
-        dueDate: Long? = null
+        dueDate: Long? = null,
+        plannedTime: Long? = null,
+        duration: Double? = null
     ): Task {
         val entity = TaskEntity(
             title = title,
             description = description,
             parentId = parentId,
             priority = priority,
-            dueDate = dueDate
+            dueDate = dueDate,
+            plannedTime = plannedTime,
+            duration = duration
         )
         taskDao.insertTask(entity)
         return entity.toDomain()
