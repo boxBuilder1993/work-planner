@@ -8,6 +8,8 @@ import (
 	"github.com/boxBuilder1993/work-planner/backend/internal/auth"
 )
 
+const maxBodySize = 1 << 20 // 1 MB
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -19,12 +21,17 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 func decodeJSON(r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(nil, r.Body, maxBodySize)
 	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
 func getUserID(r *http.Request) string {
-	return r.Context().Value(auth.UserIDKey).(string)
+	uid, ok := r.Context().Value(auth.UserIDKey).(string)
+	if !ok {
+		return ""
+	}
+	return uid
 }
 
 // extractPathParam extracts a path segment by position from the URL.

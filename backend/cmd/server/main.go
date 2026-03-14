@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -24,22 +25,42 @@ func main() {
 
 	// Load config from environment.
 	databaseURL := envOrDefault("DATABASE_URL", "postgres://workplanner:workplanner@localhost:5432/workplanner?sslmode=disable")
-	jwtSecret := envOrDefault("JWT_SECRET", "dev-secret-change-me")
+	jwtSecret := envOrDefault("JWT_SECRET", "")
 	googleClientID := envOrDefault("GOOGLE_CLIENT_ID", "")
 	port := envOrDefault("PORT", "8080")
 	corsOrigins := envOrDefault("CORS_ORIGINS", "http://localhost:5173")
 	migrationsDir := envOrDefault("MIGRATIONS_DIR", "./migrations")
 
-	// Connect to Postgres.
-	pool, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+	if googleClientID == "" {
+		log.Println("WARNING: GOOGLE_CLIENT_ID not set — Google token audience validation is disabled")
+	}
+
+	// Connect to Postgres with retry.
+	var pool *pgxpool.Pool
+	for i := 0; i < 30; i++ {
+		var err error
+		pool, err = pgxpool.New(ctx, databaseURL)
+		if err == nil {
+			if err = pool.Ping(ctx); err == nil {
+				break
+			}
+			pool.Close()
+		}
+		log.Printf("Waiting for database (attempt %d/30): %v", i+1, err)
+		select {
+		case <-ctx.Done():
+			log.Fatal("Interrupted while waiting for database")
+		case <-time.After(2 * time.Second):
+		}
+		pool = nil
+	}
+	if pool == nil {
+		log.Fatal("Failed to connect to database after 30 attempts")
 	}
 	defer pool.Close()
-
-	if err := pool.Ping(ctx); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
-	}
 	log.Println("Connected to database")
 
 	// Run migrations.
@@ -64,6 +85,11 @@ func main() {
 	mux.HandleFunc("/auth/google", authHandler.HandleGoogleAuth)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if err := pool.Ping(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"status":"unhealthy","error":"database unreachable"}`))
+			return
+		}
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
@@ -101,10 +127,16 @@ func main() {
 	// Apply global middleware.
 	var rootHandler http.Handler = mux
 	rootHandler = middleware.CORS(corsOrigins)(rootHandler)
+	rootHandler = middleware.Logging(rootHandler)
 
-	// Start recurring worker.
+	// Start recurring worker with WaitGroup for graceful shutdown.
+	var wg sync.WaitGroup
 	rw := worker.NewRecurringWorker(st)
-	go rw.Start(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		rw.Start(ctx)
+	}()
 
 	// Start server.
 	srv := &http.Server{
@@ -128,6 +160,8 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Shutdown error: %v", err)
 	}
+
+	wg.Wait()
 	log.Println("Server stopped")
 }
 

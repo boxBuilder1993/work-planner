@@ -195,6 +195,9 @@ func (s *Store) scanTasks(ctx context.Context, query string, args ...any) ([]mod
 		}
 		tasks = append(tasks, t)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return tasks, nil
 }
 
@@ -220,6 +223,9 @@ func (s *Store) ListComments(ctx context.Context, userID, taskID string) ([]mode
 			return nil, err
 		}
 		comments = append(comments, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return comments, nil
 }
@@ -339,6 +345,9 @@ func (s *Store) ListAllRepeatingTasksWithTemplates(ctx context.Context) ([]Repea
 			return nil, err
 		}
 		results = append(results, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return results, nil
 }

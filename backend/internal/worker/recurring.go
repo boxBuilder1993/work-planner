@@ -47,8 +47,8 @@ func (w *RecurringWorker) tick(ctx context.Context) {
 		return
 	}
 
-	now := time.Now()
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	now := time.Now().UTC()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
 	for _, item := range items {
 		if err := w.processRule(ctx, item, todayStart, now); err != nil {
@@ -99,7 +99,7 @@ func (w *RecurringWorker) processRule(ctx context.Context, item store.RepeatingT
 	// Create tasks for all missed dates up to today.
 	created := false
 	for !cursor.After(todayStart) {
-		taskDate := time.Date(cursor.Year(), cursor.Month(), cursor.Day(), 0, 0, 0, 0, cursor.Location())
+		taskDate := time.Date(cursor.Year(), cursor.Month(), cursor.Day(), 0, 0, 0, 0, time.UTC)
 		title := fmt.Sprintf("[%s] - %s", taskDate.Format("Jan 2, 2006"), item.Template.Title)
 
 		nowMilli := now.UnixMilli()
