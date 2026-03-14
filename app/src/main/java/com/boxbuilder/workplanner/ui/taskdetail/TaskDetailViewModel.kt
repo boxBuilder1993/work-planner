@@ -35,6 +35,8 @@ data class EditState(
     val status: TaskStatus = TaskStatus.PENDING,
     val priority: Int = 3,
     val dueDate: Long? = null,
+    val plannedTime: Long? = null,
+    val duration: Double? = null,
     val parentId: String? = null,
     val repeatIntervalDays: Int? = null,
     val repeatStartDate: Long? = null
@@ -125,6 +127,8 @@ class TaskDetailViewModel @Inject constructor(
             status = task.status,
             priority = task.priority,
             dueDate = task.dueDate,
+            plannedTime = task.plannedTime,
+            duration = task.duration,
             parentId = task.parentId,
             repeatIntervalDays = repeating?.intervalDays,
             repeatStartDate = repeating?.startDate
@@ -179,7 +183,9 @@ class TaskDetailViewModel @Inject constructor(
                     description = edit.description,
                     parentId = edit.parentId,
                     priority = edit.priority,
-                    dueDate = edit.dueDate
+                    dueDate = edit.dueDate,
+                    plannedTime = edit.plannedTime,
+                    duration = edit.duration
                 )
                 // Set repeating rule on the newly created task
                 if (edit.repeatIntervalDays != null && edit.repeatIntervalDays > 0) {
@@ -209,6 +215,8 @@ class TaskDetailViewModel @Inject constructor(
                     status = edit.status,
                     priority = edit.priority,
                     dueDate = edit.dueDate,
+                    plannedTime = edit.plannedTime,
+                    duration = edit.duration,
                     parentId = edit.parentId
                 )
                 repository.updateTask(updated)

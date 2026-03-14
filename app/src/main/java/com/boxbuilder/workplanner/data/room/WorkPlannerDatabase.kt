@@ -8,7 +8,7 @@ import com.boxbuilder.workplanner.data.entity.TaskEntity
 
 @Database(
     entities = [TaskEntity::class, CommentEntity::class, RepeatingTaskEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class WorkPlannerDatabase : RoomDatabase() {

@@ -32,6 +32,8 @@ interface TasksContextValue {
     parentId?: string | null;
     priority?: number;
     dueDate?: number | null;
+    plannedTime?: number | null;
+    duration?: number | null;
   }) => TaskEntity;
   updateTask: (task: TaskEntity) => void;
   deleteTask: (taskId: string) => void;
@@ -180,6 +182,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       parentId?: string | null;
       priority?: number;
       dueDate?: number | null;
+      plannedTime?: number | null;
+      duration?: number | null;
     }): TaskEntity => {
       const now = Date.now();
       const task: TaskEntity = {
@@ -191,6 +195,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         priority: params.priority ?? 3,
         dueDate: params.dueDate ?? null,
         taskDate: null,
+        plannedTime: params.plannedTime ?? null,
+        duration: params.duration ?? null,
         createdAt: now,
         updatedAt: now,
       };

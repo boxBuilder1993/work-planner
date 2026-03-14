@@ -9,6 +9,8 @@ data class Task(
     val priority: Int,
     val dueDate: Long?,
     val taskDate: Long?,
+    val plannedTime: Long?,
+    val duration: Double?,
     val createdAt: Long,
     val updatedAt: Long
 )

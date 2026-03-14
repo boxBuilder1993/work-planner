@@ -40,6 +40,63 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const SESSION_KEY = 'workplanner_auth';
+
+function toBase64(arr: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
+  return btoa(binary);
+}
+
+function fromBase64(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+  return arr;
+}
+
+function saveSession(accessToken: string, userName: string, userEmail: string, encryptionKey: Uint8Array, salt: Uint8Array): void {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+    accessToken,
+    userName,
+    userEmail,
+    encryptionKey: toBase64(encryptionKey),
+    salt: toBase64(salt),
+  }));
+}
+
+function loadSession(): Pick<AuthState, 'accessToken' | 'userName' | 'userEmail' | 'encryptionKey' | 'salt'> | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data.accessToken || !data.userName || !data.userEmail || !data.encryptionKey || !data.salt) return null;
+    return {
+      accessToken: data.accessToken,
+      userName: data.userName,
+      userEmail: data.userEmail,
+      encryptionKey: fromBase64(data.encryptionKey),
+      salt: fromBase64(data.salt),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearSession(): void {
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
+let _needsInitialRestore = false;
+
+export function needsInitialRestore(): boolean {
+  return _needsInitialRestore;
+}
+
+export function clearInitialRestore(): void {
+  _needsInitialRestore = false;
+}
+
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
@@ -47,17 +104,31 @@ export function useAuth(): AuthContextValue {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    accessToken: null,
-    userName: null,
-    userEmail: null,
-    encryptionKey: null,
-    salt: null,
-    isSignedIn: false,
-    isLoading: false,
-    needsPassphraseCreation: false,
-    needsPassphraseEntry: false,
-    error: null,
+  const [state, setState] = useState<AuthState>(() => {
+    const session = loadSession();
+    if (session) {
+      _needsInitialRestore = true;
+      return {
+        ...session,
+        isSignedIn: true,
+        isLoading: false,
+        needsPassphraseCreation: false,
+        needsPassphraseEntry: false,
+        error: null,
+      };
+    }
+    return {
+      accessToken: null,
+      userName: null,
+      userEmail: null,
+      encryptionKey: null,
+      salt: null,
+      isSignedIn: false,
+      isLoading: false,
+      needsPassphraseCreation: false,
+      needsPassphraseEntry: false,
+      error: null,
+    };
   });
 
   const signIn = useCallback(async () => {
@@ -127,6 +198,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Upload salt to Drive
         await uploadSalt(state.accessToken!, salt);
 
+        saveSession(state.accessToken!, state.userName!, state.userEmail!, key, salt);
+
         setState((s) => ({
           ...s,
           encryptionKey: key,
@@ -147,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }));
       }
     },
-    [state.accessToken],
+    [state.accessToken, state.userName, state.userEmail],
   );
 
   const enterPassphrase = useCallback(
@@ -164,6 +237,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Attempt restore to verify passphrase is correct
         const restored = await performRestore(state.accessToken!, key);
+
+        saveSession(state.accessToken!, state.userName!, state.userEmail!, key, state.salt!);
 
         setState((s) => ({
           ...s,
@@ -187,7 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [state.accessToken, state.salt],
+    [state.accessToken, state.userName, state.userEmail, state.salt],
   );
 
   const skipRestore = useCallback(() => {
@@ -203,6 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    clearSession();
     if (state.accessToken) {
       try {
         await revokeToken(state.accessToken);
@@ -225,6 +301,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [state.accessToken]);
 
   const handleUnauthorized = useCallback(() => {
+    clearSession();
     setState((s) => ({
       ...s,
       accessToken: null,

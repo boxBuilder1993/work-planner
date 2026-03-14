@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import type { TaskEntity } from '../types';
 import { useTasks } from '../hooks/useTasks';
-import { formatDate, isOverdue } from '../utils';
+import { formatDate, formatDateTime, isOverdue } from '../utils';
 import BreadcrumbBar from './BreadcrumbBar';
 import TaskForm from './TaskForm';
 import TaskItem from './TaskItem';
@@ -49,6 +49,8 @@ export default function TaskDetail() {
       priority: 3,
       dueDate: null,
       taskDate: null,
+      plannedTime: null,
+      duration: null,
       createdAt: 0,
       updatedAt: 0,
     },
@@ -77,6 +79,8 @@ export default function TaskDetail() {
         priority: 3,
         dueDate: null,
         taskDate: null,
+        plannedTime: null,
+        duration: null,
         createdAt: 0,
         updatedAt: 0,
       });
@@ -114,6 +118,8 @@ export default function TaskDetail() {
         parentId: editedTask.parentId,
         priority: editedTask.priority,
         dueDate: editedTask.dueDate,
+        plannedTime: editedTask.plannedTime,
+        duration: editedTask.duration,
       });
       // Set repeating rule on newly created task
       if (editRepeatInterval && editRepeatInterval > 0) {
@@ -272,6 +278,20 @@ export default function TaskDetail() {
                 <span className={styles.chip}>
                   Task date: {formatDate(existingTask.taskDate)}
                 </span>
+              </div>
+            )}
+            {(existingTask.plannedTime != null || existingTask.duration != null) && (
+              <div className={styles.chips}>
+                {existingTask.plannedTime != null && (
+                  <span className={styles.chip}>
+                    Planned: {formatDateTime(existingTask.plannedTime)}
+                  </span>
+                )}
+                {existingTask.duration != null && (
+                  <span className={styles.chip}>
+                    Duration: {existingTask.duration}h
+                  </span>
+                )}
               </div>
             )}
             {existingRepeat && (
