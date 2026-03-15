@@ -24,6 +24,8 @@ export default function TaskDetail() {
     getRepeatingTaskForTask,
     setRepeatingTask,
     removeRepeatingTask,
+    fetchRepeatingTask,
+    refreshChildren,
   } = useTasks();
 
   const isNew = !taskId;
@@ -33,6 +35,7 @@ export default function TaskDetail() {
   const existingRepeat = taskId ? getRepeatingTaskForTask(taskId) : undefined;
   const [isEditing, setIsEditing] = useState(isNew);
   const [error, setError] = useState<string | null>(null);
+  const [breadcrumbs, setBreadcrumbs] = useState<TaskEntity[]>([]);
   const [editRepeatInterval, setEditRepeatInterval] = useState<number | null>(
     existingRepeat?.intervalDays ?? null,
   );
@@ -86,13 +89,25 @@ export default function TaskDetail() {
       });
       setEditRepeatInterval(null);
       setEditRepeatStartDate(null);
+      setBreadcrumbs([]);
     }
   }, [taskId, parentIdParam, getTaskById, getRepeatingTaskForTask]);
 
-  const breadcrumbs = existingTask ? getBreadcrumbs(existingTask.id) : [];
+  // Fetch breadcrumbs, children, and repeating task from API
+  useEffect(() => {
+    if (!taskId) return;
+    let cancelled = false;
+    getBreadcrumbs(taskId).then((crumbs) => {
+      if (!cancelled) setBreadcrumbs(crumbs);
+    });
+    refreshChildren(taskId);
+    fetchRepeatingTask(taskId);
+    return () => { cancelled = true; };
+  }, [taskId, getBreadcrumbs, refreshChildren, fetchRepeatingTask]);
+
   const children = existingTask ? getChildTasks(existingTask.id) : [];
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editedTask.title.trim()) {
       setError('Title is required');
       return;
@@ -112,7 +127,7 @@ export default function TaskDetail() {
     setError(null);
 
     if (isNew) {
-      const created = createTask({
+      const created = await createTask({
         title: editedTask.title.trim(),
         description: editedTask.description,
         parentId: editedTask.parentId,
@@ -123,33 +138,33 @@ export default function TaskDetail() {
       });
       // Set repeating rule on newly created task
       if (editRepeatInterval && editRepeatInterval > 0) {
-        setRepeatingTask(created.id, editRepeatInterval, editRepeatStartDate ?? Date.now());
+        await setRepeatingTask(created.id, editRepeatInterval, editRepeatStartDate ?? Date.now());
       }
       navigate(`/tasks/${created.id}`, { replace: true });
     } else {
-      updateTask({ ...editedTask, title: editedTask.title.trim() });
+      await updateTask({ ...editedTask, title: editedTask.title.trim() });
       // Update repeating rule
       if (editRepeatInterval && editRepeatInterval > 0) {
-        setRepeatingTask(
+        await setRepeatingTask(
           existingTask!.id,
           editRepeatInterval,
           editRepeatStartDate ?? existingRepeat?.startDate ?? Date.now(),
         );
       } else if (existingRepeat) {
-        removeRepeatingTask(existingTask!.id);
+        await removeRepeatingTask(existingTask!.id);
       }
       setIsEditing(false);
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!existingTask) return;
     const childCount = children.length;
     const message = childCount > 0
       ? `Delete this task and its ${childCount} sub-task(s)?`
       : 'Delete this task?';
     if (window.confirm(message)) {
-      deleteTask(existingTask.id);
+      await deleteTask(existingTask.id);
       navigate(-1);
     }
   };

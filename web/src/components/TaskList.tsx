@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Tab, SearchFilters, TaskEntity } from '../types';
 import { DEFAULT_SEARCH_FILTERS } from '../types';
@@ -18,6 +18,7 @@ export default function TaskList() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_SEARCH_FILTERS);
+  const [rawSearchResults, setRawSearchResults] = useState<TaskEntity[]>([]);
 
   const setTab = useCallback(
     (tab: Tab) => {
@@ -26,13 +27,25 @@ export default function TaskList() {
     [setSearchParams],
   );
 
+  // Fetch search results asynchronously
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setRawSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    searchTasks(searchQuery).then((results) => {
+      if (!cancelled) setRawSearchResults(results);
+    });
+    return () => { cancelled = true; };
+  }, [searchTasks, searchQuery]);
+
   const themeTasks = useMemo(() => getPendingRootTasks(), [getPendingRootTasks]);
   const actionableTasks = useMemo(() => getLeafTasks(), [getLeafTasks]);
-  const searchResults = useMemo(() => {
-    let results = searchTasks(searchQuery);
-    results = applyFilters(results, filters);
-    return results;
-  }, [searchTasks, searchQuery, filters]);
+  const searchResults = useMemo(
+    () => applyFilters(rawSearchResults, filters),
+    [rawSearchResults, filters],
+  );
 
   return (
     <div className={styles.page}>

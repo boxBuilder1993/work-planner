@@ -17,8 +17,7 @@ local.properties
 *.keystore
 
 # AI Poller
-ai-poller/token.json
-ai-poller/credentials.json
 ai-poller/.env
+ai-poller/ai_state.json
 ai-poller/__pycache__/
 ai-poller/.venv/

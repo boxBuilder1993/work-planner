@@ -61,7 +61,3 @@ export const PRIORITY_COLORS: Record<number, string> = {
   5: '#1E88E5',
 };
 
-export const DRIVE_FILE_TASKS = 'workplanner_tasks.enc';
-export const DRIVE_FILE_COMMENTS = 'workplanner_comments.enc';
-export const DRIVE_FILE_REPEATING_TASKS = 'workplanner_repeating_tasks.enc';
-export const DRIVE_FILE_SALT = 'workplanner_salt.bin';

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import { formatDate } from '../utils';
 import styles from './CommentSection.module.css';
@@ -8,19 +8,24 @@ interface Props {
 }
 
 export default function CommentSection({ taskId }: Props) {
-  const { getCommentsForTask, addComment, deleteComment } = useTasks();
+  const { getCommentsForTask, fetchCommentsForTask, addComment, deleteComment } = useTasks();
   const [text, setText] = useState('');
   const comments = getCommentsForTask(taskId);
 
-  const handleAdd = () => {
+  // Fetch comments from API on mount
+  useEffect(() => {
+    fetchCommentsForTask(taskId);
+  }, [taskId, fetchCommentsForTask]);
+
+  const handleAdd = async () => {
     if (!text.trim()) return;
-    addComment(taskId, text.trim());
+    await addComment(taskId, text.trim());
     setText('');
   };
 
-  const handleDelete = (commentId: string) => {
+  const handleDelete = async (commentId: string) => {
     if (window.confirm('Delete this comment?')) {
-      deleteComment(commentId);
+      await deleteComment(commentId);
     }
   };
 
