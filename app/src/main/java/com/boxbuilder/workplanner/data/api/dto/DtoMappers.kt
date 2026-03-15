@@ -32,13 +32,13 @@ fun TaskDto.toDomain(): Task = Task(
     description = description,
     status = try { TaskStatus.valueOf(status) } catch (_: Exception) { TaskStatus.PENDING },
     priority = priority,
-    dueDate = dueDate?.parseIso(),
-    taskDate = taskDate?.parseIso(),
-    plannedTime = plannedTime?.parseIso(),
+    dueDate = dueDate,
+    taskDate = taskDate,
+    plannedTime = plannedTime,
     duration = duration,
     aiEnabled = aiEnabled,
-    createdAt = createdAt.parseIso(),
-    updatedAt = updatedAt.parseIso()
+    createdAt = createdAt,
+    updatedAt = updatedAt
 )
 
 fun CommentDto.toDomain(): Comment = Comment(
@@ -52,8 +52,8 @@ fun CommentDto.toDomain(): Comment = Comment(
         try { ProposalStatus.valueOf(it) } catch (_: Exception) { null }
     },
     proposalFeedback = proposalFeedback,
-    createdAt = createdAt.parseIso(),
-    updatedAt = updatedAt.parseIso()
+    createdAt = createdAt,
+    updatedAt = updatedAt
 )
 
 fun RepeatingTaskDto.toDomain(): RepeatingTask = RepeatingTask(
@@ -62,6 +62,6 @@ fun RepeatingTaskDto.toDomain(): RepeatingTask = RepeatingTask(
     intervalDays = repetitionProps["interval_days"]?.toIntOrNull() ?: 0,
     startDate = repetitionProps["start_date"]?.parseIso() ?: 0L,
     lastCreatedAt = repetitionProps["last_created_at"]?.parseIso(),
-    createdAt = createdAt.parseIso(),
-    updatedAt = updatedAt.parseIso()
+    createdAt = createdAt,
+    updatedAt = updatedAt
 )

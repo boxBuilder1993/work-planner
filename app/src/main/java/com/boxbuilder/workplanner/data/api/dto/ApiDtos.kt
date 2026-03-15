@@ -24,13 +24,13 @@ data class TaskDto(
     val description: String,
     val status: String,
     val priority: Int,
-    val dueDate: String?,
-    val taskDate: String?,
-    val plannedTime: String?,
+    val dueDate: Long?,
+    val taskDate: Long?,
+    val plannedTime: Long?,
     val duration: Double?,
     val aiEnabled: Boolean = false,
-    val createdAt: String,
-    val updatedAt: String
+    val createdAt: Long,
+    val updatedAt: Long
 )
 
 data class CreateTaskRequest(
@@ -38,8 +38,8 @@ data class CreateTaskRequest(
     val description: String = "",
     val parentId: String? = null,
     val priority: Int = 3,
-    val dueDate: String? = null,
-    val plannedTime: String? = null,
+    val dueDate: Long? = null,
+    val plannedTime: Long? = null,
     val duration: Double? = null,
     val aiEnabled: Boolean? = null
 )
@@ -49,8 +49,8 @@ data class UpdateTaskRequest(
     val description: String? = null,
     val status: String? = null,
     val priority: Int? = null,
-    val dueDate: String? = null,
-    val plannedTime: String? = null,
+    val dueDate: Long? = null,
+    val plannedTime: Long? = null,
     val duration: Double? = null,
     val aiEnabled: Boolean? = null
 )
@@ -66,8 +66,8 @@ data class CommentDto(
     val createdBy: String = "user",
     val proposalStatus: String? = null,
     val proposalFeedback: String? = null,
-    val createdAt: String,
-    val updatedAt: String
+    val createdAt: Long,
+    val updatedAt: Long
 )
 
 data class CreateCommentRequest(val text: String)
@@ -81,8 +81,8 @@ data class RepeatingTaskDto(
     val taskId: String,
     val repetitionType: String,
     val repetitionProps: Map<String, String>,
-    val createdAt: String,
-    val updatedAt: String
+    val createdAt: Long,
+    val updatedAt: Long
 )
 
 data class UpsertRepeatingTaskRequest(

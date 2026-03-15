@@ -9,7 +9,6 @@ import com.boxbuilder.workplanner.data.api.dto.UpdateTaskRequest
 import com.boxbuilder.workplanner.data.api.dto.UpsertRepeatingTaskRequest
 import com.boxbuilder.workplanner.data.api.dto.toDomain
 import com.boxbuilder.workplanner.data.api.dto.toIso
-import com.boxbuilder.workplanner.data.api.dto.toIsoOrNull
 import com.boxbuilder.workplanner.data.model.Comment
 import com.boxbuilder.workplanner.data.model.RepeatingTask
 import com.boxbuilder.workplanner.data.model.Task
@@ -93,8 +92,8 @@ class TaskRepository(private val api: WorkPlannerApi) {
                 description = description,
                 parentId = parentId,
                 priority = priority,
-                dueDate = dueDate.toIsoOrNull(),
-                plannedTime = plannedTime.toIsoOrNull(),
+                dueDate = dueDate,
+                plannedTime = plannedTime,
                 duration = duration
             )
         )
@@ -114,8 +113,8 @@ class TaskRepository(private val api: WorkPlannerApi) {
                 description = task.description,
                 status = task.status.name,
                 priority = task.priority,
-                dueDate = task.dueDate.toIsoOrNull(),
-                plannedTime = task.plannedTime.toIsoOrNull(),
+                dueDate = task.dueDate,
+                plannedTime = task.plannedTime,
                 duration = task.duration,
                 aiEnabled = task.aiEnabled
             )
