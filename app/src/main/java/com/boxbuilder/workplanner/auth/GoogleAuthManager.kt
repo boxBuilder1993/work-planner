@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
+import com.boxbuilder.workplanner.BuildConfig
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 
@@ -13,8 +14,6 @@ class GoogleAuthManager(
     private val prefs: SharedPreferences
 ) {
     companion object {
-        const val WEB_CLIENT_ID = "887974376217-gjbc077ed1s0v79gg6df1oue6sroaq99.apps.googleusercontent.com"
-
         private const val PREF_SIGNED_IN = "signed_in"
         private const val PREF_USER_EMAIL = "user_email"
         private const val PREF_USER_NAME = "user_name"
@@ -31,7 +30,7 @@ class GoogleAuthManager(
      */
     suspend fun signIn(activityContext: Context): Result<String> {
         val googleIdOption = GetGoogleIdOption.Builder()
-            .setServerClientId(WEB_CLIENT_ID)
+            .setServerClientId(BuildConfig.GOOGLE_CLIENT_ID)
             .setFilterByAuthorizedAccounts(false)
             .build()
 
