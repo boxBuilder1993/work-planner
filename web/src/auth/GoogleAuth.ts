@@ -2,13 +2,15 @@ declare global {
   interface Window {
     google: {
       accounts: {
-        oauth2: {
-          initTokenClient(config: {
+        id: {
+          initialize(config: {
             client_id: string;
-            scope: string;
-            callback: (response: { access_token?: string; error?: string }) => void;
-          }): { requestAccessToken(): void };
-          revoke(token: string, callback?: () => void): void;
+            callback: (response: { credential?: string; error?: string }) => void;
+            auto_select?: boolean;
+          }): void;
+          prompt(callback?: (notification: { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean }) => void): void;
+          renderButton(parent: HTMLElement, options: { theme?: string; size?: string; text?: string }): void;
+          revoke(hint: string, callback?: () => void): void;
         };
       };
     };
@@ -16,42 +18,52 @@ declare global {
 }
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const API_BASE = import.meta.env.VITE_API_URL as string || 'http://localhost:8080';
 
-export function requestAccessToken(): Promise<string> {
+/**
+ * Initialize Google Identity Services and get an ID token via One Tap or button.
+ * Returns a JWT from our backend (not the Google token).
+ */
+export function requestGoogleSignIn(): Promise<{ token: string; user: { id: string; email: string; name: string } }> {
   return new Promise((resolve, reject) => {
-    const client = window.google.accounts.oauth2.initTokenClient({
+    window.google.accounts.id.initialize({
       client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-        } else if (response.access_token) {
-          resolve(response.access_token);
-        } else {
-          reject(new Error('No access token returned'));
+      callback: async (response) => {
+        if (!response.credential) {
+          reject(new Error('No credential returned from Google'));
+          return;
+        }
+        try {
+          // Exchange Google ID token for our backend JWT
+          const res = await fetch(`${API_BASE}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: response.credential }),
+          });
+          if (!res.ok) {
+            const body = await res.text();
+            reject(new Error(`Auth failed: ${body}`));
+            return;
+          }
+          const data = await res.json();
+          resolve({ token: data.token, user: data.user });
+        } catch (err) {
+          reject(err);
         }
       },
     });
-    client.requestAccessToken();
+    window.google.accounts.id.prompt();
   });
 }
 
-export function revokeToken(token: string): Promise<void> {
-  return new Promise((resolve) => {
-    window.google.accounts.oauth2.revoke(token, () => {
-      resolve();
-    });
+export function renderGoogleButton(element: HTMLElement): void {
+  window.google.accounts.id.initialize({
+    client_id: CLIENT_ID,
+    callback: () => {}, // handled by requestGoogleSignIn
   });
-}
-
-export async function fetchUserInfo(
-  token: string,
-): Promise<{ email: string; name: string }> {
-  const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${token}` },
+  window.google.accounts.id.renderButton(element, {
+    theme: 'outline',
+    size: 'large',
+    text: 'signin_with',
   });
-  if (!res.ok) throw new Error('Failed to fetch user info');
-  const data = await res.json();
-  return { email: data.email, name: data.name };
 }

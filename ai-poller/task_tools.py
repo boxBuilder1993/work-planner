@@ -1,72 +1,51 @@
 """MCP tools for the Claude Agent SDK.
 
-Provides read and write tools that operate on task/comment data from in-memory
-stores, populated each poll cycle via set_data().  Mutation tracking flags let
-the processor know when data needs to be uploaded back to Drive.
+Tools call the WorkPlanner backend API directly via a shared ApiClient instance.
+Set the client before each agent run via set_api_client().
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
-import time
-import uuid
-from collections import deque
 from typing import Any
 
 from claude_agent_sdk import tool, create_sdk_mcp_server
 
-from models import TaskEntity, CommentEntity
+from api_client import ApiClient
 
 # ---------------------------------------------------------------------------
-# In-memory stores populated before each agent run
+# Shared API client — set before each agent run
 # ---------------------------------------------------------------------------
-_tasks: dict[str, TaskEntity] = {}
-_comments: list[CommentEntity] = []
-
-# Mutation tracking – reset in set_data() so each agent run starts clean
-_tasks_dirty: bool = False
-_comments_dirty: bool = False
+_api: ApiClient | None = None
 
 
-def set_data(tasks: list[TaskEntity], comments: list[CommentEntity]) -> None:
-    """Populate the in-memory stores with the latest data from Drive."""
-    global _tasks, _comments, _tasks_dirty, _comments_dirty
-    _tasks = {t.id: t for t in tasks}
-    _comments = list(comments)
-    _tasks_dirty = False
-    _comments_dirty = False
+def set_api_client(client: ApiClient) -> None:
+    """Set the API client used by all MCP tools."""
+    global _api
+    _api = client
 
 
-def get_dirty_flags() -> tuple[bool, bool]:
-    """Return (tasks_dirty, comments_dirty)."""
-    return _tasks_dirty, _comments_dirty
-
-
-def get_current_tasks() -> list[TaskEntity]:
-    """Return the current in-memory tasks as a list."""
-    return list(_tasks.values())
-
-
-def get_current_comments() -> list[CommentEntity]:
-    """Return the current in-memory comments as a list."""
-    return list(_comments)
+def _client() -> ApiClient:
+    if _api is None:
+        raise RuntimeError("API client not set — call set_api_client() first")
+    return _api
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _task_to_dict(t: TaskEntity) -> dict[str, Any]:
-    return t.model_dump(by_alias=True)
+def _task_json(task) -> str:
+    return json.dumps(task.model_dump(), indent=2)
 
 
-def _comment_to_dict(c: CommentEntity) -> dict[str, Any]:
-    return c.model_dump(by_alias=True)
+def _comment_json(comment) -> str:
+    return json.dumps(comment.model_dump(), indent=2)
 
 
-def _now_ms() -> int:
-    return int(time.time() * 1000)
+def _result(text: str) -> dict[str, Any]:
+    return {"content": [{"type": "text", "text": text}]}
 
 
 # ---------------------------------------------------------------------------
@@ -75,41 +54,38 @@ def _now_ms() -> int:
 
 @tool("get_task", "Get details of a task by its ID", {"task_id": str})
 async def get_task(args: dict[str, Any]) -> dict[str, Any]:
-    task_id = args["task_id"]
-    task = _tasks.get(task_id)
-    if task is None:
-        return {"content": [{"type": "text", "text": f"Task {task_id} not found."}]}
-    return {"content": [{"type": "text", "text": json.dumps(_task_to_dict(task), indent=2)}]}
+    try:
+        task = _client().get_task(args["task_id"])
+        return _result(_task_json(task))
+    except Exception as e:
+        return _result(f"Error: {e}")
 
 
 @tool("get_subtasks", "Get child tasks of a parent task, sorted by createdAt", {"parent_task_id": str})
 async def get_subtasks(args: dict[str, Any]) -> dict[str, Any]:
-    parent_id = args["parent_task_id"]
-    children = [t for t in _tasks.values() if t.parent_id == parent_id]
-    children.sort(key=lambda t: t.created_at)
-    result = [_task_to_dict(t) for t in children]
-    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+    try:
+        children = _client().list_children(args["parent_task_id"])
+        return _result(json.dumps([t.model_dump() for t in children], indent=2))
+    except Exception as e:
+        return _result(f"Error: {e}")
 
 
 @tool("get_parent_chain", "Get ancestor chain from root to the given task", {"task_id": str})
 async def get_parent_chain(args: dict[str, Any]) -> dict[str, Any]:
-    task_id = args["task_id"]
-    chain: list[dict[str, Any]] = []
-    current = _tasks.get(task_id)
-    while current:
-        chain.append(_task_to_dict(current))
-        current = _tasks.get(current.parent_id) if current.parent_id else None
-    chain.reverse()  # root first
-    return {"content": [{"type": "text", "text": json.dumps(chain, indent=2)}]}
+    try:
+        crumbs = _client().get_breadcrumbs(args["task_id"])
+        return _result(json.dumps([t.model_dump() for t in crumbs], indent=2))
+    except Exception as e:
+        return _result(f"Error: {e}")
 
 
 @tool("get_task_comments", "Get comment thread for a task, sorted chronologically", {"task_id": str})
 async def get_task_comments(args: dict[str, Any]) -> dict[str, Any]:
-    task_id = args["task_id"]
-    thread = [c for c in _comments if c.task_id == task_id]
-    thread.sort(key=lambda c: c.created_at)
-    result = [_comment_to_dict(c) for c in thread]
-    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+    try:
+        comments = _client().list_comments(args["task_id"])
+        return _result(json.dumps([c.model_dump() for c in comments], indent=2))
+    except Exception as e:
+        return _result(f"Error: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -134,24 +110,19 @@ async def get_task_comments(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def create_task(args: dict[str, Any]) -> dict[str, Any]:
-    global _tasks_dirty
-    now = _now_ms()
-    task = TaskEntity(
-        id=str(uuid.uuid4()),
-        parentId=args.get("parent_id"),
-        title=args["title"],
-        description=args.get("description", ""),
-        status="PENDING",
-        priority=args.get("priority", 0),
-        dueDate=args.get("due_date"),
-        plannedTime=args.get("planned_time"),
-        duration=args.get("duration"),
-        createdAt=now,
-        updatedAt=now,
-    )
-    _tasks[task.id] = task
-    _tasks_dirty = True
-    return {"content": [{"type": "text", "text": json.dumps(_task_to_dict(task), indent=2)}]}
+    try:
+        task = _client().create_task(
+            title=args["title"],
+            description=args.get("description", ""),
+            parent_id=args.get("parent_id"),
+            priority=args.get("priority", 0),
+            due_date=args.get("due_date"),
+            planned_time=args.get("planned_time"),
+            duration=args.get("duration"),
+        )
+        return _result(_task_json(task))
+    except Exception as e:
+        return _result(f"Error creating task: {e}")
 
 
 @tool(
@@ -173,60 +144,21 @@ async def create_task(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def update_task(args: dict[str, Any]) -> dict[str, Any]:
-    global _tasks_dirty
-    task_id = args["task_id"]
-    task = _tasks.get(task_id)
-    if task is None:
-        return {"content": [{"type": "text", "text": f"Task {task_id} not found."}]}
-
-    if "title" in args:
-        task.title = args["title"]
-    if "description" in args:
-        task.description = args["description"]
-    if "status" in args:
-        task.status = args["status"]
-    if "priority" in args:
-        task.priority = args["priority"]
-    if "due_date" in args:
-        task.due_date = args["due_date"]
-    if "planned_time" in args:
-        task.planned_time = args["planned_time"]
-    if "duration" in args:
-        task.duration = args["duration"]
-
-    task.updated_at = _now_ms()
-    _tasks_dirty = True
-    return {"content": [{"type": "text", "text": json.dumps(_task_to_dict(task), indent=2)}]}
+    try:
+        task_id = args.pop("task_id")
+        task = _client().update_task(task_id, **args)
+        return _result(_task_json(task))
+    except Exception as e:
+        return _result(f"Error updating task: {e}")
 
 
 @tool("delete_task", "Delete a task and all its descendants (cascade)", {"task_id": str})
 async def delete_task(args: dict[str, Any]) -> dict[str, Any]:
-    global _tasks_dirty
-    task_id = args["task_id"]
-    if task_id not in _tasks:
-        return {"content": [{"type": "text", "text": f"Task {task_id} not found."}]}
-
-    # BFS to collect task + all descendants
-    to_delete: set[str] = set()
-    queue: deque[str] = deque([task_id])
-    while queue:
-        current_id = queue.popleft()
-        if current_id in to_delete:
-            continue
-        to_delete.add(current_id)
-        for t in _tasks.values():
-            if t.parent_id == current_id and t.id not in to_delete:
-                queue.append(t.id)
-
-    for tid in to_delete:
-        _tasks.pop(tid, None)
-
-    _tasks_dirty = True
-    return {
-        "content": [
-            {"type": "text", "text": f"Deleted {len(to_delete)} task(s): {', '.join(sorted(to_delete))}"}
-        ]
-    }
+    try:
+        _client().delete_task(args["task_id"])
+        return _result(f"Deleted task {args['task_id']}")
+    except Exception as e:
+        return _result(f"Error deleting task: {e}")
 
 
 @tool(
@@ -242,22 +174,11 @@ async def delete_task(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def add_comment(args: dict[str, Any]) -> dict[str, Any]:
-    global _comments_dirty
-    task_id = args["task_id"]
-    if task_id not in _tasks:
-        return {"content": [{"type": "text", "text": f"Task {task_id} not found."}]}
-
-    now = _now_ms()
-    comment = CommentEntity(
-        id=str(uuid.uuid4()),
-        taskId=task_id,
-        text=args["text"],
-        createdAt=now,
-        updatedAt=now,
-    )
-    _comments.append(comment)
-    _comments_dirty = True
-    return {"content": [{"type": "text", "text": json.dumps(_comment_to_dict(comment), indent=2)}]}
+    try:
+        comment = _client().create_comment(args["task_id"], args["text"])
+        return _result(_comment_json(comment))
+    except Exception as e:
+        return _result(f"Error adding comment: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -294,8 +215,7 @@ async def run_command(args: dict[str, Any]) -> dict[str, Any]:
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
-            result = {"pid": proc.pid, "status": "started in background"}
-            return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+            return _result(json.dumps({"pid": proc.pid, "status": "started in background"}, indent=2))
 
         proc = subprocess.run(
             command,
@@ -310,16 +230,12 @@ async def run_command(args: dict[str, Any]) -> dict[str, Any]:
             "stdout": proc.stdout[-10000:] if len(proc.stdout) > 10000 else proc.stdout,
             "stderr": proc.stderr[-5000:] if len(proc.stderr) > 5000 else proc.stderr,
         }
-        if len(proc.stdout) > 10000:
-            result["stdout_truncated"] = True
-        if len(proc.stderr) > 5000:
-            result["stderr_truncated"] = True
-        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+        return _result(json.dumps(result, indent=2))
 
     except subprocess.TimeoutExpired:
-        return {"content": [{"type": "text", "text": json.dumps({"error": f"Command timed out after {timeout}s"}, indent=2)}]}
+        return _result(json.dumps({"error": f"Command timed out after {timeout}s"}, indent=2))
     except Exception as e:
-        return {"content": [{"type": "text", "text": json.dumps({"error": str(e)}, indent=2)}]}
+        return _result(json.dumps({"error": str(e)}, indent=2))
 
 
 # ---------------------------------------------------------------------------

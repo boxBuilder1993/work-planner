@@ -1,4 +1,4 @@
-"""Pydantic data models matching existing WorkPlanner entity schemas."""
+"""Pydantic data models matching the WorkPlanner backend API responses."""
 
 from __future__ import annotations
 
@@ -7,41 +7,29 @@ from pydantic import BaseModel, Field
 
 class TaskEntity(BaseModel):
     id: str
-    parent_id: str | None = Field(None, alias="parentId")
+    parent_id: str | None = None
     title: str = ""
     description: str = ""
     status: str = "PENDING"  # PENDING | CLOSED
     priority: int = 0
-    due_date: int | None = Field(None, alias="dueDate")
-    task_date: int | None = Field(None, alias="taskDate")
-    planned_time: int | None = Field(None, alias="plannedTime")
-    duration: float | None = Field(None, alias="duration")
-    created_at: int = Field(0, alias="createdAt")
-    updated_at: int = Field(0, alias="updatedAt")
+    due_date: int | None = None
+    task_date: int | None = None
+    planned_time: int | None = None
+    duration: float | None = None
+    created_at: int = 0
+    updated_at: int = 0
 
-    model_config = {"populate_by_name": True}
+    model_config = {"extra": "ignore"}
 
 
 class CommentEntity(BaseModel):
     id: str
-    task_id: str = Field("", alias="taskId")
+    task_id: str = ""
     text: str = ""
-    created_at: int = Field(0, alias="createdAt")
-    updated_at: int = Field(0, alias="updatedAt")
+    created_at: int = 0
+    updated_at: int = 0
 
-    model_config = {"populate_by_name": True}
-
-
-class RepeatingTaskEntity(BaseModel):
-    id: str
-    task_id: str = Field("", alias="taskId")
-    interval_days: int = Field(0, alias="intervalDays")
-    start_date: int = Field(0, alias="startDate")
-    last_created_at: int | None = Field(None, alias="lastCreatedAt")
-    created_at: int = Field(0, alias="createdAt")
-    updated_at: int = Field(0, alias="updatedAt")
-
-    model_config = {"populate_by_name": True}
+    model_config = {"extra": "ignore"}
 
 
 class AIState(BaseModel):

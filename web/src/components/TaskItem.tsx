@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { TaskEntity } from '../types';
 import { useTasks } from '../hooks/useTasks';
@@ -14,13 +15,23 @@ interface Props {
 export default function TaskItem({ task, showPath, showDescription }: Props) {
   const navigate = useNavigate();
   const { getBreadcrumbs } = useTasks();
+  const [path, setPath] = useState<string | null>(null);
 
-  const path = showPath
-    ? getBreadcrumbs(task.id)
-        .slice(0, -1) // exclude self
-        .map((t) => t.title)
-        .join(' > ')
-    : null;
+  useEffect(() => {
+    if (!showPath) return;
+    let cancelled = false;
+    getBreadcrumbs(task.id).then((crumbs) => {
+      if (!cancelled) {
+        setPath(
+          crumbs
+            .slice(0, -1)
+            .map((t) => t.title)
+            .join(' > '),
+        );
+      }
+    });
+    return () => { cancelled = true; };
+  }, [showPath, task.id, getBreadcrumbs]);
 
   return (
     <div className={styles.card} onClick={() => navigate(`/tasks/${task.id}`)}>

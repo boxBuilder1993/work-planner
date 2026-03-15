@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import type { TaskEntity } from '../types';
 import styles from './ParentPicker.module.css';
@@ -18,6 +18,7 @@ export default function ParentPicker({
 }: Props) {
   const { getAllTasks, getDescendantIds, getBreadcrumbs } = useTasks();
   const [search, setSearch] = useState('');
+  const [pathMap, setPathMap] = useState<Record<string, string>>({});
 
   const eligibleTasks = useMemo(() => {
     const allTasks = getAllTasks();
@@ -44,10 +45,23 @@ export default function ParentPicker({
     return eligible.sort((a, b) => a.title.localeCompare(b.title));
   }, [getAllTasks, getDescendantIds, currentTaskId, search]);
 
-  const getPath = (taskId: string): string => {
-    const crumbs = getBreadcrumbs(taskId);
-    return crumbs.map((t) => t.title).join(' > ');
-  };
+  // Load breadcrumb paths for eligible tasks
+  useEffect(() => {
+    let cancelled = false;
+    for (const task of eligibleTasks) {
+      if (pathMap[task.id] !== undefined) continue;
+      getBreadcrumbs(task.id).then((crumbs) => {
+        if (cancelled) return;
+        setPathMap((prev) => ({
+          ...prev,
+          [task.id]: crumbs.map((t) => t.title).join(' > '),
+        }));
+      });
+    }
+    return () => { cancelled = true; };
+  }, [eligibleTasks, getBreadcrumbs, pathMap]);
+
+  const getPath = (taskId: string): string => pathMap[taskId] ?? '';
 
   return (
     <div className={styles.overlay} onClick={onClose}>

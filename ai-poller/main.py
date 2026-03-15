@@ -1,7 +1,7 @@
 """AI Poller entry point.
 
-Polls Google Drive for @ai comments in WorkPlanner tasks,
-generates AI responses via Claude Agent SDK, and writes them back.
+Polls the WorkPlanner backend API for @ai comments,
+generates AI responses via Claude Agent SDK, and posts them back.
 
 Usage:
     python main.py          # Continuous polling (default 5 min interval)
@@ -18,14 +18,11 @@ import os
 
 from dotenv import load_dotenv
 
-from google_auth import authenticate
-from drive_client import DriveClient
-from encryption import derive_key
+from api_client import ApiClient
 from processor import PollCycleProcessor
 
 logger = logging.getLogger("ai_poller")
 
-DRIVE_FILE_SALT = "workplanner_salt.bin"
 DEFAULT_POLL_INTERVAL = 300  # 5 minutes
 
 
@@ -37,13 +34,18 @@ def setup_logging() -> None:
     )
 
 
-def load_config() -> tuple[str, int]:
-    """Load configuration from .env. Returns (passphrase, poll_interval)."""
+def load_config() -> tuple[str, str, int]:
+    """Load configuration from .env. Returns (api_url, jwt, poll_interval)."""
     load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
-    passphrase = os.environ.get("WORKPLANNER_PASSPHRASE")
-    if not passphrase:
-        logger.error("WORKPLANNER_PASSPHRASE not set in .env")
+    api_url = os.environ.get("WORKPLANNER_API_URL")
+    if not api_url:
+        logger.error("WORKPLANNER_API_URL not set in .env")
+        sys.exit(1)
+
+    jwt = os.environ.get("WORKPLANNER_JWT")
+    if not jwt:
+        logger.error("WORKPLANNER_JWT not set in .env")
         sys.exit(1)
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -54,17 +56,15 @@ def load_config() -> tuple[str, int]:
     poll_interval = int(
         os.environ.get("POLL_INTERVAL_SECONDS", str(DEFAULT_POLL_INTERVAL))
     )
-    return passphrase, poll_interval
+    return api_url, jwt, poll_interval
 
 
 async def run_once(processor: PollCycleProcessor) -> None:
-    """Run a single poll cycle."""
     count = await processor.run_cycle()
     logger.info("Cycle complete: %d comment(s) processed", count)
 
 
 async def run_loop(processor: PollCycleProcessor, interval: int) -> None:
-    """Run the poll loop continuously."""
     logger.info("Starting poll loop (interval=%ds)", interval)
     while True:
         try:
@@ -83,27 +83,14 @@ def main() -> None:
     args = parser.parse_args()
 
     setup_logging()
-    passphrase, poll_interval = load_config()
+    api_url, jwt, poll_interval = load_config()
 
-    # Authenticate with Google Drive
-    logger.info("Authenticating with Google Drive...")
-    creds = authenticate()
-    drive = DriveClient(creds)
+    # Initialize API client
+    logger.info("Connecting to WorkPlanner API at %s", api_url)
+    api = ApiClient(api_url, jwt)
 
-    # Download salt and derive encryption key
-    logger.info("Downloading salt and deriving encryption key...")
-    salt = drive.download_file_by_name(DRIVE_FILE_SALT)
-    if salt is None:
-        logger.error(
-            "Salt file not found on Drive. WorkPlanner must be set up with a "
-            "passphrase and synced at least once before running the AI poller."
-        )
-        sys.exit(1)
+    processor = PollCycleProcessor(api)
 
-    key = derive_key(passphrase, salt)
-    processor = PollCycleProcessor(drive, key)
-
-    # Run
     if args.once:
         asyncio.run(run_once(processor))
     else:
