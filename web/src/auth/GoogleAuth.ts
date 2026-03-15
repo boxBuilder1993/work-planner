@@ -17,8 +17,8 @@ declare global {
   }
 }
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
-const API_BASE = import.meta.env.VITE_API_URL as string || 'http://localhost:8080';
+const CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const API_BASE: string = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 /**
  * Initialize Google Identity Services and get an ID token via One Tap or button.
