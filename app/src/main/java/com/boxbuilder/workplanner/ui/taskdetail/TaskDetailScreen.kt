@@ -155,6 +155,7 @@ fun TaskDetailScreen(
                         onDueDateChange = viewModel::updateDueDate,
                         onRepeatIntervalChange = viewModel::updateRepeatIntervalDays,
                         onRepeatStartDateChange = viewModel::updateRepeatStartDate,
+                        onAiEnabledChange = viewModel::updateAiEnabled,
                         onChangeParentClick = {
                             scope.launch {
                                 allTasks = viewModel.getAllTasksForPicker()

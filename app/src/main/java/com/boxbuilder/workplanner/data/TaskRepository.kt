@@ -116,7 +116,8 @@ class TaskRepository(private val api: WorkPlannerApi) {
                 priority = task.priority,
                 dueDate = task.dueDate.toIsoOrNull(),
                 plannedTime = task.plannedTime.toIsoOrNull(),
-                duration = task.duration
+                duration = task.duration,
+                aiEnabled = task.aiEnabled
             )
         )
         val updated = _tasks.value.toMutableMap()

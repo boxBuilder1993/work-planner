@@ -39,7 +39,8 @@ data class EditState(
     val duration: Double? = null,
     val parentId: String? = null,
     val repeatIntervalDays: Int? = null,
-    val repeatStartDate: Long? = null
+    val repeatStartDate: Long? = null,
+    val aiEnabled: Boolean = false
 )
 
 @HiltViewModel
@@ -136,7 +137,8 @@ class TaskDetailViewModel @Inject constructor(
             duration = task.duration,
             parentId = task.parentId,
             repeatIntervalDays = repeating?.intervalDays,
-            repeatStartDate = repeating?.startDate
+            repeatStartDate = repeating?.startDate,
+            aiEnabled = task.aiEnabled
         )
         _localState.value = _localState.value.copy(isEditing = true)
     }
@@ -175,6 +177,10 @@ class TaskDetailViewModel @Inject constructor(
 
     fun updateRepeatStartDate(startDate: Long?) {
         _editState.value = _editState.value.copy(repeatStartDate = startDate)
+    }
+
+    fun updateAiEnabled(enabled: Boolean) {
+        _editState.value = _editState.value.copy(aiEnabled = enabled)
     }
 
     fun save(onSaved: (String) -> Unit) {
@@ -222,7 +228,8 @@ class TaskDetailViewModel @Inject constructor(
                     dueDate = edit.dueDate,
                     plannedTime = edit.plannedTime,
                     duration = edit.duration,
-                    parentId = edit.parentId
+                    parentId = edit.parentId,
+                    aiEnabled = edit.aiEnabled
                 )
                 repository.updateTask(updated)
 

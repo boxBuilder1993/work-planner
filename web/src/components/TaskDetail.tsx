@@ -290,6 +290,11 @@ export default function TaskDetail() {
                 </span>
               )}
             </div>
+            {existingTask.aiEnabled && (
+              <span className={`${styles.chip} ${styles.statusChipPending}`}>
+                AI Enabled
+              </span>
+            )}
             {existingTask.taskDate != null && (
               <div className={styles.chips}>
                 <span className={styles.chip}>

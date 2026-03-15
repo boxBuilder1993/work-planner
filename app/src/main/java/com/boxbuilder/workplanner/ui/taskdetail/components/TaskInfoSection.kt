@@ -82,6 +82,19 @@ fun TaskInfoViewMode(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (task.aiEnabled) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer
+            ) {
+                Text(
+                    text = "AI Enabled",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
         if (repeatingTask != null) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -110,6 +123,7 @@ fun TaskInfoEditMode(
     onDueDateChange: (Long?) -> Unit,
     onRepeatIntervalChange: (Int?) -> Unit,
     onRepeatStartDateChange: (Long?) -> Unit,
+    onAiEnabledChange: (Boolean) -> Unit,
     onChangeParentClick: () -> Unit,
     parentName: String?,
     modifier: Modifier = Modifier
@@ -164,6 +178,19 @@ fun TaskInfoEditMode(
             RepeatStartDateField(
                 startDate = editState.repeatStartDate,
                 onStartDateChange = onRepeatStartDateChange
+            )
+        }
+
+        // AI Enabled toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("AI Enabled", style = MaterialTheme.typography.bodyLarge)
+            androidx.compose.material3.Switch(
+                checked = editState.aiEnabled,
+                onCheckedChange = onAiEnabledChange
             )
         }
 

@@ -167,6 +167,17 @@ export default function TaskForm({
       </div>
 
       <div className={styles.field}>
+        <label className={styles.label}>
+          <input
+            type="checkbox"
+            checked={task.aiEnabled}
+            onChange={() => onChange({ ...task, aiEnabled: !task.aiEnabled })}
+          />{' '}
+          AI Enabled
+        </label>
+      </div>
+
+      <div className={styles.field}>
         <label className={styles.label}>Repeat every (days)</label>
         <div className={styles.dateRow}>
           <input
