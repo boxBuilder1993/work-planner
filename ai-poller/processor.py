@@ -248,25 +248,6 @@ class PollCycleProcessor:
                 actions += 1
                 continue
 
-        # Dequeue waiting tasks if slots available
-        queued = [t for t in ai_tasks if t.status == "QUEUED"]
-        for task in queued:
-            if not self._spawner.can_spawn():
-                break
-            try:
-                task_knowledge: KnowledgeBase | None = None
-                if self._knowledge_factory and task.user_id:
-                    try:
-                        task_knowledge = self._knowledge_factory.for_user(task.user_id)
-                    except Exception:
-                        logger.warning("Failed to init knowledge base for queued task %s, continuing without it", task.id)
-                self._api.update_task(task.id, status="PENDING")
-                role = detect_role(task, all_tasks)
-                await self._spawner.spawn_agent(role, knowledge=task_knowledge)
-                actions += 1
-            except Exception:
-                logger.exception("Failed to dequeue task %s", task.id)
-
         return actions
 
     async def _process_legacy_comments(

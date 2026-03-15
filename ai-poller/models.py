@@ -12,7 +12,7 @@ class TaskEntity(BaseModel):
     parent_id: str | None = None
     title: str = ""
     description: str = ""
-    status: str = "PENDING"  # PENDING | IN_PROGRESS | QUEUED | CLOSED
+    status: str = "PENDING"  # PENDING | CLOSED
     priority: int = 0
     due_date: int | None = None
     task_date: int | None = None
