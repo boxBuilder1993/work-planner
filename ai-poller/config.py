@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 @dataclass(frozen=True)
 class AgentLimits:
     """Caps on concurrent agent activity."""
-    max_global_agents: int = 20
+    max_global_agents: int = 3
     max_tasks_per_agent: int = 3
     max_turns_per_run: int = 10
 
@@ -47,7 +47,7 @@ class Config:
     anthropic_api_key: str = ""
 
     # Polling
-    poll_interval_seconds: int = 300
+    poll_interval_seconds: int = 60
 
     # Sub-configs
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
@@ -88,7 +88,7 @@ def load_config(env_path: str | None = None) -> Config:
         jwt=_env("WORKPLANNER_JWT"),
         internal_api_key=_env("INTERNAL_API_KEY"),
         anthropic_api_key=_env("ANTHROPIC_API_KEY"),
-        poll_interval_seconds=_int("POLL_INTERVAL_SECONDS", 300),
+        poll_interval_seconds=_int("POLL_INTERVAL_SECONDS", 60),
         agent_limits=AgentLimits(
             max_global_agents=_int("MAX_GLOBAL_AGENTS", 20),
             max_tasks_per_agent=_int("MAX_TASKS_PER_AGENT", 3),
