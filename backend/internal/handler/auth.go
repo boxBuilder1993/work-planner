@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -38,6 +39,7 @@ func (h *AuthHandler) HandleGoogleAuth(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := h.auth.ValidateGoogleToken(r.Context(), req.IDToken)
 	if err != nil {
+		log.Printf("Google token validation failed: %v", err)
 		writeError(w, http.StatusUnauthorized, "invalid google token")
 		return
 	}
