@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/boxBuilder1993/work-planner/backend/internal/model"
@@ -18,12 +19,17 @@ func NewCommentHandler(s *store.Store) *CommentHandler {
 	return &CommentHandler{store: s}
 }
 
-// GET /api/tasks/:id/comments
+// GET /api/tasks/:id/comments?type=PROPOSAL
 func (h *CommentHandler) List(w http.ResponseWriter, r *http.Request) {
 	taskID := extractPathParam(r.URL.Path, 2) // /api/tasks/:id/comments
 	userID := getUserID(r)
 
-	comments, err := h.store.ListComments(r.Context(), userID, taskID)
+	var commentType *string
+	if ct := r.URL.Query().Get("type"); ct != "" {
+		commentType = &ct
+	}
+
+	comments, err := h.store.ListComments(r.Context(), userID, taskID, commentType)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "database error")
 		return
@@ -51,13 +57,33 @@ func (h *CommentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	commentType := req.CommentType
+	if commentType == "" {
+		commentType = "COMMENT"
+	}
+	createdBy := req.CreatedBy
+	if createdBy == "" {
+		createdBy = "user"
+	}
+
 	now := time.Now().UnixMilli()
+
+	var proposalStatus *string
+	if commentType == "PROPOSAL" {
+		s := "PENDING"
+		proposalStatus = &s
+	}
+
 	comment := &model.Comment{
-		ID:        uuid.New().String(),
-		TaskID:    taskID,
-		Text:      req.Text,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:              uuid.New().String(),
+		TaskID:          taskID,
+		ParentCommentID: req.ParentCommentID,
+		Text:            req.Text,
+		CommentType:     commentType,
+		CreatedBy:       createdBy,
+		ProposalStatus:  proposalStatus,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	err := h.store.CreateComment(r.Context(), userID, comment)
@@ -71,6 +97,48 @@ func (h *CommentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, comment)
+}
+
+// POST /api/comments/:id/approve
+func (h *CommentHandler) Approve(w http.ResponseWriter, r *http.Request) {
+	commentID := extractPathParam(r.URL.Path, 2) // /api/comments/:id/approve
+	userID := getUserID(r)
+
+	comment, err := h.store.UpdateProposalStatus(r.Context(), userID, commentID, "APPROVED", nil, time.Now().UnixMilli())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to approve proposal")
+		return
+	}
+	if comment == nil {
+		writeError(w, http.StatusNotFound, "proposal not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, comment)
+}
+
+// POST /api/comments/:id/deny
+func (h *CommentHandler) Deny(w http.ResponseWriter, r *http.Request) {
+	commentID := extractPathParam(r.URL.Path, 2) // /api/comments/:id/deny
+	userID := getUserID(r)
+
+	var req model.UpdateProposalRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	comment, err := h.store.UpdateProposalStatus(r.Context(), userID, commentID, "DENIED", req.Feedback, time.Now().UnixMilli())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to deny proposal")
+		return
+	}
+	if comment == nil {
+		writeError(w, http.StatusNotFound, "proposal not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, comment)
 }
 
 // DELETE /api/comments/:id
@@ -103,11 +171,18 @@ func (h *CommentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ServeDeleteHTTP routes /api/comments/:id requests.
+// ServeDeleteHTTP routes /api/comments/:id and /api/comments/:id/approve|deny requests.
 func (h *CommentHandler) ServeDeleteHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
+	path := strings.TrimSuffix(r.URL.Path, "/")
+
+	switch {
+	case r.Method == http.MethodDelete && strings.Count(path, "/") == 3:
+		h.Delete(w, r)
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/approve"):
+		h.Approve(w, r)
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/deny"):
+		h.Deny(w, r)
+	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
 	}
-	h.Delete(w, r)
 }

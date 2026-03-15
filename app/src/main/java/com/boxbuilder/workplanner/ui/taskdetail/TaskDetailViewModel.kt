@@ -280,6 +280,26 @@ class TaskDetailViewModel @Inject constructor(
         }
     }
 
+    fun approveProposal(commentId: String) {
+        viewModelScope.launch {
+            try {
+                repository.approveProposal(commentId)
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to approve proposal: ${e.message}"
+            }
+        }
+    }
+
+    fun denyProposal(commentId: String, feedback: String) {
+        viewModelScope.launch {
+            try {
+                repository.denyProposal(commentId, feedback)
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to deny proposal: ${e.message}"
+            }
+        }
+    }
+
     private data class LocalState(
         val isEditing: Boolean = false,
         val isNewTask: Boolean = false,

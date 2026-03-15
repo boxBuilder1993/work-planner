@@ -4,6 +4,7 @@ import android.util.Log
 import com.boxbuilder.workplanner.data.api.WorkPlannerApi
 import com.boxbuilder.workplanner.data.api.dto.CreateCommentRequest
 import com.boxbuilder.workplanner.data.api.dto.CreateTaskRequest
+import com.boxbuilder.workplanner.data.api.dto.ProposalFeedbackRequest
 import com.boxbuilder.workplanner.data.api.dto.UpdateTaskRequest
 import com.boxbuilder.workplanner.data.api.dto.UpsertRepeatingTaskRequest
 import com.boxbuilder.workplanner.data.api.dto.toDomain
@@ -221,6 +222,24 @@ class TaskRepository(private val api: WorkPlannerApi) {
         val updated = _comments.value.toMutableMap()
         updated.remove(comment.id)
         _comments.value = updated
+    }
+
+    suspend fun approveProposal(commentId: String, feedback: String = ""): Comment {
+        val dto = api.approveProposal(commentId, ProposalFeedbackRequest(feedback = feedback))
+        val comment = dto.toDomain()
+        val updated = _comments.value.toMutableMap()
+        updated[comment.id] = comment
+        _comments.value = updated
+        return comment
+    }
+
+    suspend fun denyProposal(commentId: String, feedback: String = ""): Comment {
+        val dto = api.denyProposal(commentId, ProposalFeedbackRequest(feedback = feedback))
+        val comment = dto.toDomain()
+        val updated = _comments.value.toMutableMap()
+        updated[comment.id] = comment
+        _comments.value = updated
+        return comment
     }
 
     // ── Repeating task queries ──────────────────────────────

@@ -54,6 +54,7 @@ export default function TaskDetail() {
       taskDate: null,
       plannedTime: null,
       duration: null,
+      aiEnabled: false,
       createdAt: 0,
       updatedAt: 0,
     },
@@ -84,6 +85,7 @@ export default function TaskDetail() {
         taskDate: null,
         plannedTime: null,
         duration: null,
+        aiEnabled: false,
         createdAt: 0,
         updatedAt: 0,
       });

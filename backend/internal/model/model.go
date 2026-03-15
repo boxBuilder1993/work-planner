@@ -14,16 +14,23 @@ type Task struct {
 	TaskDate    *int64   `json:"taskDate"`
 	PlannedTime *int64   `json:"plannedTime"`
 	Duration    *float64 `json:"duration"`
+	AiEnabled   bool     `json:"aiEnabled"`
+	Level       *int     `json:"level"`
 	CreatedAt   int64    `json:"createdAt"`
 	UpdatedAt   int64    `json:"updatedAt"`
 }
 
 type Comment struct {
-	ID        string `json:"id"`
-	TaskID    string `json:"taskId"`
-	Text      string `json:"text"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	ID               string  `json:"id"`
+	TaskID           string  `json:"taskId"`
+	ParentCommentID  *string `json:"parentCommentId"`
+	Text             string  `json:"text"`
+	CommentType      string  `json:"commentType"`
+	CreatedBy        string  `json:"createdBy"`
+	ProposalStatus   *string `json:"proposalStatus"`
+	ProposalFeedback *string `json:"proposalFeedback"`
+	CreatedAt        int64   `json:"createdAt"`
+	UpdatedAt        int64   `json:"updatedAt"`
 }
 
 type RepeatingTask struct {
@@ -65,6 +72,7 @@ type CreateTaskRequest struct {
 	DueDate     *int64   `json:"dueDate,omitempty"`
 	PlannedTime *int64   `json:"plannedTime,omitempty"`
 	Duration    *float64 `json:"duration,omitempty"`
+	AiEnabled   *bool    `json:"aiEnabled,omitempty"`
 }
 
 type UpdateTaskRequest struct {
@@ -75,10 +83,19 @@ type UpdateTaskRequest struct {
 	DueDate     *int64   `json:"dueDate,omitempty"`
 	PlannedTime *int64   `json:"plannedTime,omitempty"`
 	Duration    *float64 `json:"duration,omitempty"`
+	AiEnabled   *bool    `json:"aiEnabled,omitempty"`
 }
 
 type CreateCommentRequest struct {
-	Text string `json:"text"`
+	Text            string  `json:"text"`
+	ParentCommentID *string `json:"parentCommentId,omitempty"`
+	CommentType     string  `json:"commentType,omitempty"`
+	CreatedBy       string  `json:"createdBy,omitempty"`
+}
+
+type UpdateProposalRequest struct {
+	Status   string  `json:"status"`
+	Feedback *string `json:"feedback,omitempty"`
 }
 
 type UpsertRepeatingTaskRequest struct {

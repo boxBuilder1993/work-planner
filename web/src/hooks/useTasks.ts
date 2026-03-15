@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createElement } from 'react';
-import type { TaskEntity, CommentEntity, RepeatingTaskEntity } from '../types';
+import type { TaskEntity, CommentEntity, CommentType, RepeatingTaskEntity } from '../types';
 import * as tasksApi from '../api/tasks';
 import * as commentsApi from '../api/comments';
 import * as recurringApi from '../api/recurring';
@@ -46,8 +46,14 @@ interface TasksContextValue {
   // Comment operations
   getCommentsForTask: (taskId: string) => CommentEntity[];
   fetchCommentsForTask: (taskId: string) => Promise<CommentEntity[]>;
-  addComment: (taskId: string, text: string) => Promise<CommentEntity>;
+  addComment: (
+    taskId: string,
+    text: string,
+    options?: { parentCommentId?: string; commentType?: CommentType; createdBy?: string },
+  ) => Promise<CommentEntity>;
   deleteComment: (commentId: string) => Promise<void>;
+  approveProposal: (commentId: string) => Promise<void>;
+  denyProposal: (commentId: string, feedback?: string) => Promise<void>;
 
   // Fetch helpers
   refreshRootTasks: () => Promise<void>;
@@ -209,6 +215,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       dueDate: task.dueDate,
       plannedTime: task.plannedTime,
       duration: task.duration,
+      aiEnabled: task.aiEnabled,
     });
     setTasks((prev) => {
       const next = new Map(prev);
@@ -273,14 +280,39 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return list;
   }, []);
 
-  const addComment = useCallback(async (taskId: string, text: string): Promise<CommentEntity> => {
-    const comment = await commentsApi.createComment(taskId, text);
+  const addComment = useCallback(
+    async (
+      taskId: string,
+      text: string,
+      options?: { parentCommentId?: string; commentType?: CommentType; createdBy?: string },
+    ): Promise<CommentEntity> => {
+      const comment = await commentsApi.createComment(taskId, text, options);
+      setComments((prev) => {
+        const next = new Map(prev);
+        next.set(comment.id, comment);
+        return next;
+      });
+      return comment;
+    },
+    [],
+  );
+
+  const approveProposal = useCallback(async (commentId: string) => {
+    const updated = await commentsApi.approveProposal(commentId);
     setComments((prev) => {
       const next = new Map(prev);
-      next.set(comment.id, comment);
+      next.set(updated.id, updated);
       return next;
     });
-    return comment;
+  }, []);
+
+  const denyProposal = useCallback(async (commentId: string, feedback?: string) => {
+    const updated = await commentsApi.denyProposal(commentId, feedback);
+    setComments((prev) => {
+      const next = new Map(prev);
+      next.set(updated.id, updated);
+      return next;
+    });
   }, []);
 
   const deleteComment = useCallback(async (commentId: string) => {
@@ -368,6 +400,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     fetchCommentsForTask,
     addComment,
     deleteComment,
+    approveProposal,
+    denyProposal,
     getRepeatingTaskForTask,
     setRepeatingTask,
     removeRepeatingTask,
