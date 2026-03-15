@@ -220,7 +220,10 @@ class PollCycleProcessor:
             # Resolve per-user knowledge base for this task
             task_knowledge: KnowledgeBase | None = None
             if self._knowledge_factory and task.user_id:
-                task_knowledge = self._knowledge_factory.for_user(task.user_id)
+                try:
+                    task_knowledge = self._knowledge_factory.for_user(task.user_id)
+                except Exception:
+                    logger.warning("Failed to init knowledge base for user %s, continuing without it", task.user_id)
 
             # 2. Approved proposal → re-spawn agent to continue work
             approved = get_approved_proposals_for_task(task, task_comments)
@@ -253,7 +256,10 @@ class PollCycleProcessor:
             try:
                 task_knowledge: KnowledgeBase | None = None
                 if self._knowledge_factory and task.user_id:
-                    task_knowledge = self._knowledge_factory.for_user(task.user_id)
+                    try:
+                        task_knowledge = self._knowledge_factory.for_user(task.user_id)
+                    except Exception:
+                        logger.warning("Failed to init knowledge base for queued task %s, continuing without it", task.id)
                 self._api.update_task(task.id, status="PENDING")
                 role = detect_role(task, all_tasks)
                 await self._spawner.spawn_agent(role, knowledge=task_knowledge)
