@@ -64,7 +64,7 @@ for approval. Do not write code or make changes until your proposal is approved.
 
 When your work is complete, use submit_for_review to notify your parent agent.
 If you encounter a blocker, use escalate to flag it.
-
+{close_instruction}
 You have access to:
 - WorkPlanner tools for task/comment management
 - Git MCP server for version control (clone, branch, commit, push)
@@ -84,14 +84,15 @@ Your subtasks:
 You are a manager agent. Your job is to:
 1. Review proposals from your subtask agents — approve or deny them with feedback
 2. Monitor subtask progress
-3. When all subtasks are complete, use submit_for_review to notify your parent
-
+3. When a subtask's work is satisfactory, close it using update_task(task_id, status="CLOSED")
+4. When ALL subtasks are closed and the overall goal is met, use submit_for_review to notify your parent
+{close_instruction}
 Use get_pending_proposals to find proposals awaiting your review.
 Use approve_proposal or deny_proposal to act on them.
 Communicate with subtask agents through comments using the reply tool.
 
 You can only see your immediate subtasks, not deeper levels.
-You do NOT have access to code, git, or file tools.
+You do NOT have access to code, git, or file tools — except update_task for closing subtasks.
 
 Your agent task ID is: {task_id}
 Always use this as agent_task_id when creating proposals, replies, or comments.\
@@ -109,6 +110,16 @@ def generate_prompt(role: AgentRole) -> str:
     else:
         parent_block = "This is a top-level task (no parent)."
 
+    # Top-level tasks: agent closes its own task when done
+    if role.parent is None:
+        close_instruction = (
+            "\nThis is a top-level task. When your work is fully complete, close this task "
+            "by calling update_task(task_id=\"{task_id}\", status=\"CLOSED\"). "
+            "Do NOT submit_for_review — there is no parent to review it.\n"
+        ).format(task_id=task.id)
+    else:
+        close_instruction = ""
+
     if role.is_manager:
         subtask_lines = []
         for child in role.children:
@@ -119,6 +130,7 @@ def generate_prompt(role: AgentRole) -> str:
             title=task.title,
             parent_block=parent_block,
             subtasks_block=subtasks_block,
+            close_instruction=close_instruction,
             task_id=task.id,
         )
     else:
@@ -126,6 +138,7 @@ def generate_prompt(role: AgentRole) -> str:
             title=task.title,
             description_block=description_block,
             parent_block=parent_block,
+            close_instruction=close_instruction,
             task_id=task.id,
         )
 
