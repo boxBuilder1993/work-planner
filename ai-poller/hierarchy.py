@@ -110,13 +110,13 @@ def generate_prompt(role: AgentRole) -> str:
     else:
         parent_block = "This is a top-level task (no parent)."
 
-    # Top-level tasks: agent closes its own task when done
+    # Top-level tasks: user is the parent, agent leaves it open for user to close
     if role.parent is None:
         close_instruction = (
-            "\nThis is a top-level task. When your work is fully complete, close this task "
-            "by calling update_task(task_id=\"{task_id}\", status=\"CLOSED\"). "
-            "Do NOT submit_for_review — there is no parent to review it.\n"
-        ).format(task_id=task.id)
+            "\nThis is a top-level task. The user is your manager. When your work is complete, "
+            "post a comment summarizing what you did using add_comment. "
+            "Do NOT close this task — the user will review and close it themselves.\n"
+        )
     else:
         close_instruction = ""
 
