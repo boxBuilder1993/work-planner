@@ -1,7 +1,7 @@
 """AI Poller entry point.
 
-Polls the WorkPlanner backend API for @ai comments,
-generates AI responses via Claude Agent SDK, and posts them back.
+Polls the WorkPlanner backend API for ai_enabled tasks (hierarchy mode)
+and @ai comments (legacy mode), spawns Claude agents, and posts results back.
 
 Usage:
     python main.py          # Continuous polling (default 5 min interval)
@@ -14,16 +14,15 @@ import argparse
 import asyncio
 import logging
 import sys
-import os
-
-from dotenv import load_dotenv
 
 from api_client import ApiClient
+from config import load_config
+from knowledge import KnowledgeBase
 from processor import PollCycleProcessor
+from spawner import AgentSpawner
+from workspace import WorkspaceManager
 
 logger = logging.getLogger("ai_poller")
-
-DEFAULT_POLL_INTERVAL = 300  # 5 minutes
 
 
 def setup_logging() -> None:
@@ -34,42 +33,19 @@ def setup_logging() -> None:
     )
 
 
-def load_config() -> tuple[str, str, int]:
-    """Load configuration from .env. Returns (api_url, jwt, poll_interval)."""
-    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
-
-    api_url = os.environ.get("WORKPLANNER_API_URL")
-    if not api_url:
-        logger.error("WORKPLANNER_API_URL not set in .env")
-        sys.exit(1)
-
-    jwt = os.environ.get("WORKPLANNER_JWT")
-    if not jwt:
-        logger.error("WORKPLANNER_JWT not set in .env")
-        sys.exit(1)
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        logger.error("ANTHROPIC_API_KEY not set in .env")
-        sys.exit(1)
-
-    poll_interval = int(
-        os.environ.get("POLL_INTERVAL_SECONDS", str(DEFAULT_POLL_INTERVAL))
-    )
-    return api_url, jwt, poll_interval
-
-
-async def run_once(processor: PollCycleProcessor) -> None:
+async def run_once(processor: PollCycleProcessor, spawner: AgentSpawner) -> None:
     count = await processor.run_cycle()
-    logger.info("Cycle complete: %d comment(s) processed", count)
+    logger.info("Cycle complete: %d action(s) taken", count)
+    # Wait for any spawned agents to finish
+    await spawner.wait_for_all(timeout=300)
 
 
-async def run_loop(processor: PollCycleProcessor, interval: int) -> None:
+async def run_loop(processor: PollCycleProcessor, spawner: AgentSpawner, interval: int) -> None:
     logger.info("Starting poll loop (interval=%ds)", interval)
     while True:
         try:
             count = await processor.run_cycle()
-            logger.info("Cycle complete: %d comment(s) processed", count)
+            logger.info("Cycle complete: %d action(s) taken", count)
         except Exception:
             logger.exception("Error during poll cycle, will retry next cycle")
         await asyncio.sleep(interval)
@@ -83,18 +59,45 @@ def main() -> None:
     args = parser.parse_args()
 
     setup_logging()
-    api_url, jwt, poll_interval = load_config()
 
-    # Initialize API client
-    logger.info("Connecting to WorkPlanner API at %s", api_url)
-    api = ApiClient(api_url, jwt)
+    try:
+        cfg = load_config()
+        cfg.validate()
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
 
-    processor = PollCycleProcessor(api)
+    logger.info("Connecting to WorkPlanner API at %s", cfg.api_url)
+    api = ApiClient(cfg.api_url, jwt=cfg.jwt, internal_api_key=cfg.internal_api_key)
+
+    # Initialize optional services
+    knowledge: KnowledgeBase | None = None
+    try:
+        knowledge = KnowledgeBase(cfg.vector_db)
+        logger.info("ChromaDB connected at %s:%d", cfg.vector_db.host, cfg.vector_db.port)
+    except Exception:
+        logger.warning("ChromaDB not available, running without knowledge base")
+
+    workspace = WorkspaceManager(cfg.workspace)
+    if workspace.enabled:
+        cleaned = workspace.cleanup_orphaned()
+        if cleaned:
+            logger.info("Cleaned up %d orphaned worktree(s)", cleaned)
+
+    spawner = AgentSpawner(api, cfg, knowledge)
+
+    processor = PollCycleProcessor(
+        api=api,
+        config=cfg,
+        spawner=spawner,
+        workspace=workspace,
+        knowledge=knowledge,
+    )
 
     if args.once:
-        asyncio.run(run_once(processor))
+        asyncio.run(run_once(processor, spawner))
     else:
-        asyncio.run(run_loop(processor, poll_interval))
+        asyncio.run(run_loop(processor, spawner, cfg.poll_interval_seconds))
 
 
 if __name__ == "__main__":

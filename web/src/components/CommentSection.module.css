@@ -14,6 +14,17 @@
   gap: var(--spacing-sm);
 }
 
+/* Thread nesting */
+.threadNode {
+  border-left: 2px solid transparent;
+}
+
+.threadNode[style*="margin-left: 20"] {
+  border-left-color: var(--divider);
+  padding-left: var(--spacing-sm);
+  margin-top: var(--spacing-xs, 4px);
+}
+
 .comment {
   display: flex;
   align-items: flex-start;
@@ -23,9 +34,65 @@
   padding: var(--spacing-sm) var(--spacing-md);
 }
 
+.proposalComment {
+  border-left: 3px solid var(--primary);
+}
+
 .commentContent {
   flex: 1;
   min-width: 0;
+}
+
+/* Badge row */
+.badgeRow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.agentBadge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.proposalBadge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.statusBadge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.statusPending {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.statusApproved {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.statusDenied {
+  background: #ffebee;
+  color: #c62828;
 }
 
 .commentText {
@@ -34,10 +101,89 @@
   word-break: break-word;
 }
 
+.commentMeta {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  margin-top: 2px;
+}
+
 .commentDate {
   font-size: var(--font-size-sm);
   color: var(--on-surface-secondary);
-  margin-top: 2px;
+}
+
+.commentCreator {
+  font-size: var(--font-size-sm);
+  color: var(--on-surface-secondary);
+}
+
+.proposalFeedback {
+  font-size: var(--font-size-sm);
+  color: var(--on-surface-secondary);
+  font-style: italic;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: var(--surface, #f5f5f5);
+  border-radius: var(--radius-md);
+}
+
+/* Comment action buttons */
+.commentActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.comment:hover .commentActions {
+  opacity: 1;
+}
+
+.replyButton {
+  background: none;
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--on-surface-secondary);
+  cursor: pointer;
+}
+
+.replyButton:hover {
+  background: var(--surface, #f5f5f5);
+  color: var(--on-surface);
+}
+
+.approveButton {
+  background: none;
+  border: 1px solid #2e7d32;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: #2e7d32;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.approveButton:hover {
+  background: #e8f5e9;
+}
+
+.denyButton {
+  background: none;
+  border: 1px solid #c62828;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: #c62828;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.denyButton:hover {
+  background: #ffebee;
 }
 
 .deleteButton {
@@ -59,6 +205,78 @@
   color: var(--error);
 }
 
+/* Reply indicator */
+.replyIndicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  padding: 6px 10px;
+  background: var(--surface, #f5f5f5);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--on-surface-secondary);
+}
+
+.replyIndicator span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cancelReply {
+  background: none;
+  border: none;
+  color: var(--on-surface-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+
+.cancelReply:hover {
+  color: var(--on-surface);
+}
+
+/* Deny modal */
+.denyModal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.denyModalContent {
+  background: var(--background, white);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  width: 90%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.denyModalTitle {
+  font-weight: 600;
+  font-size: var(--font-size-md);
+}
+
+.denyModalActions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+/* Add form */
 .addForm {
   display: flex;
   gap: var(--spacing-sm);

@@ -220,6 +220,8 @@ fun TaskDetailScreen(
                         comments = uiState.comments,
                         onAddComment = viewModel::addComment,
                         onDeleteComment = viewModel::deleteComment,
+                        onApproveProposal = viewModel::approveProposal,
+                        onDenyProposal = viewModel::denyProposal,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }

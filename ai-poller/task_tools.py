@@ -79,10 +79,24 @@ async def get_parent_chain(args: dict[str, Any]) -> dict[str, Any]:
         return _result(f"Error: {e}")
 
 
-@tool("get_task_comments", "Get comment thread for a task, sorted chronologically", {"task_id": str})
+@tool(
+    "get_task_comments",
+    "Get comment thread for a task, sorted chronologically. Optionally filter by comment_type.",
+    {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "ID of the task"},
+            "comment_type": {"type": "string", "description": "Filter by type: COMMENT or PROPOSAL (optional)"},
+        },
+        "required": ["task_id"],
+    },
+)
 async def get_task_comments(args: dict[str, Any]) -> dict[str, Any]:
     try:
-        comments = _client().list_comments(args["task_id"])
+        comments = _client().list_comments(
+            args["task_id"],
+            comment_type=args.get("comment_type"),
+        )
         return _result(json.dumps([c.model_dump() for c in comments], indent=2))
     except Exception as e:
         return _result(f"Error: {e}")
@@ -105,6 +119,7 @@ async def get_task_comments(args: dict[str, Any]) -> dict[str, Any]:
             "due_date": {"type": "integer", "description": "Due date as epoch milliseconds"},
             "planned_time": {"type": "integer", "description": "Planned time as epoch milliseconds"},
             "duration": {"type": "number", "description": "Duration in hours"},
+            "ai_enabled": {"type": "boolean", "description": "Whether AI agent processing is enabled for this task"},
         },
         "required": ["title"],
     },
@@ -119,6 +134,7 @@ async def create_task(args: dict[str, Any]) -> dict[str, Any]:
             due_date=args.get("due_date"),
             planned_time=args.get("planned_time"),
             duration=args.get("duration"),
+            ai_enabled=args.get("ai_enabled", False),
         )
         return _result(_task_json(task))
     except Exception as e:
@@ -163,22 +179,225 @@ async def delete_task(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "add_comment",
-    "Add a comment to a task",
+    "Add a comment to a task. Supports threading, comment types, and agent attribution.",
     {
         "type": "object",
         "properties": {
             "task_id": {"type": "string", "description": "ID of the task to comment on"},
             "text": {"type": "string", "description": "Comment text"},
+            "parent_comment_id": {"type": "string", "description": "ID of parent comment for threaded replies (optional)"},
+            "comment_type": {"type": "string", "description": "COMMENT or PROPOSAL (default: COMMENT)"},
+            "created_by": {"type": "string", "description": "Author: 'user' or an agent task ID (default: 'user')"},
         },
         "required": ["task_id", "text"],
     },
 )
 async def add_comment(args: dict[str, Any]) -> dict[str, Any]:
     try:
-        comment = _client().create_comment(args["task_id"], args["text"])
+        comment = _client().create_comment(
+            task_id=args["task_id"],
+            text=args["text"],
+            parent_comment_id=args.get("parent_comment_id"),
+            comment_type=args.get("comment_type", "COMMENT"),
+            created_by=args.get("created_by", "user"),
+        )
         return _result(_comment_json(comment))
     except Exception as e:
         return _result(f"Error adding comment: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Agent hierarchy tools — proposals & reviews
+# ---------------------------------------------------------------------------
+
+@tool(
+    "propose",
+    "Create a PROPOSAL comment on the agent's task for the parent/manager to review. "
+    "Sets comment_type=PROPOSAL and proposal_status=PENDING automatically.",
+    {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "ID of the task to attach the proposal to"},
+            "text": {"type": "string", "description": "Proposal text describing the plan or action"},
+            "agent_task_id": {"type": "string", "description": "The task ID of the agent creating this proposal (used as created_by)"},
+        },
+        "required": ["task_id", "text", "agent_task_id"],
+    },
+)
+async def propose(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comment = _client().create_comment(
+            task_id=args["task_id"],
+            text=args["text"],
+            comment_type="PROPOSAL",
+            created_by=args["agent_task_id"],
+        )
+        return _result(_comment_json(comment))
+    except Exception as e:
+        return _result(f"Error creating proposal: {e}")
+
+
+@tool(
+    "reply",
+    "Reply in a comment thread. Creates a comment with a parent_comment_id for threading.",
+    {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "ID of the task the comment thread belongs to"},
+            "parent_comment_id": {"type": "string", "description": "ID of the comment to reply to"},
+            "text": {"type": "string", "description": "Reply text"},
+            "agent_task_id": {"type": "string", "description": "The task ID of the agent replying (used as created_by)"},
+        },
+        "required": ["task_id", "parent_comment_id", "text", "agent_task_id"],
+    },
+)
+async def reply(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comment = _client().create_comment(
+            task_id=args["task_id"],
+            text=args["text"],
+            parent_comment_id=args["parent_comment_id"],
+            comment_type="COMMENT",
+            created_by=args["agent_task_id"],
+        )
+        return _result(_comment_json(comment))
+    except Exception as e:
+        return _result(f"Error replying: {e}")
+
+
+@tool(
+    "get_my_proposals",
+    "Get all PROPOSAL comments created by this agent on a given task.",
+    {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "ID of the task to check proposals on"},
+            "agent_task_id": {"type": "string", "description": "The agent's task ID (filters by created_by)"},
+        },
+        "required": ["task_id", "agent_task_id"],
+    },
+)
+async def get_my_proposals(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comments = _client().list_comments(args["task_id"], comment_type="PROPOSAL")
+        mine = [c for c in comments if c.created_by == args["agent_task_id"]]
+        return _result(json.dumps([c.model_dump() for c in mine], indent=2))
+    except Exception as e:
+        return _result(f"Error fetching proposals: {e}")
+
+
+@tool(
+    "get_pending_proposals",
+    "Get unreviewed PROPOSAL comments from subtask agents (manager tool). "
+    "Fetches PROPOSAL comments on the given task that have proposal_status=PENDING.",
+    {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "ID of the task to check for pending proposals"},
+        },
+        "required": ["task_id"],
+    },
+)
+async def get_pending_proposals(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comments = _client().list_comments(args["task_id"], comment_type="PROPOSAL")
+        pending = [c for c in comments if c.proposal_status == "PENDING"]
+        return _result(json.dumps([c.model_dump() for c in pending], indent=2))
+    except Exception as e:
+        return _result(f"Error fetching pending proposals: {e}")
+
+
+@tool(
+    "approve_proposal",
+    "Approve a pending PROPOSAL comment. Sets proposal_status=APPROVED.",
+    {
+        "type": "object",
+        "properties": {
+            "comment_id": {"type": "string", "description": "ID of the PROPOSAL comment to approve"},
+        },
+        "required": ["comment_id"],
+    },
+)
+async def approve_proposal(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comment = _client().approve_proposal(args["comment_id"])
+        return _result(_comment_json(comment))
+    except Exception as e:
+        return _result(f"Error approving proposal: {e}")
+
+
+@tool(
+    "deny_proposal",
+    "Deny a pending PROPOSAL comment with feedback. Sets proposal_status=DENIED.",
+    {
+        "type": "object",
+        "properties": {
+            "comment_id": {"type": "string", "description": "ID of the PROPOSAL comment to deny"},
+            "feedback": {"type": "string", "description": "Feedback explaining why the proposal was denied"},
+        },
+        "required": ["comment_id", "feedback"],
+    },
+)
+async def deny_proposal(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comment = _client().deny_proposal(args["comment_id"], feedback=args["feedback"])
+        return _result(_comment_json(comment))
+    except Exception as e:
+        return _result(f"Error denying proposal: {e}")
+
+
+@tool(
+    "submit_for_review",
+    "Submit work for review by the parent/manager agent. "
+    "Creates a PROPOSAL comment indicating the work is done and ready for review.",
+    {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "ID of the task whose work is complete"},
+            "text": {"type": "string", "description": "Summary of completed work for the reviewer"},
+            "agent_task_id": {"type": "string", "description": "The agent's task ID (used as created_by)"},
+        },
+        "required": ["task_id", "text", "agent_task_id"],
+    },
+)
+async def submit_for_review(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comment = _client().create_comment(
+            task_id=args["task_id"],
+            text=f"[SUBMIT FOR REVIEW] {args['text']}",
+            comment_type="PROPOSAL",
+            created_by=args["agent_task_id"],
+        )
+        return _result(_comment_json(comment))
+    except Exception as e:
+        return _result(f"Error submitting for review: {e}")
+
+
+@tool(
+    "escalate",
+    "Escalate a blocker to the parent/manager agent. "
+    "Creates a PROPOSAL comment flagging an issue that needs higher-level attention.",
+    {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "ID of the task with the blocker"},
+            "text": {"type": "string", "description": "Description of the blocker or issue"},
+            "agent_task_id": {"type": "string", "description": "The agent's task ID (used as created_by)"},
+        },
+        "required": ["task_id", "text", "agent_task_id"],
+    },
+)
+async def escalate(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comment = _client().create_comment(
+            task_id=args["task_id"],
+            text=f"[ESCALATION] {args['text']}",
+            comment_type="PROPOSAL",
+            created_by=args["agent_task_id"],
+        )
+        return _result(_comment_json(comment))
+    except Exception as e:
+        return _result(f"Error escalating: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +471,9 @@ def create_workplanner_mcp_server():
             get_task, get_subtasks, get_parent_chain, get_task_comments,
             # Write
             create_task, update_task, delete_task, add_comment,
+            # Agent hierarchy — proposals & reviews
+            propose, reply, get_my_proposals, get_pending_proposals,
+            approve_proposal, deny_proposal, submit_for_review, escalate,
             # Shell
             run_command,
         ],

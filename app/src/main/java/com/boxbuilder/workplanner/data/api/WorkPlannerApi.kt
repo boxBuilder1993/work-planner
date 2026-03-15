@@ -5,6 +5,7 @@ import com.boxbuilder.workplanner.data.api.dto.AuthResponse
 import com.boxbuilder.workplanner.data.api.dto.CommentDto
 import com.boxbuilder.workplanner.data.api.dto.CreateCommentRequest
 import com.boxbuilder.workplanner.data.api.dto.CreateTaskRequest
+import com.boxbuilder.workplanner.data.api.dto.ProposalFeedbackRequest
 import com.boxbuilder.workplanner.data.api.dto.RepeatingTaskDto
 import com.boxbuilder.workplanner.data.api.dto.TaskDto
 import com.boxbuilder.workplanner.data.api.dto.UpdateTaskRequest
@@ -67,6 +68,18 @@ interface WorkPlannerApi {
 
     @DELETE("api/comments/{id}")
     suspend fun deleteComment(@Path("id") id: String)
+
+    @POST("api/comments/{id}/approve")
+    suspend fun approveProposal(
+        @Path("id") id: String,
+        @Body request: ProposalFeedbackRequest
+    ): CommentDto
+
+    @POST("api/comments/{id}/deny")
+    suspend fun denyProposal(
+        @Path("id") id: String,
+        @Body request: ProposalFeedbackRequest
+    ): CommentDto
 
     // ── Recurring Tasks ─────────────────────────────────────
 

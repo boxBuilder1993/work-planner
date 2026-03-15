@@ -9,14 +9,23 @@ export interface TaskEntity {
   taskDate: number | null;
   plannedTime: number | null;
   duration: number | null;
+  aiEnabled: boolean;
   createdAt: number;
   updatedAt: number;
 }
+
+export type CommentType = 'COMMENT' | 'PROPOSAL';
+export type ProposalStatus = 'PENDING' | 'APPROVED' | 'DENIED';
 
 export interface CommentEntity {
   id: string;
   taskId: string;
   text: string;
+  parentCommentId: string | null;
+  commentType: CommentType;
+  createdBy: string;
+  proposalStatus: ProposalStatus | null;
+  proposalFeedback: string | null;
   createdAt: number;
   updatedAt: number;
 }

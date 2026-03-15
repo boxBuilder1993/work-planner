@@ -11,6 +11,7 @@ data class Task(
     val taskDate: Long?,
     val plannedTime: Long?,
     val duration: Double?,
+    val aiEnabled: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long
 )

@@ -1,6 +1,8 @@
 package com.boxbuilder.workplanner.data.api.dto
 
 import com.boxbuilder.workplanner.data.model.Comment
+import com.boxbuilder.workplanner.data.model.CommentType
+import com.boxbuilder.workplanner.data.model.ProposalStatus
 import com.boxbuilder.workplanner.data.model.RepeatingTask
 import com.boxbuilder.workplanner.data.model.Task
 import com.boxbuilder.workplanner.data.model.TaskStatus
@@ -34,6 +36,7 @@ fun TaskDto.toDomain(): Task = Task(
     taskDate = taskDate?.parseIso(),
     plannedTime = plannedTime?.parseIso(),
     duration = duration,
+    aiEnabled = aiEnabled,
     createdAt = createdAt.parseIso(),
     updatedAt = updatedAt.parseIso()
 )
@@ -42,6 +45,13 @@ fun CommentDto.toDomain(): Comment = Comment(
     id = id,
     taskId = taskId,
     text = text,
+    parentCommentId = parentCommentId,
+    commentType = try { CommentType.valueOf(commentType) } catch (_: Exception) { CommentType.COMMENT },
+    createdBy = createdBy,
+    proposalStatus = proposalStatus?.let {
+        try { ProposalStatus.valueOf(it) } catch (_: Exception) { null }
+    },
+    proposalFeedback = proposalFeedback,
     createdAt = createdAt.parseIso(),
     updatedAt = updatedAt.parseIso()
 )

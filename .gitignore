@@ -21,3 +21,9 @@ ai-poller/.env
 ai-poller/ai_state.json
 ai-poller/__pycache__/
 ai-poller/.venv/
+ai-poller/credentials.json
+ai-poller/token.json
+
+# Build artifacts
+backend/server
+web/.vite/

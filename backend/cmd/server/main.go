@@ -30,6 +30,8 @@ func main() {
 	port := envOrDefault("PORT", "8080")
 	corsOrigins := envOrDefault("CORS_ORIGINS", "http://localhost:5173")
 	migrationsDir := envOrDefault("MIGRATIONS_DIR", "./migrations")
+	internalAPIKey := envOrDefault("INTERNAL_API_KEY", "")
+	internalUserID := envOrDefault("INTERNAL_USER_ID", "")
 
 	if jwtSecret == "" {
 		log.Fatal("JWT_SECRET environment variable is required")
@@ -121,7 +123,7 @@ func main() {
 	})
 
 	// Apply auth middleware to protected routes.
-	authMw := middleware.AuthMiddleware(a)
+	authMw := middleware.AuthMiddleware(a, internalAPIKey, internalUserID)
 	mux.Handle("/api/", authMw(protectedMux))
 
 	// Apply global middleware.

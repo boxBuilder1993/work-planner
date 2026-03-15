@@ -15,11 +15,14 @@ logger = logging.getLogger(__name__)
 class ApiClient:
     """Thin wrapper around the WorkPlanner REST API."""
 
-    def __init__(self, base_url: str, jwt: str) -> None:
+    def __init__(self, base_url: str, jwt: str = "", internal_api_key: str = "") -> None:
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
-        self.session.headers["Authorization"] = f"Bearer {jwt}"
         self.session.headers["Content-Type"] = "application/json"
+        if internal_api_key:
+            self.session.headers["X-Internal-Key"] = internal_api_key
+        elif jwt:
+            self.session.headers["Authorization"] = f"Bearer {jwt}"
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
@@ -69,8 +72,14 @@ class ApiClient:
         due_date: int | None = None,
         planned_time: int | None = None,
         duration: float | None = None,
+        ai_enabled: bool = False,
     ) -> TaskEntity:
-        body: dict[str, Any] = {"title": title, "description": description, "priority": priority}
+        body: dict[str, Any] = {
+            "title": title,
+            "description": description,
+            "priority": priority,
+            "ai_enabled": ai_enabled,
+        }
         if parent_id is not None:
             body["parent_id"] = parent_id
         if due_date is not None:
@@ -89,11 +98,42 @@ class ApiClient:
 
     # ── Comments ───────────────────────────────────────────────────────
 
-    def list_comments(self, task_id: str) -> list[CommentEntity]:
-        return [CommentEntity(**c) for c in self._get(f"/api/tasks/{task_id}/comments")]
+    def list_comments(
+        self,
+        task_id: str,
+        comment_type: str | None = None,
+    ) -> list[CommentEntity]:
+        """List comments for a task, optionally filtered by type (e.g. PROPOSAL)."""
+        params: dict[str, str] | None = None
+        if comment_type is not None:
+            params = {"type": comment_type}
+        return [CommentEntity(**c) for c in self._get(f"/api/tasks/{task_id}/comments", params)]
 
-    def create_comment(self, task_id: str, text: str) -> CommentEntity:
-        return CommentEntity(**self._post(f"/api/tasks/{task_id}/comments", {"text": text}))
+    def create_comment(
+        self,
+        task_id: str,
+        text: str,
+        parent_comment_id: str | None = None,
+        comment_type: str = "COMMENT",
+        created_by: str = "user",
+    ) -> CommentEntity:
+        """Create a comment on a task with optional threading and type metadata."""
+        body: dict[str, Any] = {
+            "text": text,
+            "commentType": comment_type,
+            "createdBy": created_by,
+        }
+        if parent_comment_id is not None:
+            body["parentCommentId"] = parent_comment_id
+        return CommentEntity(**self._post(f"/api/tasks/{task_id}/comments", body))
+
+    def approve_proposal(self, comment_id: str) -> CommentEntity:
+        """Approve a PROPOSAL comment."""
+        return CommentEntity(**self._post(f"/api/comments/{comment_id}/approve"))
+
+    def deny_proposal(self, comment_id: str, feedback: str = "") -> CommentEntity:
+        """Deny a PROPOSAL comment with optional feedback."""
+        return CommentEntity(**self._post(f"/api/comments/{comment_id}/deny", {"feedback": feedback}))
 
     def delete_comment(self, comment_id: str) -> None:
         self._delete(f"/api/comments/{comment_id}")

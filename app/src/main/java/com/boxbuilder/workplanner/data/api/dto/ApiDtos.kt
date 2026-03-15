@@ -28,6 +28,7 @@ data class TaskDto(
     val taskDate: String?,
     val plannedTime: String?,
     val duration: Double?,
+    val aiEnabled: Boolean = false,
     val createdAt: String,
     val updatedAt: String
 )
@@ -39,7 +40,8 @@ data class CreateTaskRequest(
     val priority: Int = 3,
     val dueDate: String? = null,
     val plannedTime: String? = null,
-    val duration: Double? = null
+    val duration: Double? = null,
+    val aiEnabled: Boolean? = null
 )
 
 data class UpdateTaskRequest(
@@ -49,7 +51,8 @@ data class UpdateTaskRequest(
     val priority: Int? = null,
     val dueDate: String? = null,
     val plannedTime: String? = null,
-    val duration: Double? = null
+    val duration: Double? = null,
+    val aiEnabled: Boolean? = null
 )
 
 // ── Comments ────────────────────────────────────────────────
@@ -58,11 +61,18 @@ data class CommentDto(
     val id: String,
     val taskId: String,
     val text: String,
+    val parentCommentId: String? = null,
+    val commentType: String = "COMMENT",
+    val createdBy: String = "user",
+    val proposalStatus: String? = null,
+    val proposalFeedback: String? = null,
     val createdAt: String,
     val updatedAt: String
 )
 
 data class CreateCommentRequest(val text: String)
+
+data class ProposalFeedbackRequest(val feedback: String = "")
 
 // ── Repeating Tasks ─────────────────────────────────────────
 

@@ -18,6 +18,7 @@ export function createTask(body: {
   dueDate?: number | null;
   plannedTime?: number | null;
   duration?: number | null;
+  aiEnabled?: boolean;
 }): Promise<TaskEntity> {
   return apiPost('/api/tasks', body);
 }
@@ -30,6 +31,7 @@ export function updateTask(id: string, body: {
   dueDate?: number | null;
   plannedTime?: number | null;
   duration?: number | null;
+  aiEnabled?: boolean;
 }): Promise<TaskEntity> {
   return apiPatch(`/api/tasks/${id}`, body);
 }

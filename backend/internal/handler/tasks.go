@@ -33,6 +33,11 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		priority = *req.Priority
 	}
 
+	aiEnabled := false
+	if req.AiEnabled != nil {
+		aiEnabled = *req.AiEnabled
+	}
+
 	task := &model.Task{
 		ID:          uuid.New().String(),
 		UserID:      getUserID(r),
@@ -44,6 +49,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		DueDate:     req.DueDate,
 		PlannedTime: req.PlannedTime,
 		Duration:    req.Duration,
+		AiEnabled:   aiEnabled,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
