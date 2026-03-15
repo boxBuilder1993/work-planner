@@ -31,7 +31,6 @@ func main() {
 	corsOrigins := envOrDefault("CORS_ORIGINS", "http://localhost:5173")
 	migrationsDir := envOrDefault("MIGRATIONS_DIR", "./migrations")
 	internalAPIKey := envOrDefault("INTERNAL_API_KEY", "")
-	internalUserID := envOrDefault("INTERNAL_USER_ID", "")
 
 	if jwtSecret == "" {
 		log.Fatal("JWT_SECRET environment variable is required")
@@ -79,6 +78,7 @@ func main() {
 	taskHandler := handler.NewTaskHandler(st)
 	commentHandler := handler.NewCommentHandler(st)
 	recurringHandler := handler.NewRecurringHandler(st)
+	internalHandler := handler.NewInternalHandler(st)
 
 	// Build router.
 	mux := http.NewServeMux()
@@ -122,8 +122,18 @@ func main() {
 		commentHandler.ServeDeleteHTTP(w, r)
 	})
 
+	// Internal routes — require internal API key, no user scoping.
+	internalMux := http.NewServeMux()
+	internalMux.HandleFunc("/api/internal/tasks/", func(w http.ResponseWriter, r *http.Request) {
+		internalHandler.ServeHTTP(w, r)
+	})
+	internalMux.HandleFunc("/api/internal/tasks", func(w http.ResponseWriter, r *http.Request) {
+		internalHandler.ServeHTTP(w, r)
+	})
+
 	// Apply auth middleware to protected routes.
-	authMw := middleware.AuthMiddleware(a, internalAPIKey, internalUserID)
+	authMw := middleware.AuthMiddleware(a, internalAPIKey)
+	mux.Handle("/api/internal/", authMw(handler.RequireInternal(internalMux)))
 	mux.Handle("/api/", authMw(protectedMux))
 
 	// Apply global middleware.

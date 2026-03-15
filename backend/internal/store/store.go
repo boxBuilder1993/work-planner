@@ -412,6 +412,57 @@ func (s *Store) IsTaskClosed(ctx context.Context, taskID string) (bool, error) {
 	return status == "CLOSED", nil
 }
 
+// ─── Internal (unscoped) queries ────────────────────────────────────────────
+
+func (s *Store) ListAllRootTasks(ctx context.Context, status *string) ([]model.Task, error) {
+	query := `SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		FROM tasks WHERE parent_id IS NULL`
+	var args []any
+
+	if status != nil {
+		query += " AND status = $1"
+		args = append(args, *status)
+	}
+	query += " ORDER BY created_at"
+
+	return s.scanTasks(ctx, query, args...)
+}
+
+func (s *Store) ListAllChildren(ctx context.Context, parentID string) ([]model.Task, error) {
+	return s.scanTasks(ctx, `
+		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		FROM tasks WHERE parent_id = $1 ORDER BY created_at
+	`, parentID)
+}
+
+func (s *Store) ListAllComments(ctx context.Context, taskID string, commentType *string) ([]model.Comment, error) {
+	query := `
+		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.created_at, c.updated_at
+		FROM comments c
+		WHERE c.task_id = $1`
+	args := []any{taskID}
+
+	if commentType != nil {
+		query += " AND c.comment_type = $2"
+		args = append(args, *commentType)
+	}
+	query += " ORDER BY c.created_at ASC"
+
+	return s.scanComments(ctx, query, args...)
+}
+
+func (s *Store) GetTaskByID(ctx context.Context, taskID string) (*model.Task, error) {
+	var t model.Task
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		FROM tasks WHERE id = $1
+	`, taskID).Scan(&t.ID, &t.UserID, &t.ParentID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.CreatedAt, &t.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &t, err
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func joinStrings(s []string, sep string) string {

@@ -17,7 +17,7 @@ import sys
 
 from api_client import ApiClient
 from config import load_config
-from knowledge import KnowledgeBase
+from knowledge import KnowledgeBaseFactory
 from processor import PollCycleProcessor
 from spawner import AgentSpawner
 from workspace import WorkspaceManager
@@ -71,9 +71,9 @@ def main() -> None:
     api = ApiClient(cfg.api_url, jwt=cfg.jwt, internal_api_key=cfg.internal_api_key)
 
     # Initialize optional services
-    knowledge: KnowledgeBase | None = None
+    knowledge_factory: KnowledgeBaseFactory | None = None
     try:
-        knowledge = KnowledgeBase(cfg.vector_db)
+        knowledge_factory = KnowledgeBaseFactory(cfg.vector_db)
         logger.info("ChromaDB connected at %s:%d", cfg.vector_db.host, cfg.vector_db.port)
     except Exception:
         logger.warning("ChromaDB not available, running without knowledge base")
@@ -84,14 +84,14 @@ def main() -> None:
         if cleaned:
             logger.info("Cleaned up %d orphaned worktree(s)", cleaned)
 
-    spawner = AgentSpawner(api, cfg, knowledge)
+    spawner = AgentSpawner(api, cfg)
 
     processor = PollCycleProcessor(
         api=api,
         config=cfg,
         spawner=spawner,
         workspace=workspace,
-        knowledge=knowledge,
+        knowledge_factory=knowledge_factory,
     )
 
     if args.once:

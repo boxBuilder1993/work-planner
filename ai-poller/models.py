@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class TaskEntity(BaseModel):
     id: str
+    user_id: str = ""
     parent_id: str | None = None
     title: str = ""
     description: str = ""

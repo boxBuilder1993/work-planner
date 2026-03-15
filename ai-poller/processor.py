@@ -29,7 +29,7 @@ from hierarchy import (
     has_unreviewed_child_proposals,
     is_new_unprocessed_task,
 )
-from knowledge import KnowledgeBase
+from knowledge import KnowledgeBase, KnowledgeBaseFactory
 from models import AIState, CommentEntity, TaskEntity
 from spawner import AgentSpawner
 from task_tools import create_workplanner_mcp_server, set_api_client
@@ -142,13 +142,13 @@ class PollCycleProcessor:
         config: Config,
         spawner: AgentSpawner,
         workspace: WorkspaceManager,
-        knowledge: KnowledgeBase | None = None,
+        knowledge_factory: KnowledgeBaseFactory | None = None,
     ) -> None:
         self._api = api
         self._config = config
         self._spawner = spawner
         self._workspace = workspace
-        self._knowledge = knowledge
+        self._knowledge_factory = knowledge_factory
 
     async def run_cycle(self) -> int:
         """Run one poll cycle. Returns the number of actions taken."""
@@ -217,18 +217,23 @@ class PollCycleProcessor:
             if pending_proposals:
                 continue
 
+            # Resolve per-user knowledge base for this task
+            task_knowledge: KnowledgeBase | None = None
+            if self._knowledge_factory and task.user_id:
+                task_knowledge = self._knowledge_factory.for_user(task.user_id)
+
             # 2. Approved proposal → re-spawn agent to continue work
             approved = get_approved_proposals_for_task(task, task_comments)
             if approved:
                 role = detect_role(task, all_tasks)
-                await self._spawner.spawn_agent(role)
+                await self._spawner.spawn_agent(role, knowledge=task_knowledge)
                 actions += 1
                 continue
 
             # 3. New unprocessed task → spawn worker agent
             if is_new_unprocessed_task(task, task_comments, ai_state.processed_comment_ids):
                 role = detect_role(task, all_tasks)
-                await self._spawner.spawn_agent(role)
+                await self._spawner.spawn_agent(role, knowledge=task_knowledge)
                 ai_state.processed_comment_ids.add(task.id)
                 actions += 1
                 continue
@@ -236,7 +241,7 @@ class PollCycleProcessor:
             # 4. Manager: child tasks have unreviewed proposals → spawn manager to review
             if has_children and has_unreviewed_child_proposals(task, all_tasks, all_comments_flat):
                 role = detect_role(task, all_tasks)
-                await self._spawner.spawn_agent(role)
+                await self._spawner.spawn_agent(role, knowledge=task_knowledge)
                 actions += 1
                 continue
 
@@ -246,9 +251,12 @@ class PollCycleProcessor:
             if not self._spawner.can_spawn():
                 break
             try:
+                task_knowledge: KnowledgeBase | None = None
+                if self._knowledge_factory and task.user_id:
+                    task_knowledge = self._knowledge_factory.for_user(task.user_id)
                 self._api.update_task(task.id, status="PENDING")
                 role = detect_role(task, all_tasks)
-                await self._spawner.spawn_agent(role)
+                await self._spawner.spawn_agent(role, knowledge=task_knowledge)
                 actions += 1
             except Exception:
                 logger.exception("Failed to dequeue task %s", task.id)

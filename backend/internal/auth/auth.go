@@ -14,6 +14,7 @@ import (
 type contextKey string
 
 const UserIDKey contextKey = "userId"
+const IsInternalKey contextKey = "isInternal"
 
 // Google's public certs endpoint for verifying ID tokens.
 const googleCertsURL = "https://www.googleapis.com/oauth2/v3/tokeninfo"

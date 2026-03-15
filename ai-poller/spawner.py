@@ -39,10 +39,9 @@ class AgentRun:
 class AgentSpawner:
     """Manages spawning and tracking of Claude agent sub-processes."""
 
-    def __init__(self, api: ApiClient, config: Config, knowledge: KnowledgeBase | None = None) -> None:
+    def __init__(self, api: ApiClient, config: Config) -> None:
         self._api = api
         self._config = config
-        self._knowledge = knowledge
         self._active_runs: dict[str, AgentRun] = {}  # task_id -> AgentRun
 
     @property
@@ -55,7 +54,7 @@ class AgentSpawner:
     def can_spawn(self) -> bool:
         return self.active_count < self._config.agent_limits.max_global_agents
 
-    async def spawn_agent(self, role: AgentRole) -> None:
+    async def spawn_agent(self, role: AgentRole, knowledge: KnowledgeBase | None = None) -> None:
         """Spawn a Claude agent for the given task/role.
 
         The agent runs asynchronously and its results are posted back
@@ -76,8 +75,8 @@ class AgentSpawner:
 
         # Build the system prompt with knowledge context
         system_prompt = generate_prompt(role)
-        if self._knowledge:
-            context = self._knowledge.query_knowledge(
+        if knowledge:
+            context = knowledge.query_knowledge(
                 f"context for: {task.title} {task.description}",
                 limit=3,
             )
@@ -99,7 +98,7 @@ class AgentSpawner:
 
         # Launch the agent as an async task
         run.task_handle = asyncio.create_task(
-            self._run_agent(task.id, system_prompt, mcp_servers, allowed_tools)
+            self._run_agent(task.id, system_prompt, mcp_servers, allowed_tools, knowledge)
         )
 
     async def _run_agent(
@@ -108,6 +107,7 @@ class AgentSpawner:
         system_prompt: str,
         extra_mcp_servers: dict,
         allowed_tools: list[str],
+        knowledge: KnowledgeBase | None = None,
     ) -> None:
         """Execute one agent run for a task."""
         try:
@@ -140,8 +140,8 @@ class AgentSpawner:
                         result_text = message.result
 
             # Document the agent's work in the knowledge base
-            if self._knowledge and result_text:
-                self._knowledge.document_work(
+            if knowledge and result_text:
+                knowledge.document_work(
                     task_id=task_id,
                     agent_id=task_id,
                     work_type="agent_run",

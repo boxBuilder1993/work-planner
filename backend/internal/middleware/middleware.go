@@ -10,13 +10,13 @@ import (
 	"github.com/boxBuilder1993/work-planner/backend/internal/auth"
 )
 
-func AuthMiddleware(a *auth.Auth, internalAPIKey, internalUserID string) func(http.Handler) http.Handler {
+func AuthMiddleware(a *auth.Auth, internalAPIKey string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Internal service auth (e.g. ai-poller on Railway private network).
 			if internalAPIKey != "" {
 				if key := r.Header.Get("X-Internal-Key"); key == internalAPIKey {
-					ctx := context.WithValue(r.Context(), auth.UserIDKey, internalUserID)
+					ctx := context.WithValue(r.Context(), auth.IsInternalKey, true)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}

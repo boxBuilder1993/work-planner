@@ -17,6 +17,7 @@ class ApiClient:
 
     def __init__(self, base_url: str, jwt: str = "", internal_api_key: str = "") -> None:
         self.base_url = base_url.rstrip("/")
+        self._is_internal = bool(internal_api_key)
         self.session = requests.Session()
         self.session.headers["Content-Type"] = "application/json"
         if internal_api_key:
@@ -49,15 +50,22 @@ class ApiClient:
     # ── Tasks ──────────────────────────────────────────────────────────
 
     def list_root_tasks(self, status: str | None = None) -> list[TaskEntity]:
-        params: dict[str, str] = {"root": "true"}
+        if self._is_internal:
+            params: dict[str, str] = {}
+            if status:
+                params["status"] = status
+            return [TaskEntity(**t) for t in self._get("/api/internal/tasks", params or None)]
+        params2: dict[str, str] = {"root": "true"}
         if status:
-            params["status"] = status
-        return [TaskEntity(**t) for t in self._get("/api/tasks", params)]
+            params2["status"] = status
+        return [TaskEntity(**t) for t in self._get("/api/tasks", params2)]
 
     def get_task(self, task_id: str) -> TaskEntity:
         return TaskEntity(**self._get(f"/api/tasks/{task_id}"))
 
     def list_children(self, task_id: str) -> list[TaskEntity]:
+        if self._is_internal:
+            return [TaskEntity(**t) for t in self._get(f"/api/internal/tasks/{task_id}/children")]
         return [TaskEntity(**t) for t in self._get(f"/api/tasks/{task_id}/children")]
 
     def get_breadcrumbs(self, task_id: str) -> list[TaskEntity]:
@@ -107,6 +115,8 @@ class ApiClient:
         params: dict[str, str] | None = None
         if comment_type is not None:
             params = {"type": comment_type}
+        if self._is_internal:
+            return [CommentEntity(**c) for c in self._get(f"/api/internal/tasks/{task_id}/comments", params)]
         return [CommentEntity(**c) for c in self._get(f"/api/tasks/{task_id}/comments", params)]
 
     def create_comment(

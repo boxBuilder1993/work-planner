@@ -18,12 +18,17 @@ logger = logging.getLogger(__name__)
 
 
 class KnowledgeBase:
-    """Wrapper around a ChromaDB collection for agent knowledge."""
+    """Wrapper around a ChromaDB collection for agent knowledge.
 
-    def __init__(self, config: VectorDBConfig) -> None:
-        self._client = chromadb.HttpClient(host=config.host, port=config.port)
+    Each user gets their own collection for data isolation.
+    Collection name format: {base_collection}_{user_id}
+    """
+
+    def __init__(self, config: VectorDBConfig, user_id: str, client: chromadb.HttpClient | None = None) -> None:
+        self._client = client or chromadb.HttpClient(host=config.host, port=config.port)
+        collection_name = f"{config.collection}_{user_id.replace('-', '_')}"
         self._collection = self._client.get_or_create_collection(
-            name=config.collection,
+            name=collection_name,
             metadata={"hnsw:space": "cosine"},
         )
 
@@ -116,3 +121,21 @@ class KnowledgeBase:
             where={"agent_id": agent_id},
             limit=limit,
         )
+
+
+class KnowledgeBaseFactory:
+    """Creates and caches per-user KnowledgeBase instances.
+
+    Shares a single ChromaDB HTTP client across all collections.
+    """
+
+    def __init__(self, config: VectorDBConfig) -> None:
+        self._config = config
+        self._client = chromadb.HttpClient(host=config.host, port=config.port)
+        self._cache: dict[str, KnowledgeBase] = {}
+
+    def for_user(self, user_id: str) -> KnowledgeBase:
+        """Return a KnowledgeBase for the given user, creating if needed."""
+        if user_id not in self._cache:
+            self._cache[user_id] = KnowledgeBase(self._config, user_id, client=self._client)
+        return self._cache[user_id]
