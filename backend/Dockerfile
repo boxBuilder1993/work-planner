@@ -6,6 +6,7 @@ COPY . .
 RUN go build -o server ./cmd/server
 
 FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
 COPY --from=build /app/server /server
 COPY --from=build /app/migrations /migrations
 EXPOSE 8080
