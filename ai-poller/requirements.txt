@@ -6,4 +6,4 @@ pydantic>=2.5.0
 cryptography>=41.0.0
 python-dotenv>=1.0.0
 requests>=2.31.0
-chromadb>=0.6.0
+chromadb>=1.0.7
