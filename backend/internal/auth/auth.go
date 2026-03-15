@@ -2,16 +2,21 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"google.golang.org/api/idtoken"
 )
 
 type contextKey string
 
 const UserIDKey contextKey = "userId"
+
+// Google's public certs endpoint for verifying ID tokens.
+const googleCertsURL = "https://www.googleapis.com/oauth2/v3/tokeninfo"
 
 type Auth struct {
 	googleClientID string
@@ -31,18 +36,47 @@ type GoogleClaims struct {
 }
 
 func (a *Auth) ValidateGoogleToken(ctx context.Context, idToken string) (*GoogleClaims, error) {
-	payload, err := idtoken.Validate(ctx, idToken, a.googleClientID)
+	// Use Google's tokeninfo endpoint — lightweight, no GCP SDK/metadata dependency.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleCertsURL+"?id_token="+idToken, nil)
 	if err != nil {
-		return nil, fmt.Errorf("invalid google token: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	email, _ := payload.Claims["email"].(string)
-	name, _ := payload.Claims["name"].(string)
-	if email == "" {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate token with Google: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("google token validation failed: %s", string(body))
+	}
+
+	var tokenInfo struct {
+		Aud   string `json:"aud"`
+		Email string `json:"email"`
+		Name  string `json:"name"`
+	}
+	if err := json.Unmarshal(body, &tokenInfo); err != nil {
+		return nil, fmt.Errorf("failed to parse token info: %w", err)
+	}
+
+	// Verify audience matches our client ID.
+	if a.googleClientID != "" && tokenInfo.Aud != a.googleClientID {
+		return nil, fmt.Errorf("token audience mismatch: got %s, want %s", tokenInfo.Aud, a.googleClientID)
+	}
+
+	if tokenInfo.Email == "" {
 		return nil, fmt.Errorf("no email in google token")
 	}
 
-	return &GoogleClaims{Email: email, Name: name}, nil
+	return &GoogleClaims{Email: tokenInfo.Email, Name: tokenInfo.Name}, nil
 }
 
 func (a *Auth) GenerateJWT(userID string) (string, error) {
