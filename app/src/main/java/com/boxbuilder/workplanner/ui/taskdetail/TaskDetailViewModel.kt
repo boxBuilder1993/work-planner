@@ -91,6 +91,11 @@ class TaskDetailViewModel @Inject constructor(
                 )
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TaskDetailUiState())
 
+            // Lazy-fetch data from API — cache-derived flows auto-emit on update
+            viewModelScope.launch { repository.refreshChildren(taskId) }
+            viewModelScope.launch { repository.fetchCommentsForTask(taskId) }
+            viewModelScope.launch { repository.fetchRepeatingTask(taskId) }
+
             // Load breadcrumbs once
             viewModelScope.launch {
                 val crumbs = repository.getBreadcrumbs(taskId)
