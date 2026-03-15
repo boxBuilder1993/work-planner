@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 
 class TaskEntity(BaseModel):
@@ -22,7 +23,11 @@ class TaskEntity(BaseModel):
     created_at: int = 0
     updated_at: int = 0
 
-    model_config = {"extra": "ignore"}
+    model_config = ConfigDict(
+        extra="ignore",
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
 
 
 class CommentEntity(BaseModel):
@@ -37,7 +42,11 @@ class CommentEntity(BaseModel):
     created_at: int = 0
     updated_at: int = 0
 
-    model_config = {"extra": "ignore"}
+    model_config = ConfigDict(
+        extra="ignore",
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
 
 
 class AIState(BaseModel):
