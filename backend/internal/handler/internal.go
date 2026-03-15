@@ -4,10 +4,13 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/boxBuilder1993/work-planner/backend/internal/auth"
 	"github.com/boxBuilder1993/work-planner/backend/internal/model"
 	"github.com/boxBuilder1993/work-planner/backend/internal/store"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // InternalHandler serves /api/internal/ endpoints for the ai-poller.
@@ -101,6 +104,109 @@ func (h *InternalHandler) ListComments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, comments)
 }
 
+// GET /api/internal/tasks/{id}
+func (h *InternalHandler) GetTask(w http.ResponseWriter, r *http.Request) {
+	taskID := extractPathParam(r.URL.Path, 3) // /api/internal/tasks/:id
+	task, err := h.store.GetTaskByID(r.Context(), taskID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if task == nil {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, task)
+}
+
+// PATCH /api/internal/tasks/{id}
+func (h *InternalHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	taskID := extractPathParam(r.URL.Path, 3)
+	ctx, err := h.setUserIDFromTask(r.Context(), taskID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	userID, _ := ctx.Value(auth.UserIDKey).(string)
+
+	var req model.UpdateTaskRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	task, err := h.store.UpdateTask(ctx, userID, taskID, &req, time.Now().UnixMilli())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update task")
+		return
+	}
+	if task == nil {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, task)
+}
+
+// POST /api/internal/tasks/{id}/comments
+func (h *InternalHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
+	taskID := extractPathParam(r.URL.Path, 3)
+	ctx, err := h.setUserIDFromTask(r.Context(), taskID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	userID, _ := ctx.Value(auth.UserIDKey).(string)
+
+	var req model.CreateCommentRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Text == "" {
+		writeError(w, http.StatusBadRequest, "text is required")
+		return
+	}
+
+	commentType := req.CommentType
+	if commentType == "" {
+		commentType = "COMMENT"
+	}
+	createdBy := req.CreatedBy
+	if createdBy == "" {
+		createdBy = "user"
+	}
+
+	now := time.Now().UnixMilli()
+	var proposalStatus *string
+	if commentType == "PROPOSAL" {
+		s := "PENDING"
+		proposalStatus = &s
+	}
+
+	comment := &model.Comment{
+		ID:              uuid.New().String(),
+		TaskID:          taskID,
+		ParentCommentID: req.ParentCommentID,
+		Text:            req.Text,
+		CommentType:     commentType,
+		CreatedBy:       createdBy,
+		ProposalStatus:  proposalStatus,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+
+	err = h.store.CreateComment(ctx, userID, comment)
+	if err == pgx.ErrNoRows {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create comment")
+		return
+	}
+	writeJSON(w, http.StatusCreated, comment)
+}
+
 // ServeHTTP routes /api/internal/ requests.
 func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
@@ -117,6 +223,18 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// GET /api/internal/tasks/:id/comments
 	case r.Method == http.MethodGet && strings.HasSuffix(path, "/comments"):
 		h.ListComments(w, r)
+
+	// POST /api/internal/tasks/:id/comments
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/comments"):
+		h.CreateComment(w, r)
+
+	// GET /api/internal/tasks/:id
+	case r.Method == http.MethodGet && strings.Count(path, "/") == 4:
+		h.GetTask(w, r)
+
+	// PATCH /api/internal/tasks/:id
+	case r.Method == http.MethodPatch && strings.Count(path, "/") == 4:
+		h.UpdateTask(w, r)
 
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")

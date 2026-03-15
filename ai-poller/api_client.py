@@ -61,6 +61,8 @@ class ApiClient:
         return [TaskEntity(**t) for t in self._get("/api/tasks", params2)]
 
     def get_task(self, task_id: str) -> TaskEntity:
+        if self._is_internal:
+            return TaskEntity(**self._get(f"/api/internal/tasks/{task_id}"))
         return TaskEntity(**self._get(f"/api/tasks/{task_id}"))
 
     def list_children(self, task_id: str) -> list[TaskEntity]:
@@ -99,6 +101,8 @@ class ApiClient:
         return TaskEntity(**self._post("/api/tasks", body))
 
     def update_task(self, task_id: str, **fields: Any) -> TaskEntity:
+        if self._is_internal:
+            return TaskEntity(**self._patch(f"/api/internal/tasks/{task_id}", fields))
         return TaskEntity(**self._patch(f"/api/tasks/{task_id}", fields))
 
     def delete_task(self, task_id: str) -> None:
@@ -135,6 +139,8 @@ class ApiClient:
         }
         if parent_comment_id is not None:
             body["parentCommentId"] = parent_comment_id
+        if self._is_internal:
+            return CommentEntity(**self._post(f"/api/internal/tasks/{task_id}/comments", body))
         return CommentEntity(**self._post(f"/api/tasks/{task_id}/comments", body))
 
     def approve_proposal(self, comment_id: str) -> CommentEntity:
