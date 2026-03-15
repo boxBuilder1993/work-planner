@@ -136,8 +136,19 @@ class AgentSpawner:
             async with ClaudeSDKClient(options=options) as client:
                 await client.query(prompt)
                 async for message in client.receive_response():
-                    if isinstance(message, ResultMessage) and message.subtype == "success":
-                        result_text = message.result
+                    logger.info("Agent message for task %s: type=%s subtype=%s",
+                                task_id, type(message).__name__, getattr(message, 'subtype', ''))
+                    if isinstance(message, ResultMessage):
+                        if message.subtype == "success":
+                            result_text = message.result
+                        else:
+                            logger.warning("Agent non-success result for task %s: subtype=%s result=%s",
+                                           task_id, message.subtype, getattr(message, 'result', '')[:500])
+
+            if result_text:
+                logger.info("Agent result for task %s: %s", task_id, result_text[:500])
+            else:
+                logger.warning("Agent produced no result for task %s", task_id)
 
             # Document the agent's work in the knowledge base
             if knowledge and result_text:
