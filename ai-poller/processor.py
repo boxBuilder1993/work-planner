@@ -176,6 +176,9 @@ class PollCycleProcessor:
 
         # --- Hierarchy mode: process ai_enabled tasks ---
         ai_tasks = [t for t in tasks if t.ai_enabled and t.status != "CLOSED"]
+        logger.info("Found %d total tasks, %d ai_enabled & open", len(tasks), len(ai_tasks))
+        for t in ai_tasks:
+            logger.info("  AI task: '%s' (id=%s, status=%s)", t.title, t.id, t.status)
         if ai_tasks:
             actions += await self._process_hierarchy_tasks(
                 ai_tasks, tasks, tasks_by_id, comments_by_task, ai_state,
@@ -215,6 +218,7 @@ class PollCycleProcessor:
             # 1. Skip tasks with pending proposals (waiting for approval)
             pending_proposals = get_pending_proposals_for_task(task, task_comments)
             if pending_proposals:
+                logger.info("Task '%s' skipped: has %d pending proposals", task.title, len(pending_proposals))
                 continue
 
             # Resolve per-user knowledge base for this task
@@ -228,6 +232,7 @@ class PollCycleProcessor:
             # 2. Approved proposal → re-spawn agent to continue work
             approved = get_approved_proposals_for_task(task, task_comments)
             if approved:
+                logger.info("Task '%s': has approved proposals, re-spawning", task.title)
                 role = detect_role(task, all_tasks)
                 await self._spawner.spawn_agent(role, knowledge=task_knowledge)
                 actions += 1
@@ -235,6 +240,7 @@ class PollCycleProcessor:
 
             # 3. New unprocessed task → spawn worker agent
             if is_new_unprocessed_task(task, task_comments, ai_state.processed_comment_ids):
+                logger.info("Task '%s': new unprocessed task, spawning agent", task.title)
                 role = detect_role(task, all_tasks)
                 await self._spawner.spawn_agent(role, knowledge=task_knowledge)
                 ai_state.processed_comment_ids.add(task.id)
@@ -243,10 +249,13 @@ class PollCycleProcessor:
 
             # 4. Manager: child tasks have unreviewed proposals → spawn manager to review
             if has_children and has_unreviewed_child_proposals(task, all_tasks, all_comments_flat):
+                logger.info("Task '%s': has unreviewed child proposals, spawning manager", task.title)
                 role = detect_role(task, all_tasks)
                 await self._spawner.spawn_agent(role, knowledge=task_knowledge)
                 actions += 1
                 continue
+
+            logger.info("Task '%s' skipped: already processed, no pending/approved proposals", task.title)
 
         return actions
 
