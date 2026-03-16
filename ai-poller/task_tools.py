@@ -348,14 +348,15 @@ async def deny_proposal(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "submit_for_review",
-    "Submit work for review by the parent/manager agent. "
-    "Creates a PROPOSAL comment indicating the work is done and ready for review.",
+    "Submit proof of completion for review by the parent/manager agent. "
+    "Creates a PROPOSAL on the PARENT task so the manager can see it. "
+    "Include concrete evidence: command outputs, test results, file changes, PR links.",
     {
         "type": "object",
         "properties": {
-            "task_id": {"type": "string", "description": "ID of the task whose work is complete"},
-            "text": {"type": "string", "description": "Summary of completed work for the reviewer"},
-            "agent_task_id": {"type": "string", "description": "The agent's task ID (used as created_by)"},
+            "task_id": {"type": "string", "description": "ID of the PARENT task (post proof here so the manager sees it)"},
+            "text": {"type": "string", "description": "Proof of completion: what was done, evidence, outputs, results"},
+            "agent_task_id": {"type": "string", "description": "The agent's own task ID (used as created_by)"},
         },
         "required": ["task_id", "text", "agent_task_id"],
     },

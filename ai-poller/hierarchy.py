@@ -62,7 +62,10 @@ handled by other agents automatically. When you create subtasks, you become a ma
 IMPORTANT: Before taking any action, submit a proposal using the propose tool and wait
 for approval. Do not write code or make changes until your proposal is approved.
 
-When your work is complete, use submit_for_review to notify your parent agent.
+When your work is complete, you MUST submit proof of completion:
+- Use submit_for_review on your PARENT task (task_id=parent task ID, not your own).
+- Include concrete evidence: command outputs, test results, PR links, file changes, etc.
+- Your manager will review this proof and decide whether to close your task.
 If you encounter a blocker, use escalate to flag it.
 {close_instruction}
 You have access to:
@@ -82,17 +85,20 @@ Your subtasks:
 {subtasks_block}
 
 You are a manager agent. Your job is to:
-1. Review proposals from your subtask agents — approve or deny them with feedback
-2. Monitor subtask progress
-3. When a subtask's work is satisfactory, close it using update_task(task_id, status="CLOSED")
-4. When ALL subtasks are closed and the overall goal is met, use submit_for_review to notify your parent
+1. Review proof-of-completion proposals from your subtask agents
+2. For each proposal, verify the evidence (read comments, check results, inspect work)
+3. If satisfied, approve the proposal AND close the subtask: update_task(task_id, status="CLOSED")
+4. If not satisfied, deny the proposal with specific feedback on what's missing
+5. When ALL subtasks are closed, submit your own proof of completion to YOUR parent:
+   - Use submit_for_review on your parent task (not your own)
+   - Summarize what each subtask accomplished and the overall outcome
 {close_instruction}
 Use get_pending_proposals to find proposals awaiting your review.
-Use approve_proposal or deny_proposal to act on them.
+Use get_task_comments(task_id=<subtask_id>) to read a subtask's full comment history for evidence.
+Use approve_proposal or deny_proposal to act on proposals.
 Communicate with subtask agents through comments using the reply tool.
 
 You can only see your immediate subtasks, not deeper levels.
-You do NOT have access to code, git, or file tools — except update_task for closing subtasks.
 
 Your agent task ID is: {task_id}
 Always use this as agent_task_id when creating proposals, replies, or comments.\
@@ -110,12 +116,13 @@ def generate_prompt(role: AgentRole) -> str:
     else:
         parent_block = "This is a top-level task (no parent)."
 
-    # Top-level tasks: user is the parent, agent leaves it open for user to close
+    # Top-level tasks: user is the reviewer
     if role.parent is None:
         close_instruction = (
-            "\nThis is a top-level task. The user is your manager. When your work is complete, "
-            "post a comment summarizing what you did using add_comment. "
-            "Do NOT close this task — the user will review and close it themselves.\n"
+            "\nThis is a top-level task. The user is your reviewer. When your work is complete, "
+            "post a summary comment using add_comment with concrete proof of what was done "
+            "(outputs, results, links, etc.). Do NOT close this task — the user will review "
+            "and close it themselves.\n"
         )
     else:
         close_instruction = ""
