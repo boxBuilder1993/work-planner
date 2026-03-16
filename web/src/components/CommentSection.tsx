@@ -165,9 +165,11 @@ export default function CommentSection({ taskId }: Props) {
   const [denyFeedback, setDenyFeedback] = useState('');
   const comments = getCommentsForTask(taskId);
 
-  // Fetch comments from API on mount
+  // Fetch comments from API on mount and auto-refresh every 10s
   useEffect(() => {
     fetchCommentsForTask(taskId);
+    const interval = setInterval(() => fetchCommentsForTask(taskId), 10_000);
+    return () => clearInterval(interval);
   }, [taskId, fetchCommentsForTask]);
 
   const threadMap = buildThreadMap(comments);

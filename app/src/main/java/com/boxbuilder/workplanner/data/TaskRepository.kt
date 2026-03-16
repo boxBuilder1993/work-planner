@@ -157,6 +157,19 @@ class TaskRepository(private val api: WorkPlannerApi) {
         refreshLeafTasks()
     }
 
+    // ── Single task refresh ────────────────────────────────
+
+    suspend fun refreshTask(taskId: String) {
+        try {
+            val task = api.getTask(taskId).toDomain()
+            val updated = _tasks.value.toMutableMap()
+            updated[task.id] = task
+            _tasks.value = updated
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to refresh task $taskId", e)
+        }
+    }
+
     // ── Child refresh ───────────────────────────────────────
 
     suspend fun refreshChildren(parentId: String) {

@@ -102,6 +102,18 @@ class TaskDetailViewModel @Inject constructor(
                 val crumbs = repository.getBreadcrumbs(taskId)
                 _localState.value = _localState.value.copy(breadcrumbs = crumbs)
             }
+
+            // Auto-refresh task, children, and comments every 10s
+            viewModelScope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(10_000)
+                    try {
+                        repository.refreshTask(taskId)
+                        repository.refreshChildren(taskId)
+                        repository.fetchCommentsForTask(taskId)
+                    } catch (_: Exception) { /* ignore refresh errors */ }
+                }
+            }
         } else {
             // New task
             _editState.value = EditState(parentId = parentIdArg)

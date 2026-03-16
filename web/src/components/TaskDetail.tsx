@@ -25,6 +25,7 @@ export default function TaskDetail() {
     setRepeatingTask,
     removeRepeatingTask,
     fetchRepeatingTask,
+    refreshTask,
     refreshChildren,
   } = useTasks();
 
@@ -95,17 +96,22 @@ export default function TaskDetail() {
     }
   }, [taskId, parentIdParam, getTaskById, getRepeatingTaskForTask]);
 
-  // Fetch breadcrumbs, children, and repeating task from API
+  // Fetch breadcrumbs, children, and repeating task from API + auto-refresh every 10s
   useEffect(() => {
     if (!taskId) return;
     let cancelled = false;
-    getBreadcrumbs(taskId).then((crumbs) => {
-      if (!cancelled) setBreadcrumbs(crumbs);
-    });
-    refreshChildren(taskId);
+    const fetchData = () => {
+      refreshTask(taskId);
+      getBreadcrumbs(taskId).then((crumbs) => {
+        if (!cancelled) setBreadcrumbs(crumbs);
+      });
+      refreshChildren(taskId);
+    };
+    fetchData();
     fetchRepeatingTask(taskId);
-    return () => { cancelled = true; };
-  }, [taskId, getBreadcrumbs, refreshChildren, fetchRepeatingTask]);
+    const interval = setInterval(fetchData, 10_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [taskId, refreshTask, getBreadcrumbs, refreshChildren, fetchRepeatingTask]);
 
   const children = existingTask ? getChildTasks(existingTask.id) : [];
 

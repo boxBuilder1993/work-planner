@@ -56,6 +56,7 @@ interface TasksContextValue {
   denyProposal: (commentId: string, feedback?: string) => Promise<void>;
 
   // Fetch helpers
+  refreshTask: (taskId: string) => Promise<void>;
   refreshRootTasks: () => Promise<void>;
   refreshChildren: (parentId: string) => Promise<void>;
   refreshLeafTasks: () => Promise<void>;
@@ -89,6 +90,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     }).catch(() => {});
 
     tasksApi.listExecutableTasks().then(setLeafTasks).catch(() => {});
+  }, []);
+
+  const refreshTask = useCallback(async (taskId: string) => {
+    const t = await tasksApi.getTask(taskId);
+    setTasks((prev) => new Map(prev).set(t.id, t));
   }, []);
 
   const refreshRootTasks = useCallback(async () => {
@@ -406,6 +412,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     setRepeatingTask,
     removeRepeatingTask,
     fetchRepeatingTask,
+    refreshTask,
     refreshRootTasks,
     refreshChildren,
     refreshLeafTasks,
