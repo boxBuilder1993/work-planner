@@ -238,11 +238,30 @@ def is_new_unprocessed_task(
     comments: list[CommentEntity],
     processed_task_ids: set[str],
 ) -> bool:
-    """Check if a task is fresh and hasn't been processed yet."""
-    if task.id in processed_task_ids:
-        return False
-    # A task with existing agent comments has been processed
-    for c in comments:
-        if c.task_id == task.id and c.created_by == task.id:
+    """Check if a task needs an agent spawned.
+
+    A task is eligible if it has no pending or approved proposals
+    (those are handled by earlier checks in the processor) and either:
+    - Has never been processed, OR
+    - Was processed before but has no active proposals (stuck/failed agent)
+    """
+    # If in processed set AND has agent comments, it's already been handled
+    has_agent_comments = any(
+        c.task_id == task.id and c.created_by == task.id
+        for c in comments
+    )
+    if task.id in processed_task_ids and has_agent_comments:
+        # Check if the agent left the task in a stuck state:
+        # no pending/approved proposals means the agent failed or timed out
+        has_any_proposal = any(
+            c.task_id == task.id
+            and c.created_by == task.id
+            and c.comment_type == "PROPOSAL"
+            and c.proposal_status in ("PENDING", "APPROVED")
+            for c in comments
+        )
+        if has_any_proposal:
             return False
+        # Agent ran but left no actionable proposals → re-process
+        return True
     return True
