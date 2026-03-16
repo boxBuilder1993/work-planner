@@ -18,7 +18,7 @@ class AgentLimits:
     """Caps on concurrent agent activity."""
     max_global_agents: int = 3
     max_tasks_per_agent: int = 3
-    max_turns_per_run: int = 10
+    max_turns_per_run: int = 20
 
 
 @dataclass(frozen=True)
