@@ -20,7 +20,6 @@ from config import load_config
 from knowledge import KnowledgeBaseFactory
 from processor import PollCycleProcessor
 from spawner import AgentSpawner
-from workspace import WorkspaceManager
 
 logger = logging.getLogger("ai_poller")
 
@@ -78,19 +77,12 @@ def main() -> None:
     except Exception:
         logger.warning("ChromaDB not available, running without knowledge base")
 
-    workspace = WorkspaceManager(cfg.workspace)
-    if workspace.enabled:
-        cleaned = workspace.cleanup_orphaned()
-        if cleaned:
-            logger.info("Cleaned up %d orphaned worktree(s)", cleaned)
-
     spawner = AgentSpawner(api, cfg)
 
     processor = PollCycleProcessor(
         api=api,
         config=cfg,
         spawner=spawner,
-        workspace=workspace,
         knowledge_factory=knowledge_factory,
     )
 

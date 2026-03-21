@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
@@ -18,10 +18,11 @@ from claude_agent_sdk import (
     ResultMessage,
 )
 
+from algorithm import Algorithm, SpawnPlan, TaskContext
 from api_client import ApiClient
 from config import Config
-from hierarchy import AgentRole, generate_prompt, get_tools_for_role
 from knowledge import KnowledgeBase
+from models import TaskEntity
 from task_tools import set_api_client, create_workplanner_mcp_server
 
 logger = logging.getLogger(__name__)
@@ -31,13 +32,13 @@ logger = logging.getLogger(__name__)
 class AgentRun:
     """Tracks a single agent run."""
     task_id: str
-    role: str
+    algorithm_name: str
     started_at: float = field(default_factory=time.time)
     task_handle: asyncio.Task | None = None
 
 
 class AgentSpawner:
-    """Manages spawning and tracking of Claude agent sub-processes."""
+    """Manages spawning and tracking of Claude agent sub-agents."""
 
     def __init__(self, api: ApiClient, config: Config) -> None:
         self._api = api
@@ -54,14 +55,14 @@ class AgentSpawner:
     def can_spawn(self) -> bool:
         return self.active_count < self._config.agent_limits.max_global_agents
 
-    async def spawn_agent(self, role: AgentRole, knowledge: KnowledgeBase | None = None) -> None:
-        """Spawn a Claude agent for the given task/role.
-
-        The agent runs asynchronously and its results are posted back
-        to the backend via the MCP tools.
-        """
-        task = role.task
-
+    async def spawn(
+        self,
+        task: TaskEntity,
+        plan: SpawnPlan,
+        algorithm: Algorithm,
+        knowledge: KnowledgeBase | None = None,
+    ) -> None:
+        """Spawn a Claude agent for the given task using the provided plan."""
         if self.is_running(task.id):
             logger.warning("Agent already running for task %s, skipping", task.id)
             return
@@ -71,56 +72,57 @@ class AgentSpawner:
                            self._config.agent_limits.max_global_agents, task.id)
             return
 
-        logger.info("Spawning %s agent for task '%s' (%s)", role.role_name, task.title, task.id)
+        ai_status = task.props.get("aiStatus", "needs_planning")
+        logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s]",
+                     algorithm.name, task.title, task.id, ai_status)
 
-        # Build the system prompt with knowledge context
-        system_prompt = generate_prompt(role)
+        # Enrich prompt with knowledge context
+        system_prompt = plan.prompt
         if knowledge:
-            context = knowledge.query_knowledge(
-                f"context for: {task.title} {task.description}",
-                limit=3,
-            )
-            if context:
-                knowledge_section = "\n\nRelevant knowledge from previous work:\n"
-                for doc in context:
-                    knowledge_section += f"- {doc['document'][:200]}\n"
-                system_prompt += knowledge_section
+            try:
+                context = knowledge.query_knowledge(
+                    f"context for: {task.title} {task.description}",
+                    limit=3,
+                )
+                if context:
+                    knowledge_section = "\n\nRelevant knowledge from previous work:\n"
+                    for doc in context:
+                        knowledge_section += f"- {doc['document'][:200]}\n"
+                    system_prompt += knowledge_section
+            except Exception:
+                logger.warning("Failed to query knowledge base for task %s", task.id)
 
-        # Get tool assignment
-        mcp_servers, allowed_tools = get_tools_for_role(
-            role,
-            github_token=os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN", ""),
-        )
-
-        # Create the agent run record
-        run = AgentRun(task_id=task.id, role=role.role_name)
+        # Register run
+        run = AgentRun(task_id=task.id, algorithm_name=algorithm.name)
         self._active_runs[task.id] = run
 
-        # Launch the agent as an async task
+        # Launch async
         run.task_handle = asyncio.create_task(
-            self._run_agent(task.id, system_prompt, mcp_servers, allowed_tools, knowledge)
+            self._run_agent(task, system_prompt, plan, algorithm, knowledge)
         )
 
     async def _run_agent(
         self,
-        task_id: str,
+        task: TaskEntity,
         system_prompt: str,
-        extra_mcp_servers: dict,
-        allowed_tools: list[str],
+        plan: SpawnPlan,
+        algorithm: Algorithm,
         knowledge: KnowledgeBase | None = None,
     ) -> None:
         """Execute one agent run for a task."""
+        task_id = task.id
         try:
             set_api_client(self._api)
             workplanner_mcp = create_workplanner_mcp_server()
 
-            mcp_servers = {"workplanner": workplanner_mcp}
+            extra_mcp_servers, allowed_tools = plan.tools
+            mcp_servers: dict[str, Any] = {"workplanner": workplanner_mcp}
             mcp_servers.update(extra_mcp_servers)
 
             prompt = (
                 f"You have been assigned task {task_id}. "
                 f"Begin by reviewing your task and any existing comments, "
-                f"then take appropriate action based on your role."
+                f"then take appropriate action based on your instructions."
             )
 
             options = ClaudeAgentOptions(
@@ -142,22 +144,59 @@ class AgentSpawner:
                         if message.subtype == "success":
                             result_text = message.result
                         else:
-                            logger.warning("Agent non-success result for task %s: subtype=%s result=%s",
-                                           task_id, message.subtype, getattr(message, 'result', '')[:500])
+                            logger.warning("Agent non-success result for task %s: subtype=%s",
+                                           task_id, message.subtype)
 
+            # Auto-post result as a comment
             if result_text:
                 logger.info("Agent result for task %s: %s", task_id, result_text[:500])
+                try:
+                    run_count = task.props.get("runCount", 0) + 1
+                    self._api.create_comment(
+                        task_id=task_id,
+                        text=f"[Agent Run #{run_count}] {result_text[:3000]}",
+                        created_by=task_id,
+                    )
+                except Exception:
+                    logger.exception("Failed to post agent result comment for task %s", task_id)
             else:
                 logger.warning("Agent produced no result for task %s", task_id)
 
-            # Document the agent's work in the knowledge base
-            if knowledge and result_text:
-                knowledge.document_work(
-                    task_id=task_id,
-                    agent_id=task_id,
-                    work_type="agent_run",
-                    content=result_text[:2000],
+            # Let algorithm process the result and update props
+            try:
+                # Build fresh context after the agent ran
+                fresh_comments = self._api.list_comments(task_id)
+                all_tasks = self._api.get_all_tasks()
+                fresh_children = [t for t in all_tasks if t.parent_id == task_id]
+                fresh_task = self._api.get_task(task_id)
+                ctx = TaskContext(
+                    task=fresh_task,
+                    comments=fresh_comments,
+                    children=fresh_children,
+                    parent=next((t for t in all_tasks if t.id == task.parent_id), None) if task.parent_id else None,
                 )
+                props_update = plan.on_complete(ctx, result_text)
+                if props_update:
+                    self._api.update_task(task_id, props=props_update.self_props)
+                    if props_update.child_props:
+                        for child in fresh_children:
+                            # Only set on children that don't already have props set
+                            if not child.props.get("algorithm"):
+                                self._api.update_task(child.id, props=props_update.child_props)
+            except Exception:
+                logger.exception("Failed to run on_complete for task %s", task_id)
+
+            # Document in knowledge base
+            if knowledge and result_text:
+                try:
+                    knowledge.document_work(
+                        task_id=task_id,
+                        agent_id=task_id,
+                        work_type="agent_run",
+                        content=result_text[:2000],
+                    )
+                except Exception:
+                    logger.warning("Failed to document work in knowledge base for task %s", task_id)
 
             logger.info("Agent run completed for task %s", task_id)
 
@@ -182,7 +221,6 @@ class AgentSpawner:
         for run in list(self._active_runs.values()):
             if run.task_handle and not run.task_handle.done():
                 run.task_handle.cancel()
-        # Wait briefly for cancellations
         await self.wait_for_all(timeout=5.0)
         self._active_runs.clear()
 
