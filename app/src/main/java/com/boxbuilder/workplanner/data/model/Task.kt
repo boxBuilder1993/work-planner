@@ -12,6 +12,7 @@ data class Task(
     val plannedTime: Long?,
     val duration: Double?,
     val aiEnabled: Boolean = false,
+    val props: Map<String, Any?> = emptyMap(),
     val createdAt: Long,
     val updatedAt: Long
 )

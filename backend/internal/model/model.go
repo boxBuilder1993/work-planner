@@ -14,10 +14,11 @@ type Task struct {
 	TaskDate    *int64   `json:"taskDate"`
 	PlannedTime *int64   `json:"plannedTime"`
 	Duration    *float64 `json:"duration"`
-	AiEnabled   bool     `json:"aiEnabled"`
-	Level       *int     `json:"level"`
-	CreatedAt   int64    `json:"createdAt"`
-	UpdatedAt   int64    `json:"updatedAt"`
+	AiEnabled   bool            `json:"aiEnabled"`
+	Level       *int            `json:"level"`
+	Props       json.RawMessage `json:"props"`
+	CreatedAt   int64           `json:"createdAt"`
+	UpdatedAt   int64           `json:"updatedAt"`
 }
 
 type Comment struct {
@@ -72,7 +73,8 @@ type CreateTaskRequest struct {
 	DueDate     *int64   `json:"dueDate,omitempty"`
 	PlannedTime *int64   `json:"plannedTime,omitempty"`
 	Duration    *float64 `json:"duration,omitempty"`
-	AiEnabled   *bool    `json:"aiEnabled,omitempty"`
+	AiEnabled   *bool            `json:"aiEnabled,omitempty"`
+	Props       json.RawMessage `json:"props,omitempty"`
 }
 
 type UpdateTaskRequest struct {
@@ -83,7 +85,8 @@ type UpdateTaskRequest struct {
 	DueDate     *int64   `json:"dueDate,omitempty"`
 	PlannedTime *int64   `json:"plannedTime,omitempty"`
 	Duration    *float64 `json:"duration,omitempty"`
-	AiEnabled   *bool    `json:"aiEnabled,omitempty"`
+	AiEnabled   *bool            `json:"aiEnabled,omitempty"`
+	Props       json.RawMessage `json:"props,omitempty"`
 }
 
 type CreateCommentRequest struct {

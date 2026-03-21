@@ -46,18 +46,18 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*model.User, 
 
 func (s *Store) CreateTask(ctx context.Context, t *model.Task) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO tasks (id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-	`, t.ID, t.UserID, t.ParentID, t.Title, t.Description, t.Status, t.Priority, t.DueDate, t.TaskDate, t.PlannedTime, t.Duration, t.AiEnabled, t.Level, t.CreatedAt, t.UpdatedAt)
+		INSERT INTO tasks (id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+	`, t.ID, t.UserID, t.ParentID, t.Title, t.Description, t.Status, t.Priority, t.DueDate, t.TaskDate, t.PlannedTime, t.Duration, t.AiEnabled, t.Level, t.Props, t.CreatedAt, t.UpdatedAt)
 	return err
 }
 
 func (s *Store) GetTask(ctx context.Context, userID, taskID string) (*model.Task, error) {
 	var t model.Task
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 		FROM tasks WHERE id = $1 AND user_id = $2
-	`, taskID, userID).Scan(&t.ID, &t.UserID, &t.ParentID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.CreatedAt, &t.UpdatedAt)
+	`, taskID, userID).Scan(&t.ID, &t.UserID, &t.ParentID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.Props, &t.CreatedAt, &t.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -101,17 +101,21 @@ func (s *Store) UpdateTask(ctx context.Context, userID, taskID string, req *mode
 		setClauses = append(setClauses, "ai_enabled = @ai_enabled")
 		args["ai_enabled"] = *req.AiEnabled
 	}
+	if req.Props != nil {
+		setClauses = append(setClauses, "props = props || @props")
+		args["props"] = req.Props
+	}
 
 	query := fmt.Sprintf(`
 		UPDATE tasks SET %s
 		WHERE id = @id AND user_id = @user_id
-		RETURNING id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		RETURNING id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 	`, joinStrings(setClauses, ", "))
 
 	var t model.Task
 	err := s.pool.QueryRow(ctx, query, args).Scan(
 		&t.ID, &t.UserID, &t.ParentID, &t.Title, &t.Description, &t.Status, &t.Priority,
-		&t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.CreatedAt, &t.UpdatedAt,
+		&t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.Props, &t.CreatedAt, &t.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -131,7 +135,7 @@ func (s *Store) DeleteTask(ctx context.Context, userID, taskID string) error {
 }
 
 func (s *Store) ListRootTasks(ctx context.Context, userID string, status *string) ([]model.Task, error) {
-	query := `SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+	query := `SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 		FROM tasks WHERE user_id = $1 AND parent_id IS NULL`
 	args := []any{userID}
 
@@ -146,7 +150,7 @@ func (s *Store) ListRootTasks(ctx context.Context, userID string, status *string
 
 func (s *Store) ListChildren(ctx context.Context, userID, parentID string) ([]model.Task, error) {
 	return s.scanTasks(ctx, `
-		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 		FROM tasks WHERE user_id = $1 AND parent_id = $2 ORDER BY created_at
 	`, userID, parentID)
 }
@@ -154,7 +158,7 @@ func (s *Store) ListChildren(ctx context.Context, userID, parentID string) ([]mo
 func (s *Store) GetBreadcrumbs(ctx context.Context, userID, taskID string) ([]model.Task, error) {
 	return s.scanTasks(ctx, `
 		WITH RECURSIVE chain AS (
-			SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+			SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 			FROM tasks WHERE id = $1 AND user_id = $2
 			UNION ALL
 			SELECT t.id, t.user_id, t.parent_id, t.title, t.description, t.status, t.priority, t.due_date, t.task_date, t.planned_time, t.duration, t.ai_enabled, t.level, t.created_at, t.updated_at
@@ -176,7 +180,7 @@ func (s *Store) ListExecutableTasks(ctx context.Context, userID string) ([]model
 
 func (s *Store) SearchTasks(ctx context.Context, userID, query string) ([]model.Task, error) {
 	return s.scanTasks(ctx, `
-		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 		FROM tasks
 		WHERE user_id = $1 AND (title ILIKE '%' || $2 || '%' OR description ILIKE '%' || $2 || '%')
 		ORDER BY similarity(title, $2) DESC, created_at
@@ -194,7 +198,7 @@ func (s *Store) scanTasks(ctx context.Context, query string, args ...any) ([]mod
 	var tasks []model.Task
 	for rows.Next() {
 		var t model.Task
-		if err := rows.Scan(&t.ID, &t.UserID, &t.ParentID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.UserID, &t.ParentID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.Props, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)
@@ -383,7 +387,7 @@ func (s *Store) ListAllRepeatingTasksWithTemplates(ctx context.Context) ([]Repea
 		var item RepeatingTaskWithTemplate
 		if err := rows.Scan(
 			&item.Rule.ID, &item.Rule.TaskID, &item.Rule.RepetitionType, &item.Rule.RepetitionProps, &item.Rule.StartDate, &item.Rule.LastCreatedAt, &item.Rule.CreatedAt, &item.Rule.UpdatedAt,
-			&item.Template.ID, &item.Template.UserID, &item.Template.ParentID, &item.Template.Title, &item.Template.Description, &item.Template.Status, &item.Template.Priority, &item.Template.DueDate, &item.Template.TaskDate, &item.Template.PlannedTime, &item.Template.Duration, &item.Template.AiEnabled, &item.Template.Level, &item.Template.CreatedAt, &item.Template.UpdatedAt,
+			&item.Template.ID, &item.Template.UserID, &item.Template.ParentID, &item.Template.Title, &item.Template.Description, &item.Template.Status, &item.Template.Priority, &item.Template.DueDate, &item.Template.TaskDate, &item.Template.PlannedTime, &item.Template.Duration, &item.Template.AiEnabled, &item.Template.Level, &item.Template.Props, &item.Template.CreatedAt, &item.Template.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -415,7 +419,7 @@ func (s *Store) IsTaskClosed(ctx context.Context, taskID string) (bool, error) {
 // ─── Internal (unscoped) queries ────────────────────────────────────────────
 
 func (s *Store) ListAllRootTasks(ctx context.Context, status *string) ([]model.Task, error) {
-	query := `SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+	query := `SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 		FROM tasks WHERE parent_id IS NULL`
 	var args []any
 
@@ -430,7 +434,7 @@ func (s *Store) ListAllRootTasks(ctx context.Context, status *string) ([]model.T
 
 func (s *Store) ListAllChildren(ctx context.Context, parentID string) ([]model.Task, error) {
 	return s.scanTasks(ctx, `
-		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 		FROM tasks WHERE parent_id = $1 ORDER BY created_at
 	`, parentID)
 }
@@ -454,9 +458,9 @@ func (s *Store) ListAllComments(ctx context.Context, taskID string, commentType 
 func (s *Store) GetTaskByID(ctx context.Context, taskID string) (*model.Task, error) {
 	var t model.Task
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, created_at, updated_at
+		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 		FROM tasks WHERE id = $1
-	`, taskID).Scan(&t.ID, &t.UserID, &t.ParentID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.CreatedAt, &t.UpdatedAt)
+	`, taskID).Scan(&t.ID, &t.UserID, &t.ParentID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.TaskDate, &t.PlannedTime, &t.Duration, &t.AiEnabled, &t.Level, &t.Props, &t.CreatedAt, &t.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}

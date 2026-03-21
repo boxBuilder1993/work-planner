@@ -37,6 +37,7 @@ fun TaskDto.toDomain(): Task = Task(
     plannedTime = plannedTime,
     duration = duration,
     aiEnabled = aiEnabled,
+    props = props,
     createdAt = createdAt,
     updatedAt = updatedAt
 )

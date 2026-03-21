@@ -10,6 +10,7 @@ export interface TaskEntity {
   plannedTime: number | null;
   duration: number | null;
   aiEnabled: boolean;
+  props: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -38,6 +39,11 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		aiEnabled = *req.AiEnabled
 	}
 
+	props := json.RawMessage("{}")
+	if req.Props != nil {
+		props = req.Props
+	}
+
 	task := &model.Task{
 		ID:          uuid.New().String(),
 		UserID:      getUserID(r),
@@ -50,6 +56,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		PlannedTime: req.PlannedTime,
 		Duration:    req.Duration,
 		AiEnabled:   aiEnabled,
+		Props:       props,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}

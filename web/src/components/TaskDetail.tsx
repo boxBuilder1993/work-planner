@@ -56,6 +56,7 @@ export default function TaskDetail() {
       plannedTime: null,
       duration: null,
       aiEnabled: false,
+      props: {},
       createdAt: 0,
       updatedAt: 0,
     },
@@ -87,6 +88,7 @@ export default function TaskDetail() {
         plannedTime: null,
         duration: null,
         aiEnabled: false,
+        props: {},
         createdAt: 0,
         updatedAt: 0,
       });

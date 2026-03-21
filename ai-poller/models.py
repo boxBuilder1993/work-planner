@@ -20,6 +20,7 @@ class TaskEntity(BaseModel):
     duration: float | None = None
     ai_enabled: bool = False
     level: int | None = None
+    props: dict = Field(default_factory=dict)
     created_at: int = 0
     updated_at: int = 0
 

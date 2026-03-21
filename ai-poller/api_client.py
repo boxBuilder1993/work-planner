@@ -83,6 +83,7 @@ class ApiClient:
         planned_time: int | None = None,
         duration: float | None = None,
         ai_enabled: bool = False,
+        props: dict | None = None,
     ) -> TaskEntity:
         body: dict[str, Any] = {
             "title": title,
@@ -98,6 +99,8 @@ class ApiClient:
             body["planned_time"] = planned_time
         if duration is not None:
             body["duration"] = duration
+        if props is not None:
+            body["props"] = props
         return TaskEntity(**self._post("/api/tasks", body))
 
     def update_task(self, task_id: str, **fields: Any) -> TaskEntity:
