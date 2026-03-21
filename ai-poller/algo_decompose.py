@@ -36,10 +36,11 @@ You are the owner of task: "{title}"
 {description_block}
 {parent_block}
 
-Previous activity:
-{history}
+User comments:
+{user_comments}
 
 You are in PLANNING mode. Think like a tech lead organizing work for your team.
+Assess the scope fresh from the task description above — do not rely on any prior agent work.
 
 1. Explore the task — read repos, understand context, gather information.
 2. Ask yourself: "If I were running a team, how would I assign this work?"
@@ -236,12 +237,15 @@ class DecomposeAndDelegate(Algorithm):
         return None
 
     def _plan(self, ctx: TaskContext) -> SpawnPlan:
-        history = format_comment_history(ctx.comments)
+        # Only show user comments to the planner — exclude old agent proposals
+        # so the planner assesses scope fresh from the task description
+        user_only = [c for c in ctx.comments if c.created_by == "user"]
+        user_comments = format_comment_history(user_only) if user_only else "(none)"
         prompt = _PLANNER_PROMPT.format(
             title=ctx.task.title,
             description_block=_description_block(ctx),
             parent_block=_parent_block(ctx),
-            history=history,
+            user_comments=user_comments,
             task_id=ctx.task.id,
         )
         return SpawnPlan(
