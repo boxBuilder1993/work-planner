@@ -177,6 +177,22 @@ export default function TaskForm({
         </label>
       </div>
 
+      {task.aiEnabled && (
+        <div className={styles.field}>
+          <label className={styles.label}>AI Algorithm</label>
+          <select
+            className={styles.select}
+            value={(task.props?.algorithm as string) ?? 'simple_answer'}
+            onChange={(e) =>
+              onChange({ ...task, props: { ...task.props, algorithm: e.target.value } })
+            }
+          >
+            <option value="simple_answer">Simple Answer</option>
+            <option value="decompose_and_delegate">Decompose &amp; Delegate</option>
+          </select>
+        </div>
+      )}
+
       <div className={styles.field}>
         <label className={styles.label}>Repeat every (days)</label>
         <div className={styles.dateRow}>

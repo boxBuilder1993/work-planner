@@ -299,9 +299,16 @@ export default function TaskDetail() {
               )}
             </div>
             {existingTask.aiEnabled && (
-              <span className={`${styles.chip} ${styles.statusChipPending}`}>
-                AI Enabled
-              </span>
+              <>
+                <span className={`${styles.chip} ${styles.statusChipPending}`}>
+                  AI: {(existingTask.props?.algorithm as string) === 'decompose_and_delegate' ? 'D&D' : 'Simple'}
+                </span>
+                {existingTask.props?.aiStatus && (
+                  <span className={styles.chip}>
+                    {String(existingTask.props.aiStatus).replace(/_/g, ' ')}
+                  </span>
+                )}
+              </>
             )}
             {existingTask.taskDate != null && (
               <div className={styles.chips}>

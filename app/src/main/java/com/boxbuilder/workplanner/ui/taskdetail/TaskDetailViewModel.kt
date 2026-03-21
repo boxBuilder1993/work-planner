@@ -40,7 +40,8 @@ data class EditState(
     val parentId: String? = null,
     val repeatIntervalDays: Int? = null,
     val repeatStartDate: Long? = null,
-    val aiEnabled: Boolean = false
+    val aiEnabled: Boolean = false,
+    val aiAlgorithm: String = "simple_answer"
 )
 
 @HiltViewModel
@@ -150,7 +151,8 @@ class TaskDetailViewModel @Inject constructor(
             parentId = task.parentId,
             repeatIntervalDays = repeating?.intervalDays,
             repeatStartDate = repeating?.startDate,
-            aiEnabled = task.aiEnabled
+            aiEnabled = task.aiEnabled,
+            aiAlgorithm = task.props["algorithm"]?.toString() ?: "simple_answer"
         )
         _localState.value = _localState.value.copy(isEditing = true)
     }
@@ -195,6 +197,10 @@ class TaskDetailViewModel @Inject constructor(
         _editState.value = _editState.value.copy(aiEnabled = enabled)
     }
 
+    fun updateAiAlgorithm(algorithm: String) {
+        _editState.value = _editState.value.copy(aiAlgorithm = algorithm)
+    }
+
     fun save(onSaved: (String) -> Unit) {
         val edit = _editState.value
         if (edit.title.isBlank()) return
@@ -232,6 +238,10 @@ class TaskDetailViewModel @Inject constructor(
                     }
                 }
 
+                val updatedProps = existing.props.toMutableMap()
+                if (edit.aiEnabled) {
+                    updatedProps["algorithm"] = edit.aiAlgorithm
+                }
                 val updated = existing.copy(
                     title = edit.title,
                     description = edit.description,
@@ -241,7 +251,8 @@ class TaskDetailViewModel @Inject constructor(
                     plannedTime = edit.plannedTime,
                     duration = edit.duration,
                     parentId = edit.parentId,
-                    aiEnabled = edit.aiEnabled
+                    aiEnabled = edit.aiEnabled,
+                    props = updatedProps
                 )
                 repository.updateTask(updated)
 

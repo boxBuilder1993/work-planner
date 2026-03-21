@@ -53,7 +53,8 @@ data class UpdateTaskRequest(
     val dueDate: Long? = null,
     val plannedTime: Long? = null,
     val duration: Double? = null,
-    val aiEnabled: Boolean? = null
+    val aiEnabled: Boolean? = null,
+    val props: Map<String, Any?>? = null
 )
 
 // ── Comments ────────────────────────────────────────────────

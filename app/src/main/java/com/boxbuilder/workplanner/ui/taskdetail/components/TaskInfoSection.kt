@@ -83,16 +83,36 @@ fun TaskInfoViewMode(
             )
         }
         if (task.aiEnabled) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.tertiaryContainer
-            ) {
-                Text(
-                    text = "AI Enabled",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val algoLabel = when (task.props["algorithm"]?.toString()) {
+                    "decompose_and_delegate" -> "AI: D&D"
+                    else -> "AI: Simple"
+                }
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Text(
+                        text = algoLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+                val aiStatus = task.props["aiStatus"]?.toString()
+                if (aiStatus != null) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = aiStatus.replace("_", " "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
             }
         }
         if (repeatingTask != null) {
@@ -124,6 +144,7 @@ fun TaskInfoEditMode(
     onRepeatIntervalChange: (Int?) -> Unit,
     onRepeatStartDateChange: (Long?) -> Unit,
     onAiEnabledChange: (Boolean) -> Unit,
+    onAiAlgorithmChange: (String) -> Unit,
     onChangeParentClick: () -> Unit,
     parentName: String?,
     modifier: Modifier = Modifier
@@ -192,6 +213,40 @@ fun TaskInfoEditMode(
                 checked = editState.aiEnabled,
                 onCheckedChange = onAiEnabledChange
             )
+        }
+
+        // AI Algorithm picker (only when AI is enabled)
+        if (editState.aiEnabled) {
+            var algoExpanded by remember { mutableStateOf(false) }
+            val algoOptions = listOf("simple_answer" to "Simple Answer", "decompose_and_delegate" to "Decompose & Delegate")
+            val currentLabel = algoOptions.firstOrNull { it.first == editState.aiAlgorithm }?.second ?: "Simple Answer"
+            ExposedDropdownMenuBox(
+                expanded = algoExpanded,
+                onExpandedChange = { algoExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = currentLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("AI Algorithm") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = algoExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                )
+                ExposedDropdownMenu(
+                    expanded = algoExpanded,
+                    onDismissRequest = { algoExpanded = false }
+                ) {
+                    algoOptions.forEach { (value, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                onAiAlgorithmChange(value)
+                                algoExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
         }
 
         // Parent picker (not on new tasks — parent is set by navigation)
