@@ -111,7 +111,7 @@ class PollCycleProcessor:
 
             if plan is None:
                 ai_status = task.props.get("aiStatus", "?")
-                logger.debug("Task '%s' [%s/%s]: no action", task.title, algo_name, ai_status)
+                logger.info("Task '%s' [%s/%s]: no action needed", task.title, algo_name, ai_status)
                 continue
 
             # Resolve knowledge base

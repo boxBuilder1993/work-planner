@@ -177,11 +177,17 @@ class AgentSpawner:
                 )
                 props_update = plan.on_complete(ctx, result_text)
                 if props_update:
+                    old_status = task.props.get("aiStatus", "unset")
+                    new_status = props_update.self_props.get("aiStatus", old_status)
+                    logger.info("Task %s: state %s → %s (props: %s)",
+                                task_id, old_status, new_status, props_update.self_props)
                     self._api.update_task(task_id, props=props_update.self_props)
                     if props_update.child_props:
                         for child in fresh_children:
                             # Only set on children that don't already have props set
                             if not child.props.get("algorithm"):
+                                logger.info("Task %s: setting child %s props: %s",
+                                            task_id, child.id, props_update.child_props)
                                 self._api.update_task(child.id, props=props_update.child_props)
             except Exception:
                 logger.exception("Failed to run on_complete for task %s", task_id)
