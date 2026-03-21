@@ -18,6 +18,7 @@ from claude_agent_sdk import (
     ResultMessage,
 )
 
+from algo_tools import set_algo_context
 from algorithm import Algorithm, SpawnPlan, TaskContext
 from api_client import ApiClient
 from config import Config
@@ -113,6 +114,7 @@ class AgentSpawner:
         task_id = task.id
         try:
             set_api_client(self._api)
+            set_algo_context(self._api, task_id)
             workplanner_mcp = create_workplanner_mcp_server()
 
             extra_mcp_servers, allowed_tools = plan.tools
@@ -147,18 +149,8 @@ class AgentSpawner:
                             logger.warning("Agent non-success result for task %s: subtype=%s",
                                            task_id, message.subtype)
 
-            # Auto-post result as a comment
             if result_text:
                 logger.info("Agent result for task %s: %s", task_id, result_text[:500])
-                try:
-                    run_count = task.props.get("runCount", 0) + 1
-                    self._api.create_comment(
-                        task_id=task_id,
-                        text=f"[Agent Run #{run_count}] {result_text[:3000]}",
-                        created_by=task_id,
-                    )
-                except Exception:
-                    logger.exception("Failed to post agent result comment for task %s", task_id)
             else:
                 logger.warning("Agent produced no result for task %s", task_id)
 
