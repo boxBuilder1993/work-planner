@@ -101,6 +101,8 @@ class ApiClient:
             body["duration"] = duration
         if props is not None:
             body["props"] = props
+        if self._is_internal:
+            return TaskEntity(**self._post("/api/internal/tasks", body))
         return TaskEntity(**self._post("/api/tasks", body))
 
     def update_task(self, task_id: str, **fields: Any) -> TaskEntity:

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -207,11 +208,80 @@ func (h *InternalHandler) CreateComment(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusCreated, comment)
 }
 
+// POST /api/internal/tasks — create a task (inherits user from parent)
+func (h *InternalHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
+	var req model.CreateTaskRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+
+	// Resolve user ID from parent task
+	var userID string
+	if req.ParentID != nil {
+		parent, err := h.store.GetTaskByID(r.Context(), *req.ParentID)
+		if err != nil || parent == nil {
+			writeError(w, http.StatusBadRequest, "parent task not found")
+			return
+		}
+		userID = parent.UserID
+	} else {
+		writeError(w, http.StatusBadRequest, "parentId is required for internal task creation")
+		return
+	}
+
+	now := time.Now().UnixMilli()
+	priority := 0
+	if req.Priority != nil {
+		priority = *req.Priority
+	}
+	aiEnabled := false
+	if req.AiEnabled != nil {
+		aiEnabled = *req.AiEnabled
+	}
+	props := json.RawMessage("{}")
+	if req.Props != nil {
+		props = req.Props
+	}
+
+	task := &model.Task{
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		ParentID:    req.ParentID,
+		Title:       req.Title,
+		Description: req.Description,
+		Status:      "PENDING",
+		Priority:    priority,
+		DueDate:     req.DueDate,
+		PlannedTime: req.PlannedTime,
+		Duration:    req.Duration,
+		AiEnabled:   aiEnabled,
+		Props:       props,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := h.store.CreateTask(r.Context(), task); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create task")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, task)
+}
+
 // ServeHTTP routes /api/internal/ requests.
 func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
 
 	switch {
+	// POST /api/internal/tasks
+	case r.Method == http.MethodPost && path == "/api/internal/tasks":
+		h.CreateTask(w, r)
+
 	// GET /api/internal/tasks
 	case r.Method == http.MethodGet && path == "/api/internal/tasks":
 		h.ListTasks(w, r)
