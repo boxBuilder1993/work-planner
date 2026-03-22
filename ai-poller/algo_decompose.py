@@ -300,7 +300,15 @@ class DecomposeAndDelegate(Algorithm):
 
         status = ctx.task.props.get("aiStatus", "needs_planning")
 
-        if status == "needs_planning":
+        if status in ("needs_planning", "planning_complete"):
+            # Check if a proposal was already posted (agent may have used
+            # add_comment instead of propose_plan, skipping the status update)
+            pending = find_pending_proposals(ctx)
+            if pending:
+                return None  # waiting for approval
+            approved = find_approved_proposals(ctx)
+            if approved:
+                return self._execute_plan(ctx)
             return self._plan(ctx)
         if status in ("plan_proposed", "plan_approved"):
             # Check if proposal was approved (by manager tool or user via UI)
