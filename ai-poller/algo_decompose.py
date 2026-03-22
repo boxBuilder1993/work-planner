@@ -302,15 +302,24 @@ class DecomposeAndDelegate(Algorithm):
 
         if status == "needs_planning":
             return self._plan(ctx)
-        if status == "plan_proposed":
-            return None  # waiting for parent approval
-        if status == "plan_approved":
+        if status in ("plan_proposed", "plan_approved"):
+            # Check if proposal was approved (by manager tool or user via UI)
+            if find_approved_proposals(ctx):
+                return self._execute_plan(ctx)
+            if status == "plan_proposed" and find_denied_proposals(ctx):
+                return self._plan(ctx)  # re-plan with feedback
+            if status == "plan_proposed":
+                return None  # still waiting
             return self._execute_plan(ctx)
         if status == "worker_ready":
             return self._worker_propose(ctx)
-        if status == "work_proposed":
-            return None  # waiting for parent approval
-        if status == "work_approved":
+        if status in ("work_proposed", "work_approved"):
+            if find_approved_proposals(ctx):
+                return self._worker_execute(ctx)
+            if status == "work_proposed" and find_denied_proposals(ctx):
+                return self._worker_propose(ctx)  # re-propose
+            if status == "work_proposed":
+                return None  # still waiting
             return self._worker_execute(ctx)
         if status == "implementing":
             return self._worker_execute(ctx)
