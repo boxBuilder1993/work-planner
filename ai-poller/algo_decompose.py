@@ -342,7 +342,8 @@ class DecomposeAndDelegate(Algorithm):
             user_comments=user_comments,
             task_id=ctx.task.id,
         )
-        return SpawnPlan(prompt=prompt, tools=_planning_tools(), on_complete=_bump_run_count)
+        return SpawnPlan(prompt=prompt, tools=_planning_tools(), on_complete=_bump_run_count,
+                        metadata={"algo_tools": ["propose_plan", "request_clarification"]})
 
     def _execute_plan(self, ctx: TaskContext) -> SpawnPlan:
         """Plan was approved — create subtasks or mark worker_ready."""
@@ -365,7 +366,8 @@ class DecomposeAndDelegate(Algorithm):
                     return PropsUpdate(self_props={"aiStatus": "worker_ready", "runCount": run_count})
             return PropsUpdate(self_props={"runCount": run_count})
 
-        return SpawnPlan(prompt=prompt, tools=_plan_execution_tools(), on_complete=on_plan_executed)
+        return SpawnPlan(prompt=prompt, tools=_plan_execution_tools(), on_complete=on_plan_executed,
+                        metadata={"algo_tools": ["mark_as_planned", "mark_as_worker_ready"]})
 
     # -- Worker proposal ---------------------------------------------------
 
@@ -378,7 +380,8 @@ class DecomposeAndDelegate(Algorithm):
             history=history,
             task_id=ctx.task.id,
         )
-        return SpawnPlan(prompt=prompt, tools=_worker_propose_tools(), on_complete=_bump_run_count)
+        return SpawnPlan(prompt=prompt, tools=_worker_propose_tools(), on_complete=_bump_run_count,
+                        metadata={"algo_tools": ["propose_work", "request_clarification"]})
 
     # -- Worker execution --------------------------------------------------
 
@@ -400,7 +403,8 @@ class DecomposeAndDelegate(Algorithm):
                 return PropsUpdate(self_props={"aiStatus": "implementing", "runCount": run_count})
             return PropsUpdate(self_props={"runCount": run_count})
 
-        return SpawnPlan(prompt=prompt, tools=_worker_execute_tools(), on_complete=on_complete, model="claude-sonnet-4-6")
+        return SpawnPlan(prompt=prompt, tools=_worker_execute_tools(), on_complete=on_complete, model="claude-sonnet-4-6",
+                        metadata={"algo_tools": ["submit_proof", "submit_summary", "request_clarification"]})
 
     # -- Manager -----------------------------------------------------------
 
@@ -434,7 +438,10 @@ class DecomposeAndDelegate(Algorithm):
             pending_proposals_block=_pending_proposals_block(ctx),
             task_id=ctx.task.id,
         )
-        return SpawnPlan(prompt=prompt, tools=_manager_tools(), on_complete=_bump_run_count)
+        return SpawnPlan(prompt=prompt, tools=_manager_tools(), on_complete=_bump_run_count,
+                        metadata={"algo_tools": ["approve_child_proposal", "deny_child_proposal",
+                                                  "close_subtask", "request_rework",
+                                                  "submit_proof", "submit_summary", "request_clarification"]})
 
     # -- Awaiting input ----------------------------------------------------
 

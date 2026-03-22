@@ -73,4 +73,5 @@ class SimpleAnswer(Algorithm):
                 "mcp__workplanner__get_parent_chain",
             ]),
             on_complete=on_complete,
+            metadata={"algo_tools": ["submit_answer", "request_clarification"]},
         )
