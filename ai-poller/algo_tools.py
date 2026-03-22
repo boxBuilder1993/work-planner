@@ -49,13 +49,26 @@ def _result(text: str) -> dict[str, Any]:
     "and moves the task to management mode. Each child task will be picked up by its own agent.",
     {
         "type": "object",
-        "properties": {},
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": "Explain why you decomposed and how the subtasks are organized",
+            },
+        },
+        "required": ["reason"],
     },
 )
 async def mark_as_planned(args: dict[str, Any]) -> dict[str, Any]:
     try:
         api = _client()
         task_id = _task_id
+
+        # Post reason as comment
+        api.create_comment(
+            task_id=task_id,
+            text=f"[PLANNING COMPLETE] {args['reason']}",
+            created_by=task_id,
+        )
 
         # Set own status to in_progress
         api.update_task(task_id, props={"aiStatus": "in_progress"})
@@ -81,15 +94,28 @@ async def mark_as_planned(args: dict[str, Any]) -> dict[str, Any]:
 @tool(
     "mark_as_worker_ready",
     "Call this when you determine the task is simple enough to implement directly "
-    "without subtasks. The next agent run will be in implementation mode with full code tools.",
+    "without subtasks — a single focused change (one function, one bug fix, one test file). "
+    "The next agent run will be in implementation mode with full code tools.",
     {
         "type": "object",
-        "properties": {},
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": "Explain why this task is small enough for one agent to implement directly",
+            },
+        },
+        "required": ["reason"],
     },
 )
 async def mark_as_worker_ready(args: dict[str, Any]) -> dict[str, Any]:
     try:
-        _client().update_task(_task_id, props={"aiStatus": "worker_ready"})
+        api = _client()
+        api.create_comment(
+            task_id=_task_id,
+            text=f"[WORKER READY] {args['reason']}",
+            created_by=_task_id,
+        )
+        api.update_task(_task_id, props={"aiStatus": "worker_ready"})
         return _result("Task marked as worker_ready. Next run will be in implementation mode.")
     except Exception as e:
         return _result(f"Error: {e}")
