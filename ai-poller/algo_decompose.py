@@ -29,6 +29,7 @@ from algorithm import (
     find_pending_proposals,
     find_pending_child_proposals,
     has_proposal_resolved,
+    has_new_user_reply,
 )
 
 
