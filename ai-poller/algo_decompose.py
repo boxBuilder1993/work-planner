@@ -145,6 +145,10 @@ For each pending proposal, read it carefully and decide:
 - PROOF proposals: Verify the evidence. If satisfied, approve and then close_subtask. If not, request_rework.
 - QUESTION proposals: If you can answer, deny with the answer as feedback. If you can't, call request_clarification to escalate to YOUR parent.
 
+IMPORTANT: Check your own comment history for any unanswered QUESTION proposals you
+already posted. If you have a pending question to your parent, do NOT re-ask it.
+Focus on handling the children's proposals you CAN answer independently.
+
 When ALL subtasks are closed:
 - Call submit_proof (or submit_summary for top-level) with overall results.
 

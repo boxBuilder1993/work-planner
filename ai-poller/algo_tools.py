@@ -19,12 +19,14 @@ from api_client import ApiClient
 
 _api: ApiClient | None = None
 _task_id: str = ""
+_ai_status: str = ""
 
 
-def set_algo_context(api: ApiClient, task_id: str) -> None:
-    global _api, _task_id
+def set_algo_context(api: ApiClient, task_id: str, ai_status: str = "") -> None:
+    global _api, _task_id, _ai_status
     _api = api
     _task_id = task_id
+    _ai_status = ai_status
 
 
 def _client() -> ApiClient:
@@ -95,6 +97,10 @@ async def request_clarification(args: dict[str, Any]) -> dict[str, Any]:
             comment_type="PROPOSAL",
             created_by=_task_id,
         )
+        # Managers stay in_progress — they can keep reviewing children
+        # while waiting for an answer from their parent
+        if _ai_status == "in_progress":
+            return _result("Question posted to parent. Continuing management duties.")
         api.update_task(_task_id, props={"aiStatus": "awaiting_input"})
         return _result("Question posted. Task paused until parent responds.")
     except Exception as e:

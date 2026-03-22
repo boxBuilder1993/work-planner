@@ -114,7 +114,7 @@ class AgentSpawner:
         task_id = task.id
         try:
             set_api_client(self._api)
-            set_algo_context(self._api, task_id)
+            set_algo_context(self._api, task_id, task.props.get("aiStatus", ""))
             workplanner_mcp = create_workplanner_mcp_server()
 
             extra_mcp_servers, allowed_tools = plan.tools
