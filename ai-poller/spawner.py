@@ -146,15 +146,19 @@ class AgentSpawner:
                 async for message in client.receive_response():
                     msg_type = type(message).__name__
                     subtype = getattr(message, 'subtype', '')
-                    # Log tool calls for debugging
+                    # Log tool calls and raw message details for debugging
                     if msg_type == "AssistantMessage":
-                        content = getattr(message, 'content', None)
-                        if content:
-                            for block in content if isinstance(content, list) else []:
-                                if isinstance(block, dict) and block.get('type') == 'tool_use':
-                                    logger.info("Agent tool call for task %s: %s(%s)",
-                                                task_id, block.get('name', '?'),
-                                                str(block.get('input', {}))[:200])
+                        # Try multiple attribute names the SDK might use
+                        for attr in ('content', 'message', 'text', 'tool_calls', 'tool_use'):
+                            val = getattr(message, attr, None)
+                            if val:
+                                logger.info("Agent msg attr for task %s: %s=%s",
+                                            task_id, attr, str(val)[:300])
+                                break
+                        else:
+                            # Log all attributes to discover the structure
+                            attrs = {k: str(v)[:100] for k, v in vars(message).items() if not k.startswith('_')}
+                            logger.info("Agent msg attrs for task %s: %s", task_id, attrs)
                     logger.info("Agent message for task %s: type=%s subtype=%s",
                                 task_id, msg_type, subtype)
                     if isinstance(message, ResultMessage):
