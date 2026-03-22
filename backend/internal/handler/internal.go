@@ -273,6 +273,57 @@ func (h *InternalHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, task)
 }
 
+// POST /api/internal/comments/:id/approve
+func (h *InternalHandler) ApproveProposal(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSuffix(r.URL.Path, "/")
+	// /api/internal/comments/:id/approve → segment 4 is the ID
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+	commentID := parts[4]
+
+	comment, err := h.store.UpdateProposalStatusUnscoped(r.Context(), commentID, "APPROVED", nil, time.Now().UnixMilli())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to approve proposal")
+		return
+	}
+	if comment == nil {
+		writeError(w, http.StatusNotFound, "proposal not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, comment)
+}
+
+// POST /api/internal/comments/:id/deny
+func (h *InternalHandler) DenyProposal(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSuffix(r.URL.Path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+	commentID := parts[4]
+
+	var req model.UpdateProposalRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	comment, err := h.store.UpdateProposalStatusUnscoped(r.Context(), commentID, "DENIED", req.Feedback, time.Now().UnixMilli())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to deny proposal")
+		return
+	}
+	if comment == nil {
+		writeError(w, http.StatusNotFound, "proposal not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, comment)
+}
+
 // ServeHTTP routes /api/internal/ requests.
 func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
@@ -305,6 +356,14 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// PATCH /api/internal/tasks/:id
 	case r.Method == http.MethodPatch && strings.Count(path, "/") == 4:
 		h.UpdateTask(w, r)
+
+	// POST /api/internal/comments/:id/approve
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/approve"):
+		h.ApproveProposal(w, r)
+
+	// POST /api/internal/comments/:id/deny
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/deny"):
+		h.DenyProposal(w, r)
 
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")

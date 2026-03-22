@@ -274,6 +274,21 @@ func (s *Store) UpdateProposalStatus(ctx context.Context, userID, commentID, sta
 	return &c, err
 }
 
+func (s *Store) UpdateProposalStatusUnscoped(ctx context.Context, commentID, status string, feedback *string, updatedAt int64) (*model.Comment, error) {
+	var c model.Comment
+	err := s.pool.QueryRow(ctx, `
+		UPDATE comments SET proposal_status = $1, proposal_feedback = $2, updated_at = $3
+		WHERE id = $4 AND comment_type = 'PROPOSAL'
+		RETURNING id, task_id, parent_comment_id, text, comment_type, created_by, proposal_status, proposal_feedback, created_at, updated_at
+	`, status, feedback, updatedAt, commentID).Scan(
+		&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &c, err
+}
+
 func (s *Store) DeleteComment(ctx context.Context, userID, commentID string) error {
 	// Verify comment's task belongs to user.
 	tag, err := s.pool.Exec(ctx, `

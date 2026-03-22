@@ -150,10 +150,14 @@ class ApiClient:
 
     def approve_proposal(self, comment_id: str) -> CommentEntity:
         """Approve a PROPOSAL comment."""
+        if self._is_internal:
+            return CommentEntity(**self._post(f"/api/internal/comments/{comment_id}/approve"))
         return CommentEntity(**self._post(f"/api/comments/{comment_id}/approve"))
 
     def deny_proposal(self, comment_id: str, feedback: str = "") -> CommentEntity:
         """Deny a PROPOSAL comment with optional feedback."""
+        if self._is_internal:
+            return CommentEntity(**self._post(f"/api/internal/comments/{comment_id}/deny", {"feedback": feedback}))
         return CommentEntity(**self._post(f"/api/comments/{comment_id}/deny", {"feedback": feedback}))
 
     def delete_comment(self, comment_id: str) -> None:
