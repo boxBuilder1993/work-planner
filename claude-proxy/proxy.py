@@ -92,35 +92,31 @@ class StatusResponse(BaseModel):
 # Claude execution
 # ---------------------------------------------------------------------------
 
-def _build_mcp_config(req: RunRequest, config_path: Path) -> None:
+def _build_mcp_config(req: RunRequest, config_path: Path) -> bool:
+    """Build MCP config for algo server only. Workplanner is registered at user level.
+    Returns True if a config file was written, False if not needed."""
+    if not req.algo_tools:
+        return False
+
     env = {
         "WORKPLANNER_API_URL": req.workplanner_api_url,
         "INTERNAL_API_KEY": req.internal_api_key,
+        "ALGO_TASK_ID": req.task_id,
+        "ALGO_AI_STATUS": req.ai_status,
+        "ALGO_TOOLS": ",".join(req.algo_tools),
     }
 
-    mcp_servers: dict[str, Any] = {
-        "workplanner": {
-            "command": "uv",
-            "args": ["run", "--project", str(PROXY_DIR), str(PROXY_DIR / "workplanner_server.py")],
-            "env": env,
+    config = {
+        "mcpServers": {
+            "algo": {
+                "command": "uv",
+                "args": ["run", "--project", str(PROXY_DIR), str(PROXY_DIR / "algo_server.py")],
+                "env": env,
+            },
         },
     }
-
-    if req.algo_tools:
-        algo_env = {
-            **env,
-            "ALGO_TASK_ID": req.task_id,
-            "ALGO_AI_STATUS": req.ai_status,
-            "ALGO_TOOLS": ",".join(req.algo_tools),
-        }
-        mcp_servers["algo"] = {
-            "command": "uv",
-            "args": ["run", "--project", str(PROXY_DIR), str(PROXY_DIR / "algo_server.py")],
-            "env": algo_env,
-        }
-
-    config = {"mcpServers": mcp_servers}
     config_path.write_text(json.dumps(config))
+    return True
 
 
 async def _execute_job(job: Job, req: RunRequest) -> None:
@@ -129,7 +125,7 @@ async def _execute_job(job: Job, req: RunRequest) -> None:
     system_prompt_path: str | None = None
 
     try:
-        _build_mcp_config(req, config_path)
+        has_algo_config = _build_mcp_config(req, config_path)
 
         cmd = [
             "claude", "-p",
@@ -137,9 +133,11 @@ async def _execute_job(job: Job, req: RunRequest) -> None:
             "--max-turns", str(req.max_turns),
             "--dangerously-skip-permissions",
             "--output-format", "json",
-            "--mcp-config", str(config_path),
             "--no-session-persistence",
         ]
+
+        if has_algo_config:
+            cmd.extend(["--mcp-config", str(config_path)])
 
         if req.system_prompt:
             with tempfile.NamedTemporaryFile(

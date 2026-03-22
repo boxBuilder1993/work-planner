@@ -10,9 +10,9 @@ import json
 import subprocess
 from typing import Any
 
-from mcp.server import Server
+from mcp.server import Server, InitializationOptions
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import Tool, TextContent, ServerCapabilities
 
 from api_client import ApiClient
 
@@ -148,7 +148,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream)
+        init_options = InitializationOptions(
+            server_name="workplanner",
+            server_version="1.0.0",
+            capabilities=ServerCapabilities(tools={}),
+        )
+        await server.run(read_stream, write_stream, init_options)
 
 
 if __name__ == "__main__":
