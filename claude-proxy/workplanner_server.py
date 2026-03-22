@@ -54,17 +54,6 @@ async def list_tools() -> list[Tool]:
                  "aiEnabled": {"type": "boolean"},
                  "props": {"type": "object"},
              }, "required": ["title"]}),
-        Tool(name="update_task", description="Update task fields",
-             inputSchema={"type": "object", "properties": {
-                 "task_id": {"type": "string"},
-                 "title": {"type": "string"},
-                 "description": {"type": "string"},
-                 "status": {"type": "string"},
-                 "priority": {"type": "integer"},
-                 "props": {"type": "object"},
-             }, "required": ["task_id"]}),
-        Tool(name="delete_task", description="Delete a task",
-             inputSchema={"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}),
         Tool(name="add_comment", description="Add a comment to a task",
              inputSchema={"type": "object", "properties": {
                  "task_id": {"type": "string"},
@@ -105,15 +94,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         if name == "create_task":
             body = {k: v for k, v in arguments.items() if v is not None}
             return _text(json.dumps(client.create_task(body), indent=2))
-
-        if name == "update_task":
-            task_id = arguments.pop("task_id")
-            body = {k: v for k, v in arguments.items() if v is not None}
-            return _text(json.dumps(client.update_task(task_id, body), indent=2))
-
-        if name == "delete_task":
-            client.delete_task(arguments["task_id"])
-            return _text(f"Deleted task {arguments['task_id']}")
 
         if name == "add_comment":
             body: dict[str, Any] = {
