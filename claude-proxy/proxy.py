@@ -1,7 +1,10 @@
 """Claude Code proxy server.
 
 Accepts requests from the ai-poller on Railway, runs claude -p locally
-using your Mac's subscription auth, returns results.
+using your Mac's subscription auth, returns results via async job queue.
+
+Submit: POST /run → {job_id}
+Poll:   GET /status/{job_id} → {status, result}
 
 Start with: uv run --project /path/to/claude-proxy proxy.py
 """
@@ -13,6 +16,8 @@ import json
 import logging
 import os
 import tempfile
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -25,31 +30,69 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 PROXY_DIR = Path(__file__).parent.resolve()
 API_KEY = os.environ.get("CLAUDE_PROXY_KEY", "")
-SEMAPHORE = asyncio.Semaphore(3)  # max 3 concurrent runs
+JOB_TTL = 300  # keep completed jobs for 5 minutes
 
+
+# ---------------------------------------------------------------------------
+# Job store
+# ---------------------------------------------------------------------------
+
+class Job:
+    def __init__(self, job_id: str, task_id: str):
+        self.id = job_id
+        self.task_id = task_id
+        self.status = "queued"  # queued → running → done | error
+        self.result = ""
+        self.error = ""
+        self.created_at = time.time()
+        self.completed_at: float | None = None
+
+
+jobs: dict[str, Job] = {}
+
+
+def _cleanup_old_jobs():
+    now = time.time()
+    expired = [
+        jid for jid, j in jobs.items()
+        if j.completed_at and now - j.completed_at > JOB_TTL
+    ]
+    for jid in expired:
+        del jobs[jid]
+
+
+# ---------------------------------------------------------------------------
+# Request/response models
+# ---------------------------------------------------------------------------
 
 class RunRequest(BaseModel):
     prompt: str
     system_prompt: str = ""
-    model: str = "claude-haiku-4-5"
+    model: str = "claude-sonnet-4-6"
     max_turns: int = 20
     allowed_tools: list[str] = []
-    algo_tools: list[str] = []  # which algo tools to enable
+    algo_tools: list[str] = []
     task_id: str = ""
     ai_status: str = ""
-    # Backend connection info for MCP servers
     workplanner_api_url: str = ""
     internal_api_key: str = ""
 
 
-class RunResponse(BaseModel):
-    success: bool
+class SubmitResponse(BaseModel):
+    job_id: str
+
+
+class StatusResponse(BaseModel):
+    status: str  # queued, running, done, error
     result: str = ""
     error: str = ""
 
 
+# ---------------------------------------------------------------------------
+# Claude execution
+# ---------------------------------------------------------------------------
+
 def _build_mcp_config(req: RunRequest, config_path: Path) -> None:
-    """Write a temporary MCP config JSON for this run."""
     env = {
         "WORKPLANNER_API_URL": req.workplanner_api_url,
         "INTERNAL_API_KEY": req.internal_api_key,
@@ -63,7 +106,6 @@ def _build_mcp_config(req: RunRequest, config_path: Path) -> None:
         },
     }
 
-    # Only add algo server if algo tools are needed
     if req.algo_tools:
         algo_env = {
             **env,
@@ -81,104 +123,132 @@ def _build_mcp_config(req: RunRequest, config_path: Path) -> None:
     config_path.write_text(json.dumps(config))
 
 
-@app.post("/run", response_model=RunResponse)
-async def run_agent(
+async def _execute_job(job: Job, req: RunRequest) -> None:
+    job.status = "running"
+    config_path = Path(tempfile.mktemp(suffix=".json", prefix="mcp-", dir="/tmp"))
+    system_prompt_path: str | None = None
+
+    try:
+        _build_mcp_config(req, config_path)
+
+        cmd = [
+            "claude", "-p",
+            "--model", req.model,
+            "--max-turns", str(req.max_turns),
+            "--dangerously-skip-permissions",
+            "--output-format", "json",
+            "--mcp-config", str(config_path),
+            "--no-session-persistence",
+        ]
+
+        if req.system_prompt:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", prefix="sysprompt-", delete=False, dir="/tmp"
+            ) as spf:
+                spf.write(req.system_prompt)
+                system_prompt_path = spf.name
+            cmd.extend(["--system-prompt-file", system_prompt_path])
+
+        if req.allowed_tools:
+            cmd.append("--allowedTools")
+            cmd.extend(req.allowed_tools)
+
+        logger.info("Job %s: running claude -p for task %s", job.id, job.task_id)
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=req.prompt.encode()),
+            timeout=600,
+        )
+
+        stdout_text = stdout.decode()
+        stderr_text = stderr.decode()
+
+        if stderr_text:
+            logger.warning("Job %s stderr: %s", job.id, stderr_text[:500])
+
+        if proc.returncode == 0 and stdout_text.strip():
+            try:
+                output = json.loads(stdout_text)
+                job.result = str(output.get("result", stdout_text))
+            except json.JSONDecodeError:
+                job.result = stdout_text.strip()
+            job.status = "done"
+            logger.info("Job %s: done — %s", job.id, job.result[:200])
+        else:
+            job.error = stderr_text or f"Exit code {proc.returncode}"
+            job.status = "error"
+            logger.error("Job %s: error — %s", job.id, job.error[:500])
+
+    except asyncio.TimeoutError:
+        job.error = "Timeout after 600s"
+        job.status = "error"
+        logger.error("Job %s: timeout", job.id)
+    except Exception as e:
+        job.error = str(e)
+        job.status = "error"
+        logger.exception("Job %s: exception", job.id)
+    finally:
+        job.completed_at = time.time()
+        config_path.unlink(missing_ok=True)
+        if system_prompt_path:
+            Path(system_prompt_path).unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+def _check_auth(key: str):
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid proxy key")
+
+
+@app.post("/run", response_model=SubmitResponse)
+async def submit_job(
     req: RunRequest,
     x_proxy_key: str = Header("", alias="X-Proxy-Key"),
 ):
-    # Auth check
-    if API_KEY and x_proxy_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid proxy key")
+    _check_auth(x_proxy_key)
+    _cleanup_old_jobs()
 
-    logger.info("Run request: task=%s model=%s max_turns=%d", req.task_id, req.model, req.max_turns)
+    job_id = str(uuid.uuid4())[:8]
+    job = Job(job_id=job_id, task_id=req.task_id)
+    jobs[job_id] = job
 
-    async with SEMAPHORE:
-        # Write temp MCP config
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", prefix="mcp-", delete=False, dir="/tmp"
-        ) as f:
-            config_path = Path(f.name)
+    logger.info("Job %s: submitted for task %s (model=%s)", job_id, req.task_id, req.model)
 
-        try:
-            _build_mcp_config(req, config_path)
+    # Start execution in background
+    asyncio.create_task(_execute_job(job, req))
 
-            # Build claude command
-            cmd = [
-                "claude", "-p",
-                "--model", req.model,
-                "--max-turns", str(req.max_turns),
-                "--dangerously-skip-permissions",
-                "--output-format", "json",
-                "--mcp-config", str(config_path),
-                "--no-session-persistence",
-            ]
+    return SubmitResponse(job_id=job_id)
 
-            if req.system_prompt:
-                # Write system prompt to temp file to avoid shell escaping issues
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".txt", prefix="sysprompt-", delete=False, dir="/tmp"
-                ) as spf:
-                    spf.write(req.system_prompt)
-                    system_prompt_path = spf.name
-                cmd.extend(["--system-prompt-file", system_prompt_path])
-            else:
-                system_prompt_path = None
 
-            if req.allowed_tools:
-                cmd.append("--allowedTools")
-                cmd.extend(req.allowed_tools)
+@app.get("/status/{job_id}", response_model=StatusResponse)
+async def get_status(
+    job_id: str,
+    x_proxy_key: str = Header("", alias="X-Proxy-Key"),
+):
+    _check_auth(x_proxy_key)
 
-            logger.info("Running: %s", " ".join(cmd[:10]) + "...")
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
 
-            # Run claude -p
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(input=req.prompt.encode()),
-                timeout=600,  # 10 minute max
-            )
-
-            stdout_text = stdout.decode()
-            stderr_text = stderr.decode()
-
-            if stderr_text:
-                logger.warning("stderr: %s", stderr_text[:500])
-
-            # Parse JSON output
-            if proc.returncode == 0 and stdout_text.strip():
-                try:
-                    output = json.loads(stdout_text)
-                    # claude -p --output-format json returns {"result": "...", ...}
-                    result_text = output.get("result", stdout_text)
-                    logger.info("Success: %s", str(result_text)[:200])
-                    return RunResponse(success=True, result=str(result_text))
-                except json.JSONDecodeError:
-                    logger.info("Raw output: %s", stdout_text[:200])
-                    return RunResponse(success=True, result=stdout_text.strip())
-            else:
-                error = stderr_text or f"Exit code {proc.returncode}"
-                logger.error("Failed: %s", error[:500])
-                return RunResponse(success=False, error=error[:2000])
-
-        except asyncio.TimeoutError:
-            logger.error("Timeout for task %s", req.task_id)
-            return RunResponse(success=False, error="Timeout after 600s")
-        except Exception as e:
-            logger.exception("Error running claude for task %s", req.task_id)
-            return RunResponse(success=False, error=str(e))
-        finally:
-            config_path.unlink(missing_ok=True)
-            if system_prompt_path:
-                Path(system_prompt_path).unlink(missing_ok=True)
+    return StatusResponse(
+        status=job.status,
+        result=job.result,
+        error=job.error,
+    )
 
 
 @app.get("/health")
 async def health():
-    # Check claude is installed and authed
     proc = await asyncio.create_subprocess_exec(
         "claude", "auth", "status",
         stdout=asyncio.subprocess.PIPE,
@@ -187,7 +257,7 @@ async def health():
     stdout, _ = await proc.communicate()
     try:
         status = json.loads(stdout.decode())
-        return {"status": "ok", "auth": status}
+        return {"status": "ok", "auth": status, "active_jobs": sum(1 for j in jobs.values() if j.status == "running")}
     except Exception:
         return {"status": "error", "auth": "not logged in"}
 

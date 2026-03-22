@@ -1,7 +1,7 @@
-"""Agent spawning — calls the Claude proxy server on the user's Mac.
+"""Agent spawning — submits jobs to the Claude proxy and polls for results.
 
-The proxy runs claude -p with the user's subscription auth.
-MCP tools run on the Mac via the proxy's MCP config.
+The proxy runs claude -p on the user's Mac with their subscription auth.
+Uses async job queue: POST /run → job_id, GET /status/{job_id} → result.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 import requests
 
@@ -23,10 +22,12 @@ from models import TaskEntity
 
 logger = logging.getLogger(__name__)
 
+POLL_INTERVAL = 10  # seconds between status checks
+JOB_TIMEOUT = 600   # max seconds to wait for a job
+
 
 @dataclass
 class AgentRun:
-    """Tracks a single agent run."""
     task_id: str
     algorithm_name: str
     started_at: float = field(default_factory=time.time)
@@ -34,7 +35,6 @@ class AgentRun:
 
 
 class AgentSpawner:
-    """Manages spawning and tracking of Claude agent runs via the proxy."""
 
     def __init__(self, api: ApiClient, config: Config) -> None:
         self._api = api
@@ -53,6 +53,12 @@ class AgentSpawner:
     def can_spawn(self) -> bool:
         return self.active_count < self._config.agent_limits.max_global_agents
 
+    def _headers(self) -> dict[str, str]:
+        h: dict[str, str] = {"Content-Type": "application/json"}
+        if self._proxy_key:
+            h["X-Proxy-Key"] = self._proxy_key
+        return h
+
     async def spawn(
         self,
         task: TaskEntity,
@@ -63,35 +69,29 @@ class AgentSpawner:
         if self.is_running(task.id):
             logger.warning("Agent already running for task %s, skipping", task.id)
             return
-
         if not self.can_spawn():
-            logger.warning("Agent limit reached (%d), cannot spawn for task %s",
-                           self._config.agent_limits.max_global_agents, task.id)
+            logger.warning("Agent limit reached, cannot spawn for task %s", task.id)
             return
 
         ai_status = task.props.get("aiStatus", "needs_planning")
         logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s, model=%s]",
                      algorithm.name, task.title, task.id, ai_status, plan.model)
 
-        # Enrich prompt with knowledge context
+        # Enrich prompt with knowledge
         system_prompt = plan.prompt
         if knowledge:
             try:
                 context = knowledge.query_knowledge(
-                    f"context for: {task.title} {task.description}",
-                    limit=3,
-                )
+                    f"context for: {task.title} {task.description}", limit=3)
                 if context:
-                    knowledge_section = "\n\nRelevant knowledge from previous work:\n"
+                    system_prompt += "\n\nRelevant knowledge from previous work:\n"
                     for doc in context:
-                        knowledge_section += f"- {doc['document'][:200]}\n"
-                    system_prompt += knowledge_section
+                        system_prompt += f"- {doc['document'][:200]}\n"
             except Exception:
                 logger.warning("Failed to query knowledge base for task %s", task.id)
 
         run = AgentRun(task_id=task.id, algorithm_name=algorithm.name)
         self._active_runs[task.id] = run
-
         run.task_handle = asyncio.create_task(
             self._run_agent(task, system_prompt, plan, algorithm, knowledge)
         )
@@ -106,18 +106,8 @@ class AgentSpawner:
     ) -> None:
         task_id = task.id
         try:
-            # Extract algo tools from the plan
             _, allowed_tools = plan.tools
-            extra_mcp_servers = plan.tools[0]
-
-            # Determine which algo tools to enable
-            algo_tools: list[str] = []
-            if "algo" in extra_mcp_servers:
-                # The algo MCP server object has tools registered —
-                # we need to figure out which tools based on the phase.
-                # The allowed_tools list has patterns like "mcp__algo__*"
-                # We pass all algo tool names and let the server filter.
-                algo_tools = plan.metadata.get("algo_tools", [])
+            algo_tools = plan.metadata.get("algo_tools", [])
 
             prompt = (
                 f"You have been assigned task {task_id}. "
@@ -125,7 +115,6 @@ class AgentSpawner:
                 f"then take appropriate action based on your instructions."
             )
 
-            # Build request to proxy
             request_body = {
                 "prompt": prompt,
                 "system_prompt": system_prompt,
@@ -139,40 +128,71 @@ class AgentSpawner:
                 "internal_api_key": self._config.internal_api_key,
             }
 
-            headers: dict[str, str] = {"Content-Type": "application/json"}
-            if self._proxy_key:
-                headers["X-Proxy-Key"] = self._proxy_key
-
-            logger.info("Calling proxy for task %s: %s/run", task_id, self._proxy_url)
-
-            # Make the HTTP call in a thread to not block the event loop
+            # Submit job
+            logger.info("Submitting job for task %s to proxy", task_id)
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
+            submit_resp = await loop.run_in_executor(
                 None,
                 lambda: requests.post(
                     f"{self._proxy_url}/run",
                     json=request_body,
-                    headers=headers,
-                    timeout=660,  # slightly longer than proxy's 600s timeout
+                    headers=self._headers(),
+                    timeout=30,
                 ),
             )
 
-            if response.status_code != 200:
-                logger.error("Proxy error for task %s: %d %s",
-                             task_id, response.status_code, response.text[:500])
+            if submit_resp.status_code != 200:
+                logger.error("Proxy submit error for task %s: %d %s",
+                             task_id, submit_resp.status_code, submit_resp.text[:500])
                 return
 
-            result = response.json()
-            result_text = result.get("result", "")
-            success = result.get("success", False)
+            job_id = submit_resp.json().get("job_id")
+            if not job_id:
+                logger.error("No job_id returned for task %s", task_id)
+                return
 
-            if success and result_text:
-                logger.info("Agent result for task %s: %s", task_id, result_text[:500])
-            elif not success:
-                logger.warning("Agent failed for task %s: %s",
-                               task_id, result.get("error", "unknown")[:500])
-            else:
-                logger.warning("Agent produced no result for task %s", task_id)
+            logger.info("Job %s submitted for task %s, polling for result...", job_id, task_id)
+
+            # Poll for result
+            result_text = ""
+            success = False
+            start = time.time()
+
+            while time.time() - start < JOB_TIMEOUT:
+                await asyncio.sleep(POLL_INTERVAL)
+
+                status_resp = await loop.run_in_executor(
+                    None,
+                    lambda: requests.get(
+                        f"{self._proxy_url}/status/{job_id}",
+                        headers=self._headers(),
+                        timeout=15,
+                    ),
+                )
+
+                if status_resp.status_code != 200:
+                    logger.warning("Poll error for job %s: %d", job_id, status_resp.status_code)
+                    continue
+
+                data = status_resp.json()
+                status = data.get("status")
+
+                if status == "done":
+                    result_text = data.get("result", "")
+                    success = True
+                    logger.info("Job %s done for task %s: %s", job_id, task_id, result_text[:300])
+                    break
+                elif status == "error":
+                    logger.error("Job %s failed for task %s: %s",
+                                 job_id, task_id, data.get("error", "")[:500])
+                    break
+                # else: queued or running, keep polling
+
+            if not success and not result_text:
+                elapsed = time.time() - start
+                if elapsed >= JOB_TIMEOUT:
+                    logger.error("Job %s timed out after %ds for task %s", job_id, JOB_TIMEOUT, task_id)
+                # Either timed out or errored — result_text stays empty
 
             # Run on_complete
             try:
@@ -201,8 +221,6 @@ class AgentSpawner:
                     if props_update.child_props:
                         for child in fresh_children:
                             if not child.props.get("algorithm"):
-                                logger.info("Task %s: setting child %s props: %s",
-                                            task_id, child.id, props_update.child_props)
                                 self._api.update_task(child.id, props=props_update.child_props)
             except Exception:
                 logger.exception("Failed to run on_complete for task %s", task_id)
@@ -211,11 +229,8 @@ class AgentSpawner:
             if knowledge and result_text:
                 try:
                     knowledge.document_work(
-                        task_id=task_id,
-                        agent_id=task_id,
-                        work_type="agent_run",
-                        content=result_text[:2000],
-                    )
+                        task_id=task_id, agent_id=task_id,
+                        work_type="agent_run", content=result_text[:2000])
                 except Exception:
                     logger.warning("Failed to document work for task %s", task_id)
 
@@ -229,10 +244,7 @@ class AgentSpawner:
             self._active_runs.pop(task_id, None)
 
     async def wait_for_all(self, timeout: float | None = None) -> None:
-        handles = [
-            run.task_handle for run in self._active_runs.values()
-            if run.task_handle is not None
-        ]
+        handles = [r.task_handle for r in self._active_runs.values() if r.task_handle]
         if handles:
             await asyncio.wait(handles, timeout=timeout)
 
@@ -245,14 +257,10 @@ class AgentSpawner:
 
     def cleanup_stale(self, max_age_seconds: float = 3600) -> int:
         now = time.time()
-        stale = [
-            task_id for task_id, run in self._active_runs.items()
-            if now - run.started_at > max_age_seconds
-        ]
-        for task_id in stale:
-            run = self._active_runs.pop(task_id)
+        stale = [tid for tid, r in self._active_runs.items() if now - r.started_at > max_age_seconds]
+        for tid in stale:
+            run = self._active_runs.pop(tid)
             if run.task_handle and not run.task_handle.done():
                 run.task_handle.cancel()
-            logger.warning("Cleaned up stale agent run for task %s (age: %.0fs)",
-                           task_id, now - run.started_at)
+            logger.warning("Cleaned up stale agent run for task %s", tid)
         return len(stale)
