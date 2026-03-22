@@ -46,6 +46,7 @@ class SpawnPlan:
     prompt: str
     tools: tuple[dict[str, Any], list[str]]  # (mcp_servers, allowed_tools)
     on_complete: Callable[[TaskContext, str], PropsUpdate | None]
+    model: str = "claude-haiku-4-5-20251001"  # default to cheapest
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -394,7 +394,7 @@ class DecomposeAndDelegate(Algorithm):
                 return PropsUpdate(self_props={"aiStatus": "implementing", "runCount": run_count})
             return PropsUpdate(self_props={"runCount": run_count})
 
-        return SpawnPlan(prompt=prompt, tools=_worker_execute_tools(), on_complete=on_complete)
+        return SpawnPlan(prompt=prompt, tools=_worker_execute_tools(), on_complete=on_complete, model="claude-sonnet-4-6")
 
     # -- Manager -----------------------------------------------------------
 

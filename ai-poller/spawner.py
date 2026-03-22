@@ -132,7 +132,7 @@ class AgentSpawner:
                 mcp_servers=mcp_servers,
                 allowed_tools=allowed_tools,
                 max_turns=self._config.agent_limits.max_turns_per_run,
-                model="claude-sonnet-4-6",
+                model=plan.model,
                 env={"ANTHROPIC_API_KEY": self._config.anthropic_api_key},
             )
 
