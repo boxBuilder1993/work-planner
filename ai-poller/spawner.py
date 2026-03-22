@@ -42,6 +42,9 @@ class AgentSpawner:
         self._active_runs: dict[str, AgentRun] = {}
         self._proxy_url = os.environ.get("CLAUDE_PROXY_URL", "http://localhost:8400")
         self._proxy_key = os.environ.get("CLAUDE_PROXY_KEY", "")
+        # Public backend URL for the proxy (which runs outside Railway)
+        backend_host = os.environ.get("RAILWAY_SERVICE_BACKEND_URL", "")
+        self._public_api_url = f"https://{backend_host}" if backend_host else self._config.api_url
 
     @property
     def active_count(self) -> int:
@@ -124,7 +127,7 @@ class AgentSpawner:
                 "algo_tools": algo_tools,
                 "task_id": task_id,
                 "ai_status": task.props.get("aiStatus", ""),
-                "workplanner_api_url": self._config.api_url,
+                "workplanner_api_url": self._public_api_url,
                 "internal_api_key": self._config.internal_api_key,
             }
 
