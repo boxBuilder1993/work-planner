@@ -89,14 +89,14 @@ class ApiClient:
             "title": title,
             "description": description,
             "priority": priority,
-            "ai_enabled": ai_enabled,
+            "aiEnabled": ai_enabled,
         }
         if parent_id is not None:
-            body["parent_id"] = parent_id
+            body["parentId"] = parent_id
         if due_date is not None:
-            body["due_date"] = due_date
+            body["dueDate"] = due_date
         if planned_time is not None:
-            body["planned_time"] = planned_time
+            body["plannedTime"] = planned_time
         if duration is not None:
             body["duration"] = duration
         if props is not None:
