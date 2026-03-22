@@ -358,7 +358,7 @@ class DecomposeAndDelegate(Algorithm):
             run_count = ctx.task.props.get("runCount", 0) + 1
             # If agent didn't call mark_as_planned/mark_as_worker_ready, force transition
             status = ctx.task.props.get("aiStatus")
-            if status == "plan_approved":
+            if status in ("plan_approved", "plan_proposed"):
                 if ctx.children:
                     return PropsUpdate(self_props={"aiStatus": "in_progress", "runCount": run_count})
                 else:
