@@ -103,38 +103,52 @@ def format_comment_history(comments: list[CommentEntity]) -> str:
     return "\n---\n".join(lines)
 
 
+def _is_own_proposal(comment: CommentEntity, ctx: TaskContext) -> bool:
+    """Check if a proposal was created by this task's own agent.
+
+    Agents may post via the algo tool (created_by=task_id) or via
+    workplanner add_comment (created_by="agent" or "user"). We match
+    any proposal that isn't from a child task.
+    """
+    child_ids = {c.id for c in ctx.children}
+    return comment.created_by not in child_ids
+
+
 def find_pending_proposals(ctx: TaskContext) -> list[CommentEntity]:
-    """Find PENDING proposals on this task created by its own agent."""
+    """Find PENDING proposals on this task from its own agent."""
     return [
         c for c in ctx.comments
         if c.comment_type == "PROPOSAL"
         and c.proposal_status == "PENDING"
-        and c.created_by == ctx.task.id
+        and _is_own_proposal(c, ctx)
     ]
 
 
 def find_approved_proposals(ctx: TaskContext) -> list[CommentEntity]:
-    """Find APPROVED proposals on this task created by its own agent."""
+    """Find APPROVED proposals on this task from its own agent."""
     return [
         c for c in ctx.comments
         if c.comment_type == "PROPOSAL"
         and c.proposal_status == "APPROVED"
-        and c.created_by == ctx.task.id
+        and _is_own_proposal(c, ctx)
     ]
 
 
 def find_denied_proposals(ctx: TaskContext) -> list[CommentEntity]:
-    """Find DENIED proposals on this task created by its own agent."""
+    """Find DENIED proposals on this task from its own agent."""
     return [
         c for c in ctx.comments
         if c.comment_type == "PROPOSAL"
         and c.proposal_status == "DENIED"
-        and c.created_by == ctx.task.id
+        and _is_own_proposal(c, ctx)
     ]
 
 
 def find_pending_child_proposals(ctx: TaskContext) -> list[tuple[TaskEntity, CommentEntity]]:
-    """Find PENDING proposals on children's tasks (posted by children's own agents).
+    """Find PENDING proposals on children's tasks.
+
+    Matches any PENDING PROPOSAL on a child task, regardless of createdBy
+    (agent may have used add_comment with createdBy="agent" instead of task ID).
 
     Returns list of (child_task, proposal_comment) tuples.
     """
@@ -143,8 +157,7 @@ def find_pending_child_proposals(ctx: TaskContext) -> list[tuple[TaskEntity, Com
         child_comments = ctx.children_comments.get(child.id, [])
         for c in child_comments:
             if (c.comment_type == "PROPOSAL"
-                    and c.proposal_status == "PENDING"
-                    and c.created_by == child.id):
+                    and c.proposal_status == "PENDING"):
                 results.append((child, c))
     return results
 
