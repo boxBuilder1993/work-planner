@@ -127,6 +127,10 @@ class AgentSpawner:
                 f"then take appropriate action based on your instructions."
             )
 
+            logger.info("Agent config for task %s: model=%s, max_turns=%d, allowed_tools=%s, mcp_servers=%s",
+                        task_id, plan.model, self._config.agent_limits.max_turns_per_run,
+                        allowed_tools, list(mcp_servers.keys()))
+
             options = ClaudeAgentOptions(
                 system_prompt=system_prompt,
                 mcp_servers=mcp_servers,
@@ -140,8 +144,19 @@ class AgentSpawner:
             async with ClaudeSDKClient(options=options) as client:
                 await client.query(prompt)
                 async for message in client.receive_response():
+                    msg_type = type(message).__name__
+                    subtype = getattr(message, 'subtype', '')
+                    # Log tool calls for debugging
+                    if msg_type == "AssistantMessage":
+                        content = getattr(message, 'content', None)
+                        if content:
+                            for block in content if isinstance(content, list) else []:
+                                if isinstance(block, dict) and block.get('type') == 'tool_use':
+                                    logger.info("Agent tool call for task %s: %s(%s)",
+                                                task_id, block.get('name', '?'),
+                                                str(block.get('input', {}))[:200])
                     logger.info("Agent message for task %s: type=%s subtype=%s",
-                                task_id, type(message).__name__, getattr(message, 'subtype', ''))
+                                task_id, msg_type, subtype)
                     if isinstance(message, ResultMessage):
                         if message.subtype == "success":
                             result_text = message.result

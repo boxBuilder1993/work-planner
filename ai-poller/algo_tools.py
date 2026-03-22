@@ -59,17 +59,24 @@ def _result(text: str) -> dict[str, Any]:
     },
 )
 async def propose_plan(args: dict[str, Any]) -> dict[str, Any]:
+    import logging
+    logger = logging.getLogger("algo_tools")
+    logger.info("propose_plan called for task %s", _task_id)
     try:
         api = _client()
-        api.create_comment(
+        logger.info("Creating PROPOSAL comment on task %s", _task_id)
+        comment = api.create_comment(
             task_id=_task_id,
             text=f"[PLAN PROPOSAL] {args['plan']}",
             comment_type="PROPOSAL",
             created_by=_task_id,
         )
+        logger.info("Comment created: %s", comment.id)
         api.update_task(_task_id, props={"aiStatus": "plan_proposed"})
+        logger.info("Task %s aiStatus set to plan_proposed", _task_id)
         return _result("Plan proposed. Waiting for approval from parent/user.")
     except Exception as e:
+        logger.exception("propose_plan failed for task %s", _task_id)
         return _result(f"Error: {e}")
 
 
