@@ -266,13 +266,22 @@ def _subtasks_block(ctx: TaskContext) -> str:
 
 
 def _pending_proposals_block(ctx: TaskContext) -> str:
-    pending = find_pending_child_proposals(ctx)
-    if not pending:
-        return "(none)"
     lines = []
+    pending = find_pending_child_proposals(ctx)
     for child, proposal in pending:
         lines.append(f"- [{child.title}] (proposal_id: {proposal.id}): {proposal.text[:300]}")
-    return "\n".join(lines)
+
+    # Also show children that completed without formal proposals
+    completed_statuses = {"done", "complete", "proof_submitted", "planning_complete"}
+    for child in ctx.children:
+        if child.status != "CLOSED" and child.props.get("aiStatus", "") in completed_statuses:
+            # Check if already listed via proposal
+            if not any(c.id == child.id for c, _ in pending):
+                child_comments = ctx.children_comments.get(child.id, [])
+                last_comment = child_comments[-1].text[:200] if child_comments else "no comments"
+                lines.append(f"- [{child.title}] (COMPLETED, needs review — close_subtask with subtask_id={child.id}): {last_comment}")
+
+    return "\n".join(lines) if lines else "(none)"
 
 
 def _approved_plan_text(ctx: TaskContext) -> str:
@@ -423,20 +432,19 @@ class DecomposeAndDelegate(Algorithm):
         pending = find_pending_child_proposals(ctx)
         all_closed = all(c.status == "CLOSED" for c in ctx.children) if ctx.children else False
 
-        logger.info("Manager '%s': %d children, %d pending child proposals, all_closed=%s",
-                     ctx.task.title, len(ctx.children), len(pending), all_closed)
-        for child in ctx.children:
-            child_comments = ctx.children_comments.get(child.id, [])
-            child_proposals = [c for c in child_comments if c.comment_type == "PROPOSAL"]
-            logger.info("  Child '%s' (%s): %d comments, %d proposals",
-                        child.title, child.props.get("aiStatus", "?"),
-                        len(child_comments), len(child_proposals))
-            for p in child_proposals:
-                logger.info("    Proposal %s: status=%s, created_by=%s (child.id=%s, match=%s)",
-                           p.id[:8], p.proposal_status, p.created_by[:8], child.id[:8],
-                           p.created_by == child.id)
+        # Check for children that completed but weren't formally reviewed
+        # (e.g. simple_answer children that set done/complete without posting proposals)
+        completed_statuses = {"done", "complete", "proof_submitted", "planning_complete"}
+        children_needing_review = [
+            c for c in ctx.children
+            if c.status != "CLOSED" and c.props.get("aiStatus", "") in completed_statuses
+        ]
 
-        if not pending and not all_closed:
+        logger.info("Manager '%s': %d children, %d pending proposals, %d needing review, all_closed=%s",
+                     ctx.task.title, len(ctx.children), len(pending),
+                     len(children_needing_review), all_closed)
+
+        if not pending and not children_needing_review and not all_closed:
             return None
 
         prompt = _MANAGER_PROMPT.format(
