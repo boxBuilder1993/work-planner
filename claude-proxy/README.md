@@ -2,57 +2,161 @@
 
 Local proxy server that runs Claude Code in headless mode using your Mac's subscription. The ai-poller on Railway calls this proxy through a Cloudflare Tunnel.
 
+## Architecture
+
+```
+Railway ai-poller
+    ↓ POST /run (HTTPS)
+claude-proxy.shravan-box-builder.net
+    ↓ Cloudflare Tunnel
+Your Mac (localhost:8400)
+    ↓ proxy.py (FastAPI)
+claude -p (Claude Code CLI, headless mode)
+    ↓ MCP servers (launched automatically per run)
+    ├── workplanner_server.py → Railway backend API
+    └── algo_server.py → Railway backend API (state transitions)
+```
+
+## Components
+
+| Component | What it does | Where it runs |
+|-----------|-------------|---------------|
+| `proxy.py` | FastAPI server, accepts `/run` requests, spawns `claude -p` | Your Mac, port 8400 |
+| `workplanner_server.py` | MCP server for task/comment tools | Your Mac (launched by `claude -p`) |
+| `algo_server.py` | MCP server for state transition tools | Your Mac (launched by `claude -p`) |
+| `api_client.py` | HTTP client for Railway backend | Used by MCP servers |
+| Cloudflare Tunnel | Routes internet traffic to localhost | Your Mac (`cloudflared`) |
+
+MCP servers are **not started manually** — the proxy generates an MCP config file per request and `claude -p` launches them as subprocesses automatically.
+
 ## Prerequisites
 
-- `uv` — `brew install uv`
-- `cloudflared` — `brew install cloudflared`
-- `claude` — Claude Code CLI, authenticated (`claude auth status` should show logged in)
+Install these on your Mac:
+
+```bash
+# uv — Python package manager
+brew install uv
+
+# cloudflared — Cloudflare Tunnel connector
+brew install cloudflared
+
+# Claude Code CLI (should already be installed)
+claude --version
+
+# Verify Claude is authenticated
+claude auth status
+# Should show: loggedIn: true, subscriptionType: max
+```
 
 ## First-time setup
 
-1. Login to Cloudflare (one-time):
-   ```bash
-   cloudflared tunnel login
-   ```
-   Select `shravan-box-builder.net` in the browser.
+### 1. Cloudflare login (one-time)
 
-2. The tunnel `ai` (ID: `ea2c0844-e1eb-446d-b2ba-c51d6687e853`) is already created with a route:
-   - `claude-proxy.shravan-box-builder.net` → `localhost:8400`
+```bash
+cloudflared tunnel login
+```
 
-## Starting the proxy
+Select `shravan-box-builder.net` in the browser when prompted.
 
-Every time you want agents to run, open two terminals:
+### 2. Tunnel configuration
 
-**Terminal 1 — Cloudflare Tunnel:**
+The tunnel `ai` is already created:
+- **Tunnel ID**: `ea2c0844-e1eb-446d-b2ba-c51d6687e853`
+- **Route**: `claude-proxy.shravan-box-builder.net` → `localhost:8400`
+- **Dashboard**: https://dash.cloudflare.com/tunnels/ea2c0844-e1eb-446d-b2ba-c51d6687e853
+
+### 3. Railway env vars (already set)
+
+```
+CLAUDE_PROXY_URL=https://claude-proxy.shravan-box-builder.net
+CLAUDE_PROXY_KEY=workplanner-proxy-2026
+```
+
+## Starting everything
+
+Open two terminals:
+
+### Terminal 1 — Cloudflare Tunnel
+
 ```bash
 cloudflared tunnel run ai
 ```
 
-**Terminal 2 — Proxy Server:**
+Keep this running. It connects your Mac to Cloudflare's network.
+
+### Terminal 2 — Proxy Server
+
 ```bash
 cd ~/BoxBuilderProjects/WorkPlanner/claude-proxy
 CLAUDE_PROXY_KEY=workplanner-proxy-2026 uv run proxy.py
 ```
 
-## Verify it's working
+On first run, `uv` will create a virtual environment and install dependencies automatically.
+
+## Verify everything works
 
 ```bash
-# Local check
+# 1. Check proxy is running locally
 curl http://localhost:8400/health
 
-# Through tunnel
+# 2. Check tunnel is routing
 curl https://claude-proxy.shravan-box-builder.net/health
-```
 
-Should return `{"status":"ok","auth":{"loggedIn":true,...}}`.
+# Both should return:
+# {"status":"ok","auth":{"loggedIn":true,"subscriptionType":"max",...}}
+
+# 3. Check Railway can reach the proxy (from poller logs)
+railway logs --service ai-poller | grep "proxy"
+```
 
 ## Stopping
 
-Ctrl+C in both terminals. Agents will stop spawning until you restart.
+Ctrl+C in both terminals. The ai-poller will log errors when it can't reach the proxy, but will retry on the next cycle. No data is lost — tasks stay in their current state.
+
+## Troubleshooting
+
+### Proxy won't start
+```bash
+# Check if port is already in use
+lsof -i :8400
+
+# Kill existing process
+kill $(lsof -ti :8400)
+
+# Restart
+CLAUDE_PROXY_KEY=workplanner-proxy-2026 uv run proxy.py
+```
+
+### Tunnel not connecting
+```bash
+# Check tunnel status
+cloudflared tunnel info ai
+
+# Re-login if cert expired
+cloudflared tunnel login
+```
+
+### Claude auth expired
+```bash
+# Check auth
+claude auth status
+
+# Re-login
+claude auth login
+```
+
+### MCP server errors
+MCP servers are launched by `claude -p` per request. Check proxy logs for errors. The servers need these env vars (set automatically by the proxy):
+- `WORKPLANNER_API_URL` — Railway backend URL
+- `INTERNAL_API_KEY` — backend auth key
+- `ALGO_TASK_ID` — task being processed (algo server only)
+- `ALGO_AI_STATUS` — current task phase (algo server only)
+- `ALGO_TOOLS` — enabled tools for this phase (algo server only)
 
 ## Notes
 
-- Your Mac must be awake and connected to the internet for agents to run.
-- Max 3 concurrent agent runs (hardcoded semaphore in proxy).
-- Claude Max subscription is used — no API key costs.
-- The proxy key (`CLAUDE_PROXY_KEY`) is set on Railway's ai-poller service.
+- Your Mac must be **awake and online** for agents to run.
+- Max **3 concurrent** agent runs (semaphore in proxy.py).
+- Uses **Claude Sonnet 4.6** via your Max subscription — no API costs.
+- The proxy key prevents unauthorized access through the tunnel.
+- Each `claude -p` run gets its own MCP config file (auto-cleaned up).
