@@ -211,7 +211,7 @@ async def propose_work(args: dict[str, Any]) -> dict[str, Any]:
 @tool(
     "submit_proof",
     "Submit proof of completion. Posts a PROPOSAL on your own task with evidence. "
-    "Your parent will review it.",
+    "Your parent will review and close your task if satisfied.",
     {
         "type": "object",
         "properties": {
@@ -232,8 +232,8 @@ async def submit_proof(args: dict[str, Any]) -> dict[str, Any]:
             comment_type="PROPOSAL",
             created_by=_task_id,
         )
-        api.update_task(_task_id, props={"aiStatus": "done"})
-        return _result("Proof submitted. Waiting for parent review.")
+        api.update_task(_task_id, props={"aiStatus": "proof_submitted"})
+        return _result("Proof submitted. Waiting for parent to review and close.")
     except Exception as e:
         return _result(f"Error: {e}")
 
@@ -241,7 +241,7 @@ async def submit_proof(args: dict[str, Any]) -> dict[str, Any]:
 @tool(
     "submit_summary",
     "Submit a completion summary for a top-level task (user reviews). "
-    "Posts a PROPOSAL on your own task.",
+    "Posts a PROPOSAL on your own task. User will close it if satisfied.",
     {
         "type": "object",
         "properties": {
@@ -262,7 +262,7 @@ async def submit_summary(args: dict[str, Any]) -> dict[str, Any]:
             comment_type="PROPOSAL",
             created_by=_task_id,
         )
-        api.update_task(_task_id, props={"aiStatus": "done"})
+        api.update_task(_task_id, props={"aiStatus": "proof_submitted"})
         return _result("Summary posted. User will review and close.")
     except Exception as e:
         return _result(f"Error: {e}")

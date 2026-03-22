@@ -309,7 +309,7 @@ class DecomposeAndDelegate(Algorithm):
             return self._manage(ctx)
         if status == "awaiting_input":
             return self._handle_awaiting_input(ctx)
-        # "done" → nothing to do
+        # "proof_submitted" or "done" → waiting for parent, nothing to do
         return None
 
     # -- Planning ----------------------------------------------------------
@@ -389,7 +389,7 @@ class DecomposeAndDelegate(Algorithm):
             run_count = ctx.task.props.get("runCount", 0) + 1
             # If agent didn't call submit_proof, set to implementing so it retries
             status = ctx.task.props.get("aiStatus")
-            if status != "done":
+            if status != "proof_submitted":
                 return PropsUpdate(self_props={"aiStatus": "implementing", "runCount": run_count})
             return PropsUpdate(self_props={"runCount": run_count})
 
