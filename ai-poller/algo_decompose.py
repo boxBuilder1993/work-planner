@@ -403,8 +403,24 @@ class DecomposeAndDelegate(Algorithm):
     # -- Manager -----------------------------------------------------------
 
     def _manage(self, ctx: TaskContext) -> SpawnPlan | None:
+        import logging
+        logger = logging.getLogger(__name__)
+
         pending = find_pending_child_proposals(ctx)
         all_closed = all(c.status == "CLOSED" for c in ctx.children) if ctx.children else False
+
+        logger.info("Manager '%s': %d children, %d pending child proposals, all_closed=%s",
+                     ctx.task.title, len(ctx.children), len(pending), all_closed)
+        for child in ctx.children:
+            child_comments = ctx.children_comments.get(child.id, [])
+            child_proposals = [c for c in child_comments if c.comment_type == "PROPOSAL"]
+            logger.info("  Child '%s' (%s): %d comments, %d proposals",
+                        child.title, child.props.get("aiStatus", "?"),
+                        len(child_comments), len(child_proposals))
+            for p in child_proposals:
+                logger.info("    Proposal %s: status=%s, created_by=%s (child.id=%s, match=%s)",
+                           p.id[:8], p.proposal_status, p.created_by[:8], child.id[:8],
+                           p.created_by == child.id)
 
         if not pending and not all_closed:
             return None
