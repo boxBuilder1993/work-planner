@@ -303,11 +303,15 @@ class DecomposeAndDelegate(Algorithm):
         if status == "needs_planning":
             return self._plan(ctx)
         if status == "plan_proposed":
-            return self._handle_plan_proposed(ctx)
+            return None  # waiting for parent approval
+        if status == "plan_approved":
+            return self._execute_plan(ctx)
         if status == "worker_ready":
             return self._worker_propose(ctx)
         if status == "work_proposed":
-            return self._handle_work_proposed(ctx)
+            return None  # waiting for parent approval
+        if status == "work_approved":
+            return self._worker_execute(ctx)
         if status == "implementing":
             return self._worker_execute(ctx)
         if status == "in_progress":
@@ -331,26 +335,28 @@ class DecomposeAndDelegate(Algorithm):
         )
         return SpawnPlan(prompt=prompt, tools=_planning_tools(), on_complete=_bump_run_count)
 
-    def _handle_plan_proposed(self, ctx: TaskContext) -> SpawnPlan | None:
-        approved = find_approved_proposals(ctx)
-        if approved:
-            # Plan approved → execute it
-            prompt = _PLAN_EXECUTION_PROMPT.format(
-                title=ctx.task.title,
-                description_block=_description_block(ctx),
-                parent_block=_parent_block(ctx),
-                approved_plan=_approved_plan_text(ctx),
-                task_id=ctx.task.id,
-            )
-            return SpawnPlan(prompt=prompt, tools=_plan_execution_tools(), on_complete=_bump_run_count)
+    def _execute_plan(self, ctx: TaskContext) -> SpawnPlan:
+        """Plan was approved — create subtasks or mark worker_ready."""
+        prompt = _PLAN_EXECUTION_PROMPT.format(
+            title=ctx.task.title,
+            description_block=_description_block(ctx),
+            parent_block=_parent_block(ctx),
+            approved_plan=_approved_plan_text(ctx),
+            task_id=ctx.task.id,
+        )
 
-        denied = find_denied_proposals(ctx)
-        if denied:
-            # Denied → re-plan with feedback in history
-            return self._plan(ctx)
+        def on_plan_executed(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
+            run_count = ctx.task.props.get("runCount", 0) + 1
+            # If agent didn't call mark_as_planned/mark_as_worker_ready, force transition
+            status = ctx.task.props.get("aiStatus")
+            if status == "plan_approved":
+                if ctx.children:
+                    return PropsUpdate(self_props={"aiStatus": "in_progress", "runCount": run_count})
+                else:
+                    return PropsUpdate(self_props={"aiStatus": "worker_ready", "runCount": run_count})
+            return PropsUpdate(self_props={"runCount": run_count})
 
-        # Still waiting for approval
-        return None
+        return SpawnPlan(prompt=prompt, tools=_plan_execution_tools(), on_complete=on_plan_executed)
 
     # -- Worker proposal ---------------------------------------------------
 
@@ -364,19 +370,6 @@ class DecomposeAndDelegate(Algorithm):
             task_id=ctx.task.id,
         )
         return SpawnPlan(prompt=prompt, tools=_worker_propose_tools(), on_complete=_bump_run_count)
-
-    def _handle_work_proposed(self, ctx: TaskContext) -> SpawnPlan | None:
-        approved = find_approved_proposals(ctx)
-        if approved:
-            # Work approved → execute
-            return self._worker_execute(ctx)
-
-        denied = find_denied_proposals(ctx)
-        if denied:
-            # Denied → re-propose
-            return self._worker_propose(ctx)
-
-        return None
 
     # -- Worker execution --------------------------------------------------
 

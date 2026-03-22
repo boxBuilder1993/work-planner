@@ -294,8 +294,19 @@ async def submit_summary(args: dict[str, Any]) -> dict[str, Any]:
 )
 async def approve_child_proposal(args: dict[str, Any]) -> dict[str, Any]:
     try:
-        comment = _client().approve_proposal(args["proposal_id"])
-        return _result(f"Proposal approved: {comment.text[:200]}")
+        api = _client()
+        comment = api.approve_proposal(args["proposal_id"])
+        # Transition child's state based on what was approved
+        child_task = api.get_task(comment.task_id)
+        child_status = child_task.props.get("aiStatus", "")
+        if child_status == "plan_proposed":
+            api.update_task(comment.task_id, props={"aiStatus": "plan_approved"})
+        elif child_status == "work_proposed":
+            api.update_task(comment.task_id, props={"aiStatus": "work_approved"})
+        elif child_status == "awaiting_input":
+            # Question answered — resume planning
+            api.update_task(comment.task_id, props={"aiStatus": "needs_planning"})
+        return _result(f"Proposal approved and child state updated.")
     except Exception as e:
         return _result(f"Error: {e}")
 
@@ -320,8 +331,19 @@ async def approve_child_proposal(args: dict[str, Any]) -> dict[str, Any]:
 )
 async def deny_child_proposal(args: dict[str, Any]) -> dict[str, Any]:
     try:
-        comment = _client().deny_proposal(args["proposal_id"], feedback=args["feedback"])
-        return _result(f"Proposal denied with feedback.")
+        api = _client()
+        comment = api.deny_proposal(args["proposal_id"], feedback=args["feedback"])
+        # Transition child back so it re-plans or re-proposes
+        child_task = api.get_task(comment.task_id)
+        child_status = child_task.props.get("aiStatus", "")
+        if child_status == "plan_proposed":
+            api.update_task(comment.task_id, props={"aiStatus": "needs_planning"})
+        elif child_status == "work_proposed":
+            api.update_task(comment.task_id, props={"aiStatus": "worker_ready"})
+        elif child_status == "awaiting_input":
+            # Question answered with feedback — resume planning
+            api.update_task(comment.task_id, props={"aiStatus": "needs_planning"})
+        return _result(f"Proposal denied with feedback. Child state reset.")
     except Exception as e:
         return _result(f"Error: {e}")
 
