@@ -114,14 +114,17 @@ class PollCycleProcessor:
                 task.props["algorithm"] = algo_name
                 task.props["aiStatus"] = "needs_planning"
 
-            # Auto-inherit algorithm from parent for children missing it
-            if parent and not task.props.get("algorithm"):
+            # Auto-inherit algorithm from parent when child has the default
+            # but parent uses a different algorithm
+            if parent:
                 parent_algo = parent.props.get("algorithm", "simple_answer")
-                logger.info("Task '%s': inheriting algorithm '%s' from parent", task.title, parent_algo)
-                self._api.update_task(task.id, props={"algorithm": parent_algo})
-                task.props["algorithm"] = parent_algo
-                algo_name = parent_algo
-                algorithm = self._registry.get(algo_name)
+                child_algo = task.props.get("algorithm", "simple_answer")
+                if child_algo == "simple_answer" and parent_algo != "simple_answer":
+                    logger.info("Task '%s': inheriting algorithm '%s' from parent", task.title, parent_algo)
+                    self._api.update_task(task.id, props={"algorithm": parent_algo})
+                    task.props["algorithm"] = parent_algo
+                    algo_name = parent_algo
+                    algorithm = self._registry.get(algo_name)
 
             # Auto-fix: if task has children but is stuck in needs_planning, move to in_progress
             if children and task.props.get("aiStatus") in ("needs_planning", "planning_complete"):
