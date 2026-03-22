@@ -1,8 +1,7 @@
 """Algorithm-specific MCP tools for state transitions.
 
-Each algorithm gets its own MCP server with tools that let the agent
-explicitly drive the state machine. This replaces implicit on_complete
-inspection with explicit agent decisions.
+All proposals live on the task's own comment thread. Parents watch
+their children's tasks for proposals to review.
 """
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ _task_id: str = ""
 
 
 def set_algo_context(api: ApiClient, task_id: str) -> None:
-    """Set the API client and task ID for algorithm tools."""
     global _api, _task_id
     _api = api
     _task_id = task_id
@@ -40,91 +38,43 @@ def _result(text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# DecomposeAndDelegate tools
+# Planning phase tools
 # ---------------------------------------------------------------------------
 
 @tool(
-    "mark_as_planned",
-    "Call this AFTER you have created subtasks. Signals that decomposition is complete "
-    "and moves the task to management mode. Each child task will be picked up by its own agent.",
+    "propose_plan",
+    "Propose your plan for this task. This posts a PROPOSAL on your own task "
+    "for your parent (or the user) to review. Do NOT create subtasks yet — wait for approval.",
     {
         "type": "object",
         "properties": {
-            "reason": {
+            "plan": {
                 "type": "string",
-                "description": "Explain why you decomposed and how the subtasks are organized",
+                "description": "Your proposed plan: what subtasks you want to create, or why this is worker-ready. Be specific about deliverables.",
             },
         },
-        "required": ["reason"],
+        "required": ["plan"],
     },
 )
-async def mark_as_planned(args: dict[str, Any]) -> dict[str, Any]:
-    try:
-        api = _client()
-        task_id = _task_id
-
-        # Post reason as comment
-        api.create_comment(
-            task_id=task_id,
-            text=f"[PLANNING COMPLETE] {args['reason']}",
-            created_by=task_id,
-        )
-
-        # Set own status to in_progress
-        api.update_task(task_id, props={"aiStatus": "in_progress"})
-
-        # Initialize children with D&D algorithm
-        children = api.list_children(task_id)
-        initialized = 0
-        for child in children:
-            if not child.props.get("algorithm"):
-                api.update_task(child.id, props={
-                    "algorithm": "decompose_and_delegate",
-                    "aiStatus": "needs_planning",
-                })
-                initialized += 1
-
-        return _result(
-            f"Task moved to in_progress. {initialized} child task(s) initialized for planning."
-        )
-    except Exception as e:
-        return _result(f"Error: {e}")
-
-
-@tool(
-    "mark_as_worker_ready",
-    "Call this when you determine the task is simple enough to implement directly "
-    "without subtasks — a single focused change (one function, one bug fix, one test file). "
-    "The next agent run will be in implementation mode with full code tools.",
-    {
-        "type": "object",
-        "properties": {
-            "reason": {
-                "type": "string",
-                "description": "Explain why this task is small enough for one agent to implement directly",
-            },
-        },
-        "required": ["reason"],
-    },
-)
-async def mark_as_worker_ready(args: dict[str, Any]) -> dict[str, Any]:
+async def propose_plan(args: dict[str, Any]) -> dict[str, Any]:
     try:
         api = _client()
         api.create_comment(
             task_id=_task_id,
-            text=f"[WORKER READY] {args['reason']}",
+            text=f"[PLAN PROPOSAL] {args['plan']}",
+            comment_type="PROPOSAL",
             created_by=_task_id,
         )
-        api.update_task(_task_id, props={"aiStatus": "worker_ready"})
-        return _result("Task marked as worker_ready. Next run will be in implementation mode.")
+        api.update_task(_task_id, props={"aiStatus": "plan_proposed"})
+        return _result("Plan proposed. Waiting for approval from parent/user.")
     except Exception as e:
         return _result(f"Error: {e}")
 
 
 @tool(
     "request_clarification",
-    "Ask the user or parent manager a question before proceeding. "
-    "The task will pause until they reply.",
+    "Ask your parent (or the user) a question. Posts a PROPOSAL on your own task "
+    "and pauses until it's answered. Your parent will see it and respond.",
     {
         "type": "object",
         "properties": {
@@ -141,53 +91,157 @@ async def request_clarification(args: dict[str, Any]) -> dict[str, Any]:
         api = _client()
         api.create_comment(
             task_id=_task_id,
-            text=args["question"],
+            text=f"[QUESTION] {args['question']}",
+            comment_type="PROPOSAL",
             created_by=_task_id,
         )
         api.update_task(_task_id, props={"aiStatus": "awaiting_input"})
-        return _result("Question posted. Task paused until a reply is received.")
+        return _result("Question posted. Task paused until parent responds.")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Plan execution tools (available after plan approval)
+# ---------------------------------------------------------------------------
+
+@tool(
+    "mark_as_planned",
+    "Call this AFTER you have created all subtasks. Moves to management mode.",
+    {
+        "type": "object",
+        "properties": {
+            "summary": {
+                "type": "string",
+                "description": "Brief summary of subtasks created",
+            },
+        },
+        "required": ["summary"],
+    },
+)
+async def mark_as_planned(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        api = _client()
+        task_id = _task_id
+
+        api.create_comment(
+            task_id=task_id,
+            text=f"[PLANNING COMPLETE] {args['summary']}",
+            created_by=task_id,
+        )
+        api.update_task(task_id, props={"aiStatus": "in_progress"})
+
+        # Initialize children with D&D algorithm
+        children = api.list_children(task_id)
+        for child in children:
+            if not child.props.get("algorithm"):
+                api.update_task(child.id, props={
+                    "algorithm": "decompose_and_delegate",
+                    "aiStatus": "needs_planning",
+                })
+
+        return _result(f"Task in management mode. {len(children)} child task(s) initialized.")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
+@tool(
+    "mark_as_worker_ready",
+    "Call this when the approved plan says this task should be implemented directly. "
+    "Only for truly small tasks — one function, one bug fix, one test file.",
+    {
+        "type": "object",
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": "Why this task is small enough for direct implementation",
+            },
+        },
+        "required": ["reason"],
+    },
+)
+async def mark_as_worker_ready(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        api = _client()
+        api.create_comment(
+            task_id=_task_id,
+            text=f"[WORKER READY] {args['reason']}",
+            created_by=_task_id,
+        )
+        api.update_task(_task_id, props={"aiStatus": "worker_ready"})
+        return _result("Task marked as worker_ready.")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Worker tools
+# ---------------------------------------------------------------------------
+
+@tool(
+    "propose_work",
+    "Propose the specific actions you want to take — PRs to open, commands to run, "
+    "files to change. Posts a PROPOSAL on your own task for approval before executing.",
+    {
+        "type": "object",
+        "properties": {
+            "plan": {
+                "type": "string",
+                "description": "Specific actions: PRs to open, commands to run, files to create/modify. Be concrete.",
+            },
+        },
+        "required": ["plan"],
+    },
+)
+async def propose_work(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        api = _client()
+        api.create_comment(
+            task_id=_task_id,
+            text=f"[WORK PROPOSAL] {args['plan']}",
+            comment_type="PROPOSAL",
+            created_by=_task_id,
+        )
+        api.update_task(_task_id, props={"aiStatus": "work_proposed"})
+        return _result("Work proposal posted. Waiting for approval before executing.")
     except Exception as e:
         return _result(f"Error: {e}")
 
 
 @tool(
     "submit_proof",
-    "Submit proof of completion to your parent task. Include concrete evidence: "
-    "command outputs, test results, PR links, file changes.",
+    "Submit proof of completion. Posts a PROPOSAL on your own task with evidence. "
+    "Your parent will review it.",
     {
         "type": "object",
         "properties": {
-            "parent_task_id": {
-                "type": "string",
-                "description": "ID of the parent task to submit proof to",
-            },
             "proof": {
                 "type": "string",
-                "description": "Proof of completion with concrete evidence",
+                "description": "Proof of completion: PR links, command outputs, test results, file changes",
             },
         },
-        "required": ["parent_task_id", "proof"],
+        "required": ["proof"],
     },
 )
 async def submit_proof(args: dict[str, Any]) -> dict[str, Any]:
     try:
         api = _client()
         api.create_comment(
-            task_id=args["parent_task_id"],
+            task_id=_task_id,
             text=f"[PROOF OF COMPLETION] {args['proof']}",
             comment_type="PROPOSAL",
             created_by=_task_id,
         )
         api.update_task(_task_id, props={"aiStatus": "done"})
-        return _result("Proof submitted to parent. Task marked as done.")
+        return _result("Proof submitted. Waiting for parent review.")
     except Exception as e:
         return _result(f"Error: {e}")
 
 
 @tool(
     "submit_summary",
-    "Submit a summary of completed work for a top-level task (no parent). "
-    "The user will review and close the task.",
+    "Submit a completion summary for a top-level task (user reviews). "
+    "Posts a PROPOSAL on your own task.",
     {
         "type": "object",
         "properties": {
@@ -205,17 +259,70 @@ async def submit_summary(args: dict[str, Any]) -> dict[str, Any]:
         api.create_comment(
             task_id=_task_id,
             text=f"[COMPLETION SUMMARY] {args['summary']}",
+            comment_type="PROPOSAL",
             created_by=_task_id,
         )
         api.update_task(_task_id, props={"aiStatus": "done"})
-        return _result("Summary posted. Task marked as done. User will review and close.")
+        return _result("Summary posted. User will review and close.")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Manager tools — operate on children's tasks
+# ---------------------------------------------------------------------------
+
+@tool(
+    "approve_child_proposal",
+    "Approve a pending proposal on a child task.",
+    {
+        "type": "object",
+        "properties": {
+            "proposal_id": {
+                "type": "string",
+                "description": "ID of the PROPOSAL comment to approve",
+            },
+        },
+        "required": ["proposal_id"],
+    },
+)
+async def approve_child_proposal(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comment = _client().approve_proposal(args["proposal_id"])
+        return _result(f"Proposal approved: {comment.text[:200]}")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
+@tool(
+    "deny_child_proposal",
+    "Deny a pending proposal on a child task with feedback.",
+    {
+        "type": "object",
+        "properties": {
+            "proposal_id": {
+                "type": "string",
+                "description": "ID of the PROPOSAL comment to deny",
+            },
+            "feedback": {
+                "type": "string",
+                "description": "Feedback explaining why denied or what to change",
+            },
+        },
+        "required": ["proposal_id", "feedback"],
+    },
+)
+async def deny_child_proposal(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        comment = _client().deny_proposal(args["proposal_id"], feedback=args["feedback"])
+        return _result(f"Proposal denied with feedback.")
     except Exception as e:
         return _result(f"Error: {e}")
 
 
 @tool(
     "close_subtask",
-    "Close a subtask after reviewing and approving its proof of completion.",
+    "Close a child task after verifying its proof of completion.",
     {
         "type": "object",
         "properties": {
@@ -236,14 +343,12 @@ async def close_subtask(args: dict[str, Any]) -> dict[str, Any]:
         api = _client()
         subtask_id = args["subtask_id"]
         feedback = args.get("feedback")
-
         if feedback:
             api.create_comment(
                 task_id=subtask_id,
                 text=f"[REVIEW] {feedback}",
                 created_by=_task_id,
             )
-
         api.update_task(subtask_id, status="CLOSED")
         return _result(f"Subtask {subtask_id} closed.")
     except Exception as e:
@@ -252,7 +357,7 @@ async def close_subtask(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "request_rework",
-    "Reject a subtask's proof and send it back for rework with feedback.",
+    "Send a child task back for rework by denying its proof and resetting it.",
     {
         "type": "object",
         "properties": {
@@ -260,34 +365,24 @@ async def close_subtask(args: dict[str, Any]) -> dict[str, Any]:
                 "type": "string",
                 "description": "ID of the subtask to send back",
             },
+            "proposal_id": {
+                "type": "string",
+                "description": "ID of the proof PROPOSAL to deny",
+            },
             "feedback": {
                 "type": "string",
                 "description": "What needs to be fixed or improved",
             },
         },
-        "required": ["subtask_id", "feedback"],
+        "required": ["subtask_id", "proposal_id", "feedback"],
     },
 )
 async def request_rework(args: dict[str, Any]) -> dict[str, Any]:
     try:
         api = _client()
-        subtask_id = args["subtask_id"]
-
-        # Deny the proposal
-        comments = api.list_comments(_task_id, comment_type="PROPOSAL")
-        for c in comments:
-            if c.created_by == subtask_id and c.proposal_status == "PENDING":
-                api.deny_proposal(c.id, feedback=args["feedback"])
-                break
-
-        # Reset subtask to worker_ready so it re-runs
-        api.update_task(subtask_id, props={"aiStatus": "worker_ready"})
-        api.create_comment(
-            task_id=subtask_id,
-            text=f"[REWORK REQUESTED] {args['feedback']}",
-            created_by=_task_id,
-        )
-        return _result(f"Subtask {subtask_id} sent back for rework.")
+        api.deny_proposal(args["proposal_id"], feedback=args["feedback"])
+        api.update_task(args["subtask_id"], props={"aiStatus": "worker_ready"})
+        return _result(f"Subtask sent back for rework.")
     except Exception as e:
         return _result(f"Error: {e}")
 
@@ -298,13 +393,13 @@ async def request_rework(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "submit_answer",
-    "Submit your answer to the task. This will be posted as a comment and the task will be marked done.",
+    "Submit your answer to the task. Posted as a comment, task marked done.",
     {
         "type": "object",
         "properties": {
             "answer": {
                 "type": "string",
-                "description": "Your answer or response to the task",
+                "description": "Your answer or response",
             },
         },
         "required": ["answer"],
@@ -319,7 +414,7 @@ async def submit_answer(args: dict[str, Any]) -> dict[str, Any]:
             created_by=_task_id,
         )
         api.update_task(_task_id, props={"aiStatus": "done"})
-        return _result("Answer posted. Task marked as done.")
+        return _result("Answer posted. Task done.")
     except Exception as e:
         return _result(f"Error: {e}")
 
@@ -328,38 +423,50 @@ async def submit_answer(args: dict[str, Any]) -> dict[str, Any]:
 # MCP server factories
 # ---------------------------------------------------------------------------
 
-def create_dd_planner_mcp() -> Any:
-    """MCP server for D&D planning mode."""
+def create_planning_mcp() -> Any:
+    """Tools for planning phase: propose, ask questions. No create_task."""
     return create_sdk_mcp_server(
         name="algo",
         version="1.0.0",
-        tools=[
-            mark_as_planned,
-            mark_as_worker_ready,
-            request_clarification,
-        ],
+        tools=[propose_plan, request_clarification],
     )
 
 
-def create_dd_worker_mcp() -> Any:
-    """MCP server for D&D worker mode."""
+def create_plan_execution_mcp() -> Any:
+    """Tools for executing an approved plan: create subtasks or mark worker-ready."""
     return create_sdk_mcp_server(
         name="algo",
         version="1.0.0",
-        tools=[
-            submit_proof,
-            submit_summary,
-            request_clarification,
-        ],
+        tools=[mark_as_planned, mark_as_worker_ready],
     )
 
 
-def create_dd_manager_mcp() -> Any:
-    """MCP server for D&D manager mode."""
+def create_worker_propose_mcp() -> Any:
+    """Tools for worker to propose its work before executing."""
+    return create_sdk_mcp_server(
+        name="algo",
+        version="1.0.0",
+        tools=[propose_work, request_clarification],
+    )
+
+
+def create_worker_execute_mcp() -> Any:
+    """Tools for worker to execute approved work and submit proof."""
+    return create_sdk_mcp_server(
+        name="algo",
+        version="1.0.0",
+        tools=[submit_proof, submit_summary, request_clarification],
+    )
+
+
+def create_manager_mcp() -> Any:
+    """Tools for manager: review children, close/rework, escalate, complete."""
     return create_sdk_mcp_server(
         name="algo",
         version="1.0.0",
         tools=[
+            approve_child_proposal,
+            deny_child_proposal,
             close_subtask,
             request_rework,
             submit_proof,
@@ -370,12 +477,9 @@ def create_dd_manager_mcp() -> Any:
 
 
 def create_simple_answer_mcp() -> Any:
-    """MCP server for SimpleAnswer algorithm."""
+    """Tools for SimpleAnswer algorithm."""
     return create_sdk_mcp_server(
         name="algo",
         version="1.0.0",
-        tools=[
-            submit_answer,
-            request_clarification,
-        ],
+        tools=[submit_answer, request_clarification],
     )

@@ -25,6 +25,8 @@ class TaskContext:
     comments: list[CommentEntity]
     children: list[TaskEntity]
     parent: TaskEntity | None
+    # Comments on each child task, keyed by child task ID
+    children_comments: dict[str, list[CommentEntity]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +103,7 @@ def format_comment_history(comments: list[CommentEntity]) -> str:
 
 
 def find_pending_proposals(ctx: TaskContext) -> list[CommentEntity]:
-    """Find PENDING proposals created by this task's agent."""
+    """Find PENDING proposals on this task created by its own agent."""
     return [
         c for c in ctx.comments
         if c.comment_type == "PROPOSAL"
@@ -111,7 +113,7 @@ def find_pending_proposals(ctx: TaskContext) -> list[CommentEntity]:
 
 
 def find_approved_proposals(ctx: TaskContext) -> list[CommentEntity]:
-    """Find APPROVED proposals created by this task's agent."""
+    """Find APPROVED proposals on this task created by its own agent."""
     return [
         c for c in ctx.comments
         if c.comment_type == "PROPOSAL"
@@ -120,15 +122,43 @@ def find_approved_proposals(ctx: TaskContext) -> list[CommentEntity]:
     ]
 
 
-def find_pending_child_proposals(ctx: TaskContext) -> list[CommentEntity]:
-    """Find PENDING proposals on this task created by child task agents."""
-    child_ids = {c.id for c in ctx.children}
+def find_denied_proposals(ctx: TaskContext) -> list[CommentEntity]:
+    """Find DENIED proposals on this task created by its own agent."""
     return [
         c for c in ctx.comments
         if c.comment_type == "PROPOSAL"
-        and c.proposal_status == "PENDING"
-        and c.created_by in child_ids
+        and c.proposal_status == "DENIED"
+        and c.created_by == ctx.task.id
     ]
+
+
+def find_pending_child_proposals(ctx: TaskContext) -> list[tuple[TaskEntity, CommentEntity]]:
+    """Find PENDING proposals on children's tasks (posted by children's own agents).
+
+    Returns list of (child_task, proposal_comment) tuples.
+    """
+    results = []
+    for child in ctx.children:
+        child_comments = ctx.children_comments.get(child.id, [])
+        for c in child_comments:
+            if (c.comment_type == "PROPOSAL"
+                    and c.proposal_status == "PENDING"
+                    and c.created_by == child.id):
+                results.append((child, c))
+    return results
+
+
+def has_proposal_resolved(ctx: TaskContext) -> bool:
+    """Check if the task's most recent PENDING proposal has been resolved."""
+    proposals = [
+        c for c in ctx.comments
+        if c.comment_type == "PROPOSAL"
+        and c.created_by == ctx.task.id
+    ]
+    if not proposals:
+        return False
+    latest = max(proposals, key=lambda c: c.created_at)
+    return latest.proposal_status in ("APPROVED", "DENIED")
 
 
 def has_new_user_reply(ctx: TaskContext) -> bool:

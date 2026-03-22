@@ -87,11 +87,20 @@ class PollCycleProcessor:
             children = [t for t in tasks if t.parent_id == task.id]
             parent = tasks_by_id.get(task.parent_id) if task.parent_id else None
 
+            # Fetch children's comments for manager to review proposals
+            children_comments: dict[str, list] = {}
+            for child in children:
+                if child.id in all_comments_map:
+                    children_comments[child.id] = all_comments_map[child.id]
+                else:
+                    children_comments[child.id] = self._api.list_comments(child.id)
+
             ctx = TaskContext(
                 task=task,
                 comments=comments,
                 children=children,
                 parent=parent,
+                children_comments=children_comments,
             )
 
             # Look up algorithm

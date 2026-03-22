@@ -161,11 +161,16 @@ class AgentSpawner:
                 all_tasks = self._api.get_all_tasks()
                 fresh_children = [t for t in all_tasks if t.parent_id == task_id]
                 fresh_task = self._api.get_task(task_id)
+                children_comments = {
+                    child.id: self._api.list_comments(child.id)
+                    for child in fresh_children
+                }
                 ctx = TaskContext(
                     task=fresh_task,
                     comments=fresh_comments,
                     children=fresh_children,
                     parent=next((t for t in all_tasks if t.id == task.parent_id), None) if task.parent_id else None,
+                    children_comments=children_comments,
                 )
                 props_update = plan.on_complete(ctx, result_text)
                 if props_update:

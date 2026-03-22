@@ -10,6 +10,7 @@ from algorithm import (
     PropsUpdate,
     format_comment_history,
     has_new_user_reply,
+    has_proposal_resolved,
 )
 
 _PROMPT = """\
@@ -41,9 +42,9 @@ class SimpleAnswer(Algorithm):
             return None
 
         if status == "awaiting_input":
-            if not has_new_user_reply(ctx):
+            if not has_proposal_resolved(ctx) and not has_new_user_reply(ctx):
                 return None
-            # User replied — re-run
+            # Unblocked — re-run
 
         history = format_comment_history(ctx.comments)
         description_block = f"Description: {ctx.task.description}" if ctx.task.description else ""
