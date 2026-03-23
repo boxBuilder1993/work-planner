@@ -97,8 +97,97 @@
 
 .commentText {
   font-size: var(--font-size-md);
-  white-space: pre-wrap;
   word-break: break-word;
+  line-height: 1.6;
+}
+
+/* Markdown prose styles */
+.commentText p {
+  margin: 0 0 0.5em 0;
+}
+.commentText p:last-child {
+  margin-bottom: 0;
+}
+
+.commentText h1,
+.commentText h2,
+.commentText h3,
+.commentText h4,
+.commentText h5,
+.commentText h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0.75em 0 0.35em 0;
+}
+.commentText h1 { font-size: 1.3em; }
+.commentText h2 { font-size: 1.15em; }
+.commentText h3 { font-size: 1.05em; }
+
+.commentText ul,
+.commentText ol {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+}
+.commentText li {
+  margin: 0.15em 0;
+}
+
+.commentText code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875em;
+  background: var(--surface, #f5f5f5);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+.commentText pre {
+  background: var(--surface, #f5f5f5);
+  border-radius: var(--radius-md);
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.commentText pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+
+.commentText blockquote {
+  margin: 0.5em 0;
+  padding: 0.25em 0.75em;
+  border-left: 3px solid var(--divider, #ddd);
+  color: var(--on-surface-secondary);
+}
+
+.commentText a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.commentText a:hover {
+  opacity: 0.8;
+}
+
+.commentText hr {
+  border: none;
+  border-top: 1px solid var(--divider, #ddd);
+  margin: 0.75em 0;
+}
+
+.commentText table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+  margin: 0.5em 0;
+}
+.commentText th,
+.commentText td {
+  border: 1px solid var(--divider, #ddd);
+  padding: 4px 10px;
+  text-align: left;
+}
+.commentText th {
+  background: var(--surface, #f5f5f5);
+  font-weight: 600;
 }
 
 .commentMeta {
