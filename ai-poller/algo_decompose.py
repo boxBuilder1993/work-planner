@@ -44,7 +44,7 @@ You are the owner of task: "{title}"
 
 User comments:
 {user_comments}
-
+{denied_proposal_block}
 You are in PLANNING mode. Think like a tech lead organizing work for your team.
 Assess the scope fresh from the task description — do not rely on any prior agent work.
 
@@ -309,22 +309,31 @@ class DecomposeAndDelegate(Algorithm):
 
         status = ctx.task.props.get("aiStatus", "needs_planning")
 
-        if status in ("needs_planning", "planning_complete"):
-            # Check if a proposal was already posted (agent may have used
-            # add_comment instead of propose_plan, skipping the status update)
+        if status in ("needs_planning", "planning_complete", "plan_proposed", "plan_approved"):
             pending = find_pending_proposals(ctx)
             if pending:
                 return None  # waiting for approval
+
             approved = find_approved_proposals(ctx)
             if approved:
                 return self._execute_plan(ctx)
-            return self._plan(ctx)
-        if status in ("plan_proposed", "plan_approved"):
-            # Check if proposal was approved (by manager tool or user via UI)
-            if find_approved_proposals(ctx):
-                return self._execute_plan(ctx)
-            if status == "plan_proposed" and find_denied_proposals(ctx):
-                return self._plan(ctx)  # re-plan with feedback
+
+            denied = find_denied_proposals(ctx)
+            if denied:
+                # Only re-plan if the most recent proposal was denied
+                # AND there's no newer proposal after it (avoid duplicate re-plans)
+                all_proposals = [c for c in ctx.comments if c.comment_type == "PROPOSAL"]
+                if all_proposals:
+                    latest = max(all_proposals, key=lambda c: c.created_at)
+                    if latest.proposal_status == "DENIED":
+                        return self._plan(ctx)  # re-plan with feedback
+                return None  # already re-planned, waiting
+
+            # No proposals at all yet — plan for the first time
+            if not any(c.comment_type == "PROPOSAL" for c in ctx.comments):
+                return self._plan(ctx)
+
+            return None  # has proposals but none pending/approved/denied — wait
             if status == "plan_proposed":
                 return None  # still waiting
             return self._execute_plan(ctx)
@@ -352,11 +361,25 @@ class DecomposeAndDelegate(Algorithm):
     def _plan(self, ctx: TaskContext) -> SpawnPlan:
         user_only = [c for c in ctx.comments if c.created_by == "user"]
         user_comments = format_comment_history(user_only) if user_only else "(none)"
+
+        denied = find_denied_proposals(ctx)
+        if denied:
+            latest_denied = max(denied, key=lambda c: c.created_at)
+            denied_proposal_block = (
+                "\nPrevious proposal was DENIED:\n"
+                f"  Proposal: {latest_denied.text}\n"
+                f"  Feedback: {latest_denied.proposal_feedback or '(no feedback provided)'}\n"
+                "Address this feedback in your new proposal.\n"
+            )
+        else:
+            denied_proposal_block = ""
+
         prompt = _PLANNER_PROMPT.format(
             title=ctx.task.title,
             description_block=_description_block(ctx),
             parent_block=_parent_block(ctx),
             user_comments=user_comments,
+            denied_proposal_block=denied_proposal_block,
             task_id=ctx.task.id,
         )
         return SpawnPlan(prompt=prompt, tools=_planning_tools(), on_complete=_bump_run_count,
