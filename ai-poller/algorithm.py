@@ -99,7 +99,10 @@ def format_comment_history(comments: list[CommentEntity]) -> str:
         if c.comment_type == "PROPOSAL":
             status = c.proposal_status or "UNKNOWN"
             prefix = f"[PROPOSAL:{status}] "
-        lines.append(f"[{author}] {prefix}{c.text}")
+        line = f"[{author}] {prefix}{c.text}"
+        if c.comment_type == "PROPOSAL" and c.proposal_status == "DENIED" and c.proposal_feedback:
+            line += f"\n  Feedback: {c.proposal_feedback}"
+        lines.append(line)
     return "\n---\n".join(lines)
 
 
