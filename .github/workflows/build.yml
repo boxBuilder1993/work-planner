@@ -60,6 +60,15 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 90
 
+      - name: Job summary
+        run: |
+          echo "## 📱 WorkPlanner v${{ steps.version.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Download**: [Latest Release](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.name }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Version code: \`${{ steps.version.outputs.code }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
       - name: Create GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
