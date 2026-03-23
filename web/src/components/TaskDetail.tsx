@@ -301,7 +301,7 @@ export default function TaskDetail() {
             {existingTask.aiEnabled && (
               <>
                 <span className={`${styles.chip} ${styles.statusChipPending}`}>
-                  AI: {(existingTask.props?.algorithm as string) === 'decompose_and_delegate' ? 'D&D' : 'Simple'}
+                  AI: {(existingTask.props?.algorithm as string)?.includes('decompose_and_delegate') ? 'D&D' : 'Simple'}
                 </span>
                 {existingTask.props?.aiStatus && (
                   <span className={styles.chip}>

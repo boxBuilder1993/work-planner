@@ -58,6 +58,11 @@ class Algorithm(ABC):
     """Base class for task execution algorithms."""
     name: str
 
+    def initialize(self, ctx: TaskContext) -> PropsUpdate | None:
+        """Called by processor before evaluate(). Algorithm-specific setup.
+        Return PropsUpdate to set initial props, or None."""
+        return None
+
     @abstractmethod
     def evaluate(self, ctx: TaskContext, is_running: bool) -> SpawnPlan | None:
         """Evaluate a task and return a spawn plan, or None if no action needed."""
@@ -163,6 +168,18 @@ def find_pending_child_proposals(ctx: TaskContext) -> list[tuple[TaskEntity, Com
                     and c.proposal_status == "PENDING"):
                 results.append((child, c))
     return results
+
+
+def latest_proposal_denied(ctx: TaskContext) -> bool:
+    """Check if the most recent proposal on this task was DENIED."""
+    all_proposals = [
+        c for c in ctx.comments
+        if c.comment_type == "PROPOSAL" and _is_own_proposal(c, ctx)
+    ]
+    if not all_proposals:
+        return False
+    latest = max(all_proposals, key=lambda c: c.created_at)
+    return latest.proposal_status == "DENIED"
 
 
 def has_proposal_resolved(ctx: TaskContext) -> bool:

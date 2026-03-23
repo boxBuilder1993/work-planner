@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from algo_decompose import DecomposeAndDelegate
+from algo_decompose_v2 import DecomposeAndDelegateV2
 from algo_simple_answer import SimpleAnswer
 from algorithm import AlgorithmRegistry, TaskContext
 from api_client import ApiClient
@@ -28,6 +29,7 @@ def build_registry() -> AlgorithmRegistry:
     registry = AlgorithmRegistry()
     registry.register(SimpleAnswer())
     registry.register(DecomposeAndDelegate())
+    registry.register(DecomposeAndDelegateV2())
     registry.set_default("simple_answer")
     return registry
 
@@ -107,31 +109,16 @@ class PollCycleProcessor:
             algo_name = task.props.get("algorithm", "simple_answer")
             algorithm = self._registry.get(algo_name)
 
-            # Initialize props for new ai-enabled tasks
-            if not task.props.get("aiStatus"):
-                logger.info("Initializing props for task '%s' with algorithm '%s'", task.title, algo_name)
-                self._api.update_task(task.id, props={"algorithm": algo_name, "aiStatus": "needs_planning"})
-                task.props["algorithm"] = algo_name
-                task.props["aiStatus"] = "needs_planning"
-
-            # Auto-inherit algorithm from parent when child has the default
-            # but parent uses a different algorithm
-            if parent:
-                parent_algo = parent.props.get("algorithm", "simple_answer")
-                child_algo = task.props.get("algorithm", "simple_answer")
-                if child_algo == "simple_answer" and parent_algo != "simple_answer":
-                    logger.info("Task '%s': inheriting algorithm '%s' from parent", task.title, parent_algo)
-                    self._api.update_task(task.id, props={"algorithm": parent_algo})
-                    task.props["algorithm"] = parent_algo
-                    algo_name = parent_algo
+            # Let the algorithm handle its own initialization
+            init_update = algorithm.initialize(ctx)
+            if init_update and init_update.self_props:
+                logger.info("Task '%s': initialize → %s", task.title, init_update.self_props)
+                self._api.update_task(task.id, props=init_update.self_props)
+                task.props.update(init_update.self_props)
+                # Re-resolve algorithm if it changed
+                if "algorithm" in init_update.self_props:
+                    algo_name = init_update.self_props["algorithm"]
                     algorithm = self._registry.get(algo_name)
-
-            # Auto-fix: if task has children but is stuck in needs_planning, move to in_progress
-            if children and task.props.get("aiStatus") in ("needs_planning", "planning_complete"):
-                logger.info("Task '%s': has %d children but stuck in %s, moving to in_progress",
-                            task.title, len(children), task.props.get("aiStatus"))
-                self._api.update_task(task.id, props={"aiStatus": "in_progress"})
-                task.props["aiStatus"] = "in_progress"
 
             is_running = self._spawner.is_running(task.id)
             plan = algorithm.evaluate(ctx, is_running)

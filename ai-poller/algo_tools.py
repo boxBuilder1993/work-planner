@@ -117,10 +117,11 @@ async def request_clarification(args: dict[str, Any]) -> dict[str, Any]:
             comment_type="PROPOSAL",
             created_by=task_id,
         )
-        # Managers stay in_progress — they can keep reviewing children
-        if _ai_status() == "in_progress":
+        # Managers stay in managing/in_progress — they can keep reviewing children
+        current = _ai_status()
+        if current in ("in_progress", "managing"):
             return _result("Question posted to parent. Continuing management duties.")
-        api.update_task(task_id, props={"aiStatus": "awaiting_input"})
+        api.update_task(task_id, props={"aiStatus": "awaiting_input", "resumeState": current})
         return _result("Question posted. Task paused until parent responds.")
     except Exception as e:
         return _result(f"Error: {e}")
