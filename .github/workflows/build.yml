@@ -1,4 +1,4 @@
-name: Build
+name: Build & Release
 
 on:
   pull_request:
@@ -17,6 +17,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for git rev-list version counting
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -24,20 +26,48 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up debug keystore
+      - name: Decode release keystore
         run: |
-          mkdir -p ~/.android
-          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > ~/.android/debug.keystore
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/workplanner-release.jks
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --parallel
+      - name: Build release APK
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ github.workspace }}/workplanner-release.jks
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --parallel
 
-      - name: Upload debug APK
+      - name: Get version info
+        id: version
+        run: |
+          VERSION_CODE=$(git rev-list --count HEAD)
+          VERSION_NAME="1.0.${VERSION_CODE}"
+          echo "code=${VERSION_CODE}" >> $GITHUB_OUTPUT
+          echo "name=${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION_NAME} (${VERSION_CODE})"
+
+      - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+          name: workplanner-v${{ steps.version.outputs.name }}
+          path: app/build/outputs/apk/release/app-release.apk
+          retention-days: 90
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.name }}
+          name: WorkPlanner v${{ steps.version.outputs.name }}
+          body: |
+            Auto-built from commit ${{ github.sha }}
+
+            **Version**: ${{ steps.version.outputs.name }} (code: ${{ steps.version.outputs.code }})
+
+            Download the APK below and install on your Android device.
+          files: app/build/outputs/apk/release/app-release.apk
+          make_latest: true

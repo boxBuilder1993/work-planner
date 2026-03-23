@@ -13,18 +13,52 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// Auto-version from git commit count
+val gitVersionCode: Int by lazy {
+    try {
+        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+            .directory(rootProject.projectDir)
+            .start()
+        process.inputStream.bufferedReader().readText().trim().toInt()
+    } catch (_: Exception) {
+        1
+    }
+}
+
+val gitVersionName: String by lazy {
+    try {
+        val count = gitVersionCode
+        "1.0.${count}"
+    } catch (_: Exception) {
+        "1.0.0"
+    }
+}
+
 android {
     namespace = "com.boxbuilder.workplanner"
     compileSdk {
         version = release(36)
     }
 
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("RELEASE_KEYSTORE_PATH")
+                ?: rootProject.file("workplanner-release.jks").takeIf { it.exists() }?.absolutePath
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: "workplanner2026"
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "workplanner"
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: "workplanner2026"
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.boxbuilder.workplanner"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = gitVersionCode
+        versionName = gitVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -37,6 +71,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

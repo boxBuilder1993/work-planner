@@ -27,3 +27,4 @@ ai-poller/token.json
 # Build artifacts
 backend/server
 web/.vite/
+workplanner-release.jks
