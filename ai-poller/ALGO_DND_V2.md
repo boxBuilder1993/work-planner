@@ -89,15 +89,39 @@ create new ones, or leave working ones alone.
 
 ---
 
+## PR-based proof of completion
+
+Workers MUST open a pull request and include the PR link in their proof. They do NOT
+push directly to main. This gives managers something concrete to review.
+
+### Worker flow
+1. Create a feature branch
+2. Implement changes, commit
+3. Open a PR against main (or parent branch)
+4. Call `submit_proof` with the PR link, summary of changes, test results
+
+### Manager review flow
+1. Manager sees child's proof proposal with PR link
+2. Manager reads the PR diff via GitHub tools
+3. Manager checks CI status if available
+4. If satisfied: `approve_child_proposal` + `close_subtask` (this also merges the PR)
+5. If not satisfied: `deny_child_proposal` with feedback → child goes back to planning
+
+### Manager's own proof
+When all children are closed (PRs merged), the manager submits its own proof to its
+parent with links to all merged PRs and a summary of what was delivered.
+
+---
+
 ## Tools per state
 
 | State | Algo tools | Other tools |
 |-------|-----------|-------------|
 | planning | `propose_plan`, `request_clarification` | Read-only code tools, GitHub (explore) |
 | plan_approved | `mark_as_planned`, `mark_as_worker_ready` | `create_task` |
-| managing | `approve_child_proposal`, `deny_child_proposal`, `close_subtask`, `request_rework`, `submit_proof`, `request_clarification` | Read task/comments |
+| managing | `approve_child_proposal`, `deny_child_proposal`, `close_subtask`, `request_rework`, `submit_proof`, `request_clarification` | Read task/comments, **GitHub (read PRs, diffs, CI)** |
 | working | `propose_work`, `request_clarification` | Read-only code tools, GitHub (explore) |
-| work_approved | `submit_proof`, `request_clarification` | Full code tools, git, GitHub |
+| work_approved | `submit_proof`, `request_clarification` | Full code tools, **git (branch, commit, push)**, **GitHub (create PR)** |
 | proof_submitted | *(none — waiting)* | |
 | awaiting_input | *(none — frozen)* | |
 
