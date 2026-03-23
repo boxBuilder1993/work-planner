@@ -92,6 +92,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // Markdown rendering
+    implementation(libs.compose.markdown)
+
     // Credential Manager (Google Sign-In)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
