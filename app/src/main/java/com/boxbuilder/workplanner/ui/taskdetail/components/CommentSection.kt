@@ -37,11 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.boxbuilder.workplanner.data.model.Comment
 import com.boxbuilder.workplanner.data.model.ProposalStatus
+import dev.jeziellago.compose.markdowntext.MarkdownText
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -167,8 +167,8 @@ private fun CommentCard(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
-            Text(
-                text = comment.text,
+            MarkdownText(
+                markdown = comment.text,
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
@@ -271,18 +271,17 @@ private fun ProposalCard(
             }
 
             // Proposal text
-            Text(
-                text = comment.text,
+            MarkdownText(
+                markdown = comment.text,
                 style = MaterialTheme.typography.bodyMedium
             )
 
             // Show feedback if present (for approved/denied proposals)
             if (!comment.proposalFeedback.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Feedback: ${comment.proposalFeedback}",
+                MarkdownText(
+                    markdown = "**Feedback:** ${comment.proposalFeedback}",
                     style = MaterialTheme.typography.bodySmall,
-                    fontStyle = FontStyle.Italic,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
