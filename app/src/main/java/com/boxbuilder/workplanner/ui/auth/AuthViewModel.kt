@@ -42,12 +42,19 @@ class AuthViewModel @Inject constructor(
         if (authManager.isSignedIn && jwt != null) {
             _uiState.value = AuthUiState(
                 isSignedIn = true,
-                isReady = true,
+                isLoading = true,
                 userName = authManager.userName,
                 userEmail = authManager.userEmail
             )
             viewModelScope.launch {
                 repository.initialize()
+                _uiState.value = AuthUiState(
+                    isSignedIn = true,
+                    isLoading = false,
+                    isReady = true,
+                    userName = authManager.userName,
+                    userEmail = authManager.userEmail
+                )
             }
         }
     }
