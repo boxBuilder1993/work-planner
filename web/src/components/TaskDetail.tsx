@@ -116,6 +116,8 @@ export default function TaskDetail() {
   }, [taskId, refreshTask, getBreadcrumbs, refreshChildren, fetchRepeatingTask]);
 
   const children = existingTask ? getChildTasks(existingTask.id) : [];
+  const openChildren = children.filter((c) => c.status !== 'CLOSED');
+  const closedChildren = children.filter((c) => c.status === 'CLOSED');
 
   const handleSave = async () => {
     if (!editedTask.title.trim()) {
@@ -346,7 +348,7 @@ export default function TaskDetail() {
           <div className={styles.subtasksSection}>
             <div className={styles.subtasksHeader}>
               <span className={styles.subtasksTitle}>
-                Sub-tasks ({children.length})
+                Sub-tasks ({openChildren.length} open)
               </span>
               {existingTask.status === 'PENDING' && (
                 <button
@@ -360,10 +362,22 @@ export default function TaskDetail() {
               )}
             </div>
             <div className={styles.subtaskList}>
-              {children.map((child) => (
+              {openChildren.map((child) => (
                 <TaskItem key={child.id} task={child} showDescription />
               ))}
             </div>
+            {closedChildren.length > 0 && (
+              <div className={styles.closedSubtasksSection}>
+                <span className={styles.closedSubtasksTitle}>
+                  Completed ({closedChildren.length})
+                </span>
+                <div className={styles.subtaskList}>
+                  {closedChildren.map((child) => (
+                    <TaskItem key={child.id} task={child} showDescription />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -161,6 +161,19 @@
   gap: var(--spacing-sm);
 }
 
+.closedSubtasksSection {
+  margin-top: var(--spacing-lg);
+}
+
+.closedSubtasksTitle {
+  display: block;
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--on-surface-secondary);
+  margin-bottom: var(--spacing-sm);
+  opacity: 0.7;
+}
+
 .error {
   background: #FFEBEE;
   color: var(--error);
