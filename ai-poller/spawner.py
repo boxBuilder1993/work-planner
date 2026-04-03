@@ -1,7 +1,7 @@
-"""Agent spawning — submits jobs to the Claude proxy and polls for results.
+"""Agent spawning — runs agents via the debate-based AgentRunner.
 
-The proxy runs claude -p on the user's Mac with their subscription auth.
-Uses async job queue: POST /run → job_id, GET /status/{job_id} → result.
+Every agent invocation is a multi-agent debate. The spawner doesn't know
+or care — it calls runner.prompt() and gets back a synthesized result.
 """
 
 from __future__ import annotations
@@ -12,18 +12,14 @@ import os
 import time
 from dataclasses import dataclass, field
 
-import requests
-
 from algorithm import Algorithm, SpawnPlan, TaskContext
 from api_client import ApiClient
 from config import Config
+from debate import AgentRunner, DebateConfig
 from knowledge import KnowledgeBase
 from models import TaskEntity
 
 logger = logging.getLogger(__name__)
-
-POLL_INTERVAL = 10  # seconds between status checks
-JOB_TIMEOUT = 600   # max seconds to wait for a job
 
 
 @dataclass
@@ -40,11 +36,25 @@ class AgentSpawner:
         self._api = api
         self._config = config
         self._active_runs: dict[str, AgentRun] = {}
-        self._proxy_url = os.environ.get("CLAUDE_PROXY_URL", "http://localhost:8400")
-        self._proxy_key = os.environ.get("CLAUDE_PROXY_KEY", "")
+
+        proxy_url = os.environ.get("CLAUDE_PROXY_URL", "http://localhost:8400")
+        proxy_key = os.environ.get("CLAUDE_PROXY_KEY", "")
+
         # Public backend URL for the proxy (which runs outside Railway)
         backend_host = os.environ.get("RAILWAY_SERVICE_BACKEND_URL", "")
         self._public_api_url = f"https://{backend_host}" if backend_host else self._config.api_url
+
+        # Debate config from env or defaults
+        self._runner = AgentRunner(
+            proxy_url=proxy_url,
+            proxy_key=proxy_key,
+            config=DebateConfig(
+                agents=int(os.environ.get("DEBATE_AGENTS", "2")),
+                max_rounds=int(os.environ.get("DEBATE_MAX_ROUNDS", "10")),
+                target_rounds=int(os.environ.get("DEBATE_TARGET_ROUNDS", "0")),
+                timeout_minutes=int(os.environ.get("DEBATE_TIMEOUT_MINUTES", "30")),
+            ),
+        )
 
     @property
     def active_count(self) -> int:
@@ -55,12 +65,6 @@ class AgentSpawner:
 
     def can_spawn(self) -> bool:
         return self.active_count < self._config.agent_limits.max_global_agents
-
-    def _headers(self) -> dict[str, str]:
-        h: dict[str, str] = {"Content-Type": "application/json"}
-        if self._proxy_key:
-            h["X-Proxy-Key"] = self._proxy_key
-        return h
 
     async def spawn(
         self,
@@ -76,23 +80,19 @@ class AgentSpawner:
             logger.warning("Agent limit reached, cannot spawn for task %s", task.id)
             return
 
-        ai_status = task.props.get("aiStatus", "needs_planning")
+        ai_status = task.props.get("aiStatus", "?")
         logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s, model=%s]",
                      algorithm.name, task.title, task.id, ai_status, plan.model)
-
-        # Agents query knowledge themselves via MCP tools — no upfront injection
-        system_prompt = plan.prompt
 
         run = AgentRun(task_id=task.id, algorithm_name=algorithm.name)
         self._active_runs[task.id] = run
         run.task_handle = asyncio.create_task(
-            self._run_agent(task, system_prompt, plan, algorithm, knowledge)
+            self._run_agent(task, plan, algorithm, knowledge)
         )
 
     async def _run_agent(
         self,
         task: TaskEntity,
-        system_prompt: str,
         plan: SpawnPlan,
         algorithm: Algorithm,
         knowledge: KnowledgeBase | None = None,
@@ -108,84 +108,24 @@ class AgentSpawner:
                 f"then take appropriate action based on your instructions."
             )
 
-            request_body = {
-                "prompt": prompt,
-                "system_prompt": system_prompt,
-                "model": plan.model,
-                "max_turns": self._config.agent_limits.max_turns_per_run,
-                "allowed_tools": allowed_tools,
-                "algo_tools": algo_tools,
-                "task_id": task_id,
-                "ai_status": task.props.get("aiStatus", ""),
-                "workplanner_api_url": self._public_api_url,
-                "internal_api_key": self._config.internal_api_key,
-            }
-
-            # Submit job
-            logger.info("Submitting job for task %s to proxy", task_id)
-            loop = asyncio.get_event_loop()
-            submit_resp = await loop.run_in_executor(
-                None,
-                lambda: requests.post(
-                    f"{self._proxy_url}/run",
-                    json=request_body,
-                    headers=self._headers(),
-                    timeout=30,
-                ),
+            # Run via debate-based runner
+            result_text = await self._runner.prompt(
+                prompt=prompt,
+                system_prompt=plan.prompt,
+                tools=plan.tools,
+                model=plan.model,
+                task_id=task_id,
+                ai_status=task.props.get("aiStatus", ""),
+                workplanner_api_url=self._public_api_url,
+                internal_api_key=self._config.internal_api_key,
+                algo_tools=algo_tools,
+                max_turns=self._config.agent_limits.max_turns_per_run,
             )
 
-            if submit_resp.status_code != 200:
-                logger.error("Proxy submit error for task %s: %d %s",
-                             task_id, submit_resp.status_code, submit_resp.text[:500])
-                return
-
-            job_id = submit_resp.json().get("job_id")
-            if not job_id:
-                logger.error("No job_id returned for task %s", task_id)
-                return
-
-            logger.info("Job %s submitted for task %s, polling for result...", job_id, task_id)
-
-            # Poll for result
-            result_text = ""
-            success = False
-            start = time.time()
-
-            while time.time() - start < JOB_TIMEOUT:
-                await asyncio.sleep(POLL_INTERVAL)
-
-                status_resp = await loop.run_in_executor(
-                    None,
-                    lambda: requests.get(
-                        f"{self._proxy_url}/status/{job_id}",
-                        headers=self._headers(),
-                        timeout=15,
-                    ),
-                )
-
-                if status_resp.status_code != 200:
-                    logger.warning("Poll error for job %s: %d", job_id, status_resp.status_code)
-                    continue
-
-                data = status_resp.json()
-                status = data.get("status")
-
-                if status == "done":
-                    result_text = data.get("result", "")
-                    success = True
-                    logger.info("Job %s done for task %s: %s", job_id, task_id, result_text[:300])
-                    break
-                elif status == "error":
-                    logger.error("Job %s failed for task %s: %s",
-                                 job_id, task_id, data.get("error", "")[:500])
-                    break
-                # else: queued or running, keep polling
-
-            if not success and not result_text:
-                elapsed = time.time() - start
-                if elapsed >= JOB_TIMEOUT:
-                    logger.error("Job %s timed out after %ds for task %s", job_id, JOB_TIMEOUT, task_id)
-                # Either timed out or errored — result_text stays empty
+            if result_text:
+                logger.info("Agent result for task %s: %s", task_id, result_text[:500])
+            else:
+                logger.warning("Agent produced no result for task %s", task_id)
 
             # Run on_complete
             try:
