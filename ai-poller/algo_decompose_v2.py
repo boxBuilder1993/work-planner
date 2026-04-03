@@ -60,6 +60,12 @@ _COMPLETED_STATUSES = frozenset({"done", "complete", "proof_submitted"})
 # Prompts
 # ---------------------------------------------------------------------------
 
+_KNOWLEDGE_INSTRUCTION = """
+KNOWLEDGE BASE: You have access to a company knowledge base via query_knowledge and store_knowledge.
+- Before proposing: query_knowledge to check for past decisions and patterns on similar work.
+- After making decisions: store_knowledge to save your decisions for future reference.
+Use these throughout your work, not just once."""
+
 _PLANNER_PROMPT = """\
 You are the owner of task: "{title}"
 {description_block}
@@ -70,9 +76,11 @@ User comments:
 {denied_block}
 {existing_children_block}
 You are in PLANNING mode. Think like a tech lead organizing work for your team.
+""" + _KNOWLEDGE_INSTRUCTION + """
 
-1. Explore the task — read repos, understand context, gather information.
-2. Decide how to organize the work.
+1. Query the knowledge base for past decisions on similar projects.
+2. Explore the task — read repos, understand context, gather information.
+3. Decide how to organize the work.
 
 YOUR DEFAULT IS TO DECOMPOSE. Only propose worker-ready if the task is truly a
 single small change (one function, one bug fix, one test file).
@@ -97,7 +105,11 @@ Execute the approved plan:
   then call mark_as_planned.
 - If worker-ready: call mark_as_worker_ready.
 
-Give each subtask a clear title and description specifying deliverables.
+IMPORTANT: Each subtask description MUST include:
+- The target repository (GitHub URL or local path)
+- The base branch to work from
+- Specific deliverables and acceptance criteria
+- Any dependencies on other subtasks
 
 Your task ID is: {task_id}\
 """
@@ -110,14 +122,17 @@ You are the owner of task: "{title}"
 Previous activity:
 {history}
 {denied_block}
+""" + _KNOWLEDGE_INSTRUCTION + """
+
 Before doing any work, propose your implementation plan.
 
-Call propose_work with:
-- The feature branch name you'll create
-- The specific files you'll create or modify
-- The PR you'll open (branch → main)
-- Any commands you'll run
-- Expected test results
+1. Query the knowledge base for past implementation patterns and gotchas.
+2. Call propose_work with:
+   - The target repository and feature branch name
+   - The specific files you'll create or modify
+   - The PR you'll open (branch → main)
+   - Any commands you'll run
+   - Expected test results
 
 Do NOT write code or push yet. Propose first, wait for approval.
 If you need clarification, call request_clarification.
@@ -135,12 +150,14 @@ Previous activity:
 
 Your work plan has been APPROVED. Execute it now:
 
-1. Create a feature branch (do NOT push to main directly)
-2. Implement the changes
-3. Run tests
-4. Commit and push the branch
-5. Open a PR against main
-6. Call submit_proof with the PR link and evidence (test output, files changed)
+1. Query the knowledge base for implementation patterns used in this project.
+2. Create a feature branch (do NOT push to main directly).
+3. Implement the changes.
+4. Run tests.
+5. Commit and push the branch.
+6. Open a PR against main.
+7. Call submit_proof with the PR link and evidence (test output, files changed).
+8. Store implementation notes in the knowledge base via store_knowledge.
 
 If you get stuck, call request_clarification.
 
@@ -158,6 +175,7 @@ Children needing attention:
 {children_attention_block}
 
 You are in MANAGEMENT mode. Review proposals from your subtask agents.
+""" + _KNOWLEDGE_INSTRUCTION + """
 
 For each item needing attention:
 - PLAN proposals: Does the decomposition make sense? approve_child_proposal or deny_child_proposal.
@@ -200,6 +218,8 @@ def _planning_tools() -> tuple[dict, list[str]]:
         "mcp__workplanner__get_task",
         "mcp__workplanner__get_subtasks",
         "mcp__workplanner__get_task_comments",
+        "mcp__workplanner__query_knowledge",
+        "mcp__workplanner__store_knowledge",
         "mcp__github__*",
         "Read", "Glob", "Grep", "Bash",
     ]
@@ -209,6 +229,8 @@ def _plan_execution_tools() -> tuple[dict, list[str]]:
     return {"algo": create_plan_execution_mcp()}, [
         "mcp__algo__*",
         "mcp__workplanner__create_task",
+        "mcp__workplanner__query_knowledge",
+        "mcp__workplanner__store_knowledge",
     ]
 
 
@@ -236,6 +258,8 @@ def _worker_execute_tools() -> tuple[dict, list[str]]:
         "mcp__algo__*",
         "mcp__workplanner__get_task",
         "mcp__workplanner__get_task_comments",
+        "mcp__workplanner__query_knowledge",
+        "mcp__workplanner__store_knowledge",
         "mcp__git__*",
         "mcp__github__*",
         "Read", "Write", "Edit", "Bash", "Glob", "Grep",
@@ -252,6 +276,8 @@ def _manager_tools() -> tuple[dict, list[str]]:
         "mcp__workplanner__get_task",
         "mcp__workplanner__get_subtasks",
         "mcp__workplanner__get_task_comments",
+        "mcp__workplanner__query_knowledge",
+        "mcp__workplanner__store_knowledge",
         "mcp__github__*",
     ]
 
@@ -405,7 +431,16 @@ class DecomposeAndDelegateV2(Algorithm):
 
         if status == "proof_submitted":
             if latest_proposal_denied(ctx):
-                return self._plan(ctx)
+                # Reset to planning before re-planning
+                plan = self._plan(ctx)
+                original_on_complete = plan.on_complete
+                def on_replan(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
+                    result = original_on_complete(ctx, result_text)
+                    props = result.self_props if result else {}
+                    props["aiStatus"] = "planning"
+                    return PropsUpdate(self_props=props)
+                plan.on_complete = on_replan
+                return plan
             return None
 
         if status == "awaiting_input":
@@ -444,12 +479,20 @@ class DecomposeAndDelegateV2(Algorithm):
             task_id=ctx.task.id,
         )
 
+        approved_plan = _approved_plan_text(ctx)
+
         def on_plan_executed(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
             run_count = ctx.task.props.get("runCount", 0) + 1
             status = ctx.task.props.get("aiStatus")
             if status in ("plan_approved", "planning"):
                 if ctx.children:
                     return PropsUpdate(self_props={"aiStatus": "managing", "runCount": run_count})
+                # Check approved plan intent — does it mention decomposition/subtasks?
+                plan_lower = approved_plan.lower()
+                if any(kw in plan_lower for kw in ["subtask", "decompos", "break into", "split into"]):
+                    # Plan said to decompose but no children created — retry
+                    logger.warning("Plan said to decompose but no children created for task %s", ctx.task.id)
+                    return PropsUpdate(self_props={"aiStatus": "planning", "runCount": run_count})
                 return PropsUpdate(self_props={"aiStatus": "working", "runCount": run_count})
             return PropsUpdate(self_props={"runCount": run_count})
 
@@ -515,10 +558,20 @@ class DecomposeAndDelegateV2(Algorithm):
             children_attention_block=_children_attention_block(ctx),
             task_id=ctx.task.id,
         )
+        def on_manage_complete(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
+            run_count = ctx.task.props.get("runCount", 0) + 1
+            # If all children closed but manager didn't submit proof, force proof_submitted
+            all_done = all(c.status == "CLOSED" for c in ctx.children) if ctx.children else False
+            current = ctx.task.props.get("aiStatus")
+            if all_done and current == "managing":
+                logger.info("All children closed for task %s but no proof submitted — forcing proof_submitted", ctx.task.id)
+                return PropsUpdate(self_props={"aiStatus": "proof_submitted", "runCount": run_count})
+            return PropsUpdate(self_props={"runCount": run_count})
+
         return SpawnPlan(
             prompt=prompt,
             tools=_manager_tools(),
-            on_complete=_bump_run_count,
+            on_complete=on_manage_complete,
             metadata={"algo_tools": [
                 "approve_child_proposal", "deny_child_proposal",
                 "close_subtask", "request_rework",
