@@ -1,15 +1,16 @@
 """Debate-based agent execution.
 
 Every agent invocation is a debate between 2 agents + a judge.
-The caller gets back a single synthesized result, as if one agent ran.
-This module replaces direct agent calls — debate IS the execution layer.
+The debate is pure reasoning — no tools, no side effects.
+After convergence, a single executor agent carries out the decision with tools.
+
+The caller gets back a single result, as if one agent ran.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -38,12 +39,14 @@ class DebateConfig:
 _DEBATER_A_SUFFIX = """
 
 You are Agent A in a debate. Propose your best answer independently.
-Be thorough, consider alternatives, and justify your reasoning."""
+Be thorough, consider alternatives, and justify your reasoning.
+You do NOT have access to any tools — reason based on the information provided."""
 
 _DEBATER_B_SUFFIX = """
 
 You are Agent B in a debate. Propose your best answer independently.
-Think differently from obvious approaches. Challenge assumptions."""
+Think differently from obvious approaches. Challenge assumptions.
+You do NOT have access to any tools — reason based on the information provided."""
 
 _JUDGE_SYSTEM = """\
 You are a Judge evaluating two agents debating a question.
@@ -70,7 +73,8 @@ _REVISION_PROMPT = """\
 {latest_feedback}
 
 Revise your position. Address the judge's feedback. Engage with the other agent's
-strongest arguments. If you now agree with the other agent, say so explicitly."""
+strongest arguments. If you now agree with the other agent, say so explicitly.
+You do NOT have access to any tools — reason based on the information provided."""
 
 _FORCE_SYNTHESIS_PROMPT = """\
 The agents did not reach consensus after {rounds} rounds.
@@ -88,9 +92,17 @@ VERDICT: FORCED_SYNTHESIS
 FEEDBACK: Agents did not converge after {rounds} rounds.
 SYNTHESIS: <your synthesized answer>"""
 
+_EXECUTOR_SYSTEM = """\
+You are an executor agent. A debate between multiple agents has produced the
+decision below. Your job is to carry out this decision using the tools available
+to you. Do exactly what the decision says — do not re-debate or second-guess it.
+
+The debated decision:
+{synthesis}"""
+
 
 # ---------------------------------------------------------------------------
-# Debate history formatting
+# Debate history
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -129,7 +141,6 @@ class JudgeVerdict:
 
 
 def _parse_verdict(text: str) -> JudgeVerdict:
-    """Parse the judge's structured output."""
     verdict_line = ""
     feedback_line = ""
     synthesis_lines = []
@@ -159,16 +170,16 @@ def _parse_verdict(text: str) -> JudgeVerdict:
     return JudgeVerdict(
         converged=converged,
         feedback=feedback_line,
-        synthesis=synthesis if synthesis else text,  # fallback: use full text
+        synthesis=synthesis if synthesis else text,
     )
 
 
 # ---------------------------------------------------------------------------
-# Agent Runner (debate-based)
+# Agent Runner
 # ---------------------------------------------------------------------------
 
 class AgentRunner:
-    """Every prompt() call runs a multi-agent debate and returns the synthesis."""
+    """Every prompt() call runs a debate (no tools) then an executor (with tools)."""
 
     def __init__(
         self,
@@ -193,16 +204,53 @@ class AgentRunner:
         algo_tools: list[str] | None = None,
         max_turns: int = 20,
     ) -> str:
-        """Run a debate and return the synthesized result."""
+        """Run a debate then execute the decision. Returns the execution result."""
 
         if self._config.agents <= 1:
-            # Single agent — no debate
+            # Single agent — no debate, just execute directly
             return await self._call_agent(
                 system_prompt, prompt, tools, model,
                 task_id, ai_status, workplanner_api_url, internal_api_key,
                 algo_tools, max_turns,
             )
 
+        # Step 1: DEBATE (no tools — pure reasoning)
+        synthesis = await self._debate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=model,
+            task_id=task_id,
+        )
+
+        logger.info("Debate synthesis for task %s: %s", task_id, synthesis[:300])
+
+        # Step 2: EXECUTE the debated decision (with tools)
+        executor_system = _EXECUTOR_SYSTEM.format(synthesis=synthesis)
+        result = await self._call_agent(
+            system_prompt=executor_system,
+            prompt=prompt,
+            tools=tools,
+            model=model,
+            task_id=task_id,
+            ai_status=ai_status,
+            workplanner_api_url=workplanner_api_url,
+            internal_api_key=internal_api_key,
+            algo_tools=algo_tools,
+            max_turns=max_turns,
+        )
+
+        return result
+
+    async def _debate(
+        self,
+        prompt: str,
+        system_prompt: str,
+        model: str,
+        task_id: str,
+    ) -> str:
+        """Run the debate rounds. No tools. Returns the judge's synthesis."""
+
+        no_tools: tuple[dict, list[str]] = ({}, [])
         start_time = time.time()
         rounds: list[DebateRound] = []
         max_rounds = self._config.max_rounds
@@ -211,14 +259,12 @@ class AgentRunner:
         logger.info("Debate round 1 for task %s: agents proposing independently", task_id)
         result_a, result_b = await asyncio.gather(
             self._call_agent(
-                system_prompt + _DEBATER_A_SUFFIX, prompt, tools, model,
-                task_id, ai_status, workplanner_api_url, internal_api_key,
-                algo_tools, max_turns,
+                system_prompt + _DEBATER_A_SUFFIX, prompt,
+                no_tools, model, task_id,
             ),
             self._call_agent(
-                system_prompt + _DEBATER_B_SUFFIX, prompt, tools, model,
-                task_id, ai_status, workplanner_api_url, internal_api_key,
-                algo_tools, max_turns,
+                system_prompt + _DEBATER_B_SUFFIX, prompt,
+                no_tools, model, task_id,
             ),
         )
 
@@ -226,8 +272,7 @@ class AgentRunner:
         judge_result = await self._call_agent(
             _JUDGE_SYSTEM,
             f"Original question:\n{prompt}\n\nAgent A's position:\n{result_a}\n\nAgent B's position:\n{result_b}",
-            ({}, []),  # judge doesn't need tools
-            model, task_id, "", "", "", None, 5,
+            no_tools, model, task_id,
         )
         verdict = _parse_verdict(judge_result)
         rounds.append(DebateRound(
@@ -245,7 +290,6 @@ class AgentRunner:
 
         # Rounds 2-N
         for round_num in range(2, max_rounds + 1):
-            # Check timeout
             elapsed = (time.time() - start_time) / 60
             if elapsed > self._config.timeout_minutes:
                 logger.warning("Debate timed out after %.1f minutes for task %s", elapsed, task_id)
@@ -263,9 +307,7 @@ class AgentRunner:
                         debate_history=history,
                         latest_feedback=verdict.feedback,
                     ),
-                    tools, model,
-                    task_id, ai_status, workplanner_api_url, internal_api_key,
-                    algo_tools, max_turns,
+                    no_tools, model, task_id,
                 ),
                 self._call_agent(
                     system_prompt + _DEBATER_B_SUFFIX,
@@ -274,9 +316,7 @@ class AgentRunner:
                         debate_history=history,
                         latest_feedback=verdict.feedback,
                     ),
-                    tools, model,
-                    task_id, ai_status, workplanner_api_url, internal_api_key,
-                    algo_tools, max_turns,
+                    no_tools, model, task_id,
                 ),
             )
 
@@ -285,7 +325,7 @@ class AgentRunner:
             judge_result = await self._call_agent(
                 _JUDGE_SYSTEM,
                 f"Original question:\n{prompt}\n\n{history_with_latest}",
-                ({}, []), model, task_id, "", "", "", None, 5,
+                no_tools, model, task_id,
             )
             verdict = _parse_verdict(judge_result)
             rounds.append(DebateRound(
@@ -301,9 +341,9 @@ class AgentRunner:
                 logger.info("Debate converged in round %d for task %s", round_num, task_id)
                 return verdict.synthesis
 
-            # Check target rounds (0 = unlimited)
             if self._config.target_rounds > 0 and round_num >= self._config.target_rounds:
-                logger.info("Debate hit target rounds (%d) for task %s", self._config.target_rounds, task_id)
+                logger.info("Debate hit target rounds (%d) for task %s",
+                            self._config.target_rounds, task_id)
                 break
 
         # Force synthesis
@@ -316,10 +356,9 @@ class AgentRunner:
                 debate_history=history,
                 rounds=len(rounds),
             ),
-            ({}, []), model, task_id, "", "", "", None, 5,
+            no_tools, model, task_id,
         )
-        forced = _parse_verdict(force_result)
-        return forced.synthesis
+        return _parse_verdict(force_result).synthesis
 
     async def _call_agent(
         self,
