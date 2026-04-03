@@ -77,6 +77,24 @@ async def propose_plan(args: dict[str, Any]) -> dict[str, Any]:
     logger.info("propose_plan called for task %s", task_id)
     try:
         api = _client()
+        # Guard against concurrent proposals: re-check for existing PENDING proposals
+        # right before posting. This catches the race where two agents were spawned in
+        # the same poller cycle (before either posted), both passed the spawn-time check,
+        # and now both try to propose. The first one wins; the second skips gracefully.
+        existing_comments = api.list_comments(task_id)
+        existing_pending = [
+            c for c in existing_comments
+            if c.comment_type == "PROPOSAL" and c.proposal_status == "PENDING"
+        ]
+        if existing_pending:
+            logger.info(
+                "Task %s: skipping propose_plan — %d PENDING proposal(s) already exist",
+                task_id, len(existing_pending),
+            )
+            return _result(
+                "Skipping: a pending proposal already exists for this task. "
+                "Waiting for the existing proposal to be reviewed."
+            )
         comment = api.create_comment(
             task_id=task_id,
             text=f"[PLAN PROPOSAL] {args['plan']}",

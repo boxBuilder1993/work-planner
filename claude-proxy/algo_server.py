@@ -182,11 +182,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "createdBy": task_id,
             })
             client.update_task(task_id, {"props": {"aiStatus": "in_progress"}})
+            # Inherit the parent's algorithm so d&dv2 subtasks stay on v2
+            parent_task = client.get_task(task_id)
+            parent_algo = parent_task.get("props", {}).get("algorithm", "decompose_and_delegate")
             children = client.list_children(task_id)
             for child in children:
                 if not child.get("props", {}).get("algorithm"):
                     client.update_task(child["id"], {"props": {
-                        "algorithm": "decompose_and_delegate",
+                        "algorithm": parent_algo,
                         "aiStatus": "needs_planning",
                     }})
             return _text(f"Management mode. {len(children)} children initialized.")

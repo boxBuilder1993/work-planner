@@ -456,8 +456,46 @@ class DecomposeAndDelegateV2(Algorithm):
             if find_pending_proposals(ctx):
                 return None
             approved = _find_approved_after_latest_denial(ctx)
-            if approved:
+            # Only trigger execution for approved WORK proposals.
+            # Plan proposals ("[PLAN PROPOSAL] ...") are approved during the
+            # planning phase and must NOT be treated as work approvals. Tasks
+            # entering this state via the "worker_ready" STATUS_ALIAS only have
+            # plan approvals — they must go through _worker_propose first to
+            # get a concrete implementation plan before execution begins.
+            approved_work = [c for c in approved if "[WORK PROPOSAL]" in c.text]
+            run_count = ctx.task.props.get("runCount", 0)
+            if approved_work:
+                if run_count > 10:
+                    logger.warning(
+                        "Task %s hit retry cap in working state (runCount=%d), resetting to planning",
+                        ctx.task.id, run_count,
+                    )
+                    plan = self._plan(ctx)
+                    original_on_complete = plan.on_complete
+                    def on_working_retry_cap(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
+                        result = original_on_complete(ctx, result_text)
+                        props = result.self_props if result else {}
+                        props["aiStatus"] = "planning"
+                        return PropsUpdate(self_props=props)
+                    plan.on_complete = on_working_retry_cap
+                    return plan
                 return self._worker_execute(ctx)
+            # No approved work proposals yet — spawn worker_propose, but cap retries
+            # to prevent infinite looping when the propose agent keeps failing to post.
+            if run_count > 10:
+                logger.warning(
+                    "Task %s hit retry cap in worker_propose (runCount=%d), resetting to planning",
+                    ctx.task.id, run_count,
+                )
+                plan = self._plan(ctx)
+                original_on_complete = plan.on_complete
+                def on_propose_retry_cap(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
+                    result = original_on_complete(ctx, result_text)
+                    props = result.self_props if result else {}
+                    props["aiStatus"] = "planning"
+                    return PropsUpdate(self_props=props)
+                plan.on_complete = on_propose_retry_cap
+                return plan
             return self._worker_propose(ctx)
 
         if status == "work_approved":
