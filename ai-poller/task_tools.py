@@ -6,13 +6,17 @@ Set the client before each agent run via set_api_client().
 
 from __future__ import annotations
 
+import difflib
 import json
+import logging
 import subprocess
 from typing import Any
 
 from claude_agent_sdk import tool, create_sdk_mcp_server
 
 from api_client import ApiClient
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Shared API client — set before each agent run
@@ -46,6 +50,28 @@ def _comment_json(comment) -> str:
 
 def _result(text: str) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": text}]}
+
+
+_DEDUP_SIMILARITY_THRESHOLD = 0.8
+
+
+def _titles_are_similar(a: str, b: str, threshold: float = _DEDUP_SIMILARITY_THRESHOLD) -> bool:
+    """Return True if two task titles are similar enough to be considered duplicates.
+
+    Uses SequenceMatcher ratio as the primary check, and also treats one title
+    being a substring of the other (modulo whitespace) as a match.
+    """
+    a_lower = a.lower().strip()
+    b_lower = b.lower().strip()
+    if a_lower == b_lower:
+        return True
+    ratio = difflib.SequenceMatcher(None, a_lower, b_lower).ratio()
+    if ratio >= threshold:
+        return True
+    # Substring check: catches "Implement X" vs "Implement X in finance-scripts"
+    if a_lower in b_lower or b_lower in a_lower:
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +152,39 @@ async def get_task_comments(args: dict[str, Any]) -> dict[str, Any]:
 )
 async def create_task(args: dict[str, Any]) -> dict[str, Any]:
     try:
-        task = _client().create_task(
-            title=args["title"],
+        client = _client()
+        new_title: str = args["title"]
+        parent_id: str | None = args.get("parent_id")
+
+        # Deduplication guard: when creating a child task, check whether a
+        # sibling with a sufficiently similar title already exists. This prevents
+        # duplicate subtasks from being created when the plan executor re-runs
+        # due to a STATUS_ALIASES bug or other retry scenario.
+        if parent_id:
+            try:
+                existing_siblings = client.list_children(parent_id)
+                for sibling in existing_siblings:
+                    if sibling.status != "CLOSED" and _titles_are_similar(new_title, sibling.title):
+                        logger.info(
+                            "Skipping duplicate child task '%s' — similar to existing '%s' (%s)",
+                            new_title, sibling.title, sibling.id,
+                        )
+                        return _result(
+                            f"Skipped: a child task with a similar title already exists.\n"
+                            f"  Existing: '{sibling.title}' (id={sibling.id})\n"
+                            f"  Requested: '{new_title}'\n"
+                            f"Use the existing task instead of creating a duplicate."
+                        )
+            except Exception as dedup_err:
+                logger.warning(
+                    "Deduplication check failed for parent %s; proceeding with create: %s",
+                    parent_id, dedup_err,
+                )
+
+        task = client.create_task(
+            title=new_title,
             description=args.get("description", ""),
-            parent_id=args.get("parent_id"),
+            parent_id=parent_id,
             priority=args.get("priority", 0),
             due_date=args.get("due_date"),
             planned_time=args.get("planned_time"),

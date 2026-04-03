@@ -456,8 +456,46 @@ class DecomposeAndDelegateV2(Algorithm):
             if find_pending_proposals(ctx):
                 return None
             approved = _find_approved_after_latest_denial(ctx)
-            if approved:
+            # Only trigger execution for approved WORK proposals.
+            # Plan proposals ("[PLAN PROPOSAL] ...") are approved during the
+            # planning phase and must NOT be treated as work approvals. Tasks
+            # entering this state via the "worker_ready" STATUS_ALIAS only have
+            # plan approvals — they must go through _worker_propose first to
+            # get a concrete implementation plan before execution begins.
+            approved_work = [c for c in approved if "[WORK PROPOSAL]" in c.text]
+            run_count = ctx.task.props.get("runCount", 0)
+            if approved_work:
+                if run_count > 10:
+                    logger.warning(
+                        "Task %s hit retry cap in working state (runCount=%d), resetting to planning",
+                        ctx.task.id, run_count,
+                    )
+                    plan = self._plan(ctx)
+                    original_on_complete = plan.on_complete
+                    def on_working_retry_cap(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
+                        result = original_on_complete(ctx, result_text)
+                        props = result.self_props if result else {}
+                        props["aiStatus"] = "planning"
+                        return PropsUpdate(self_props=props)
+                    plan.on_complete = on_working_retry_cap
+                    return plan
                 return self._worker_execute(ctx)
+            # No approved work proposals yet — spawn worker_propose, but cap retries
+            # to prevent infinite looping when the propose agent keeps failing to post.
+            if run_count > 10:
+                logger.warning(
+                    "Task %s hit retry cap in worker_propose (runCount=%d), resetting to planning",
+                    ctx.task.id, run_count,
+                )
+                plan = self._plan(ctx)
+                original_on_complete = plan.on_complete
+                def on_propose_retry_cap(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
+                    result = original_on_complete(ctx, result_text)
+                    props = result.self_props if result else {}
+                    props["aiStatus"] = "planning"
+                    return PropsUpdate(self_props=props)
+                plan.on_complete = on_propose_retry_cap
+                return plan
             return self._worker_propose(ctx)
 
         if status == "work_approved":
@@ -651,3 +689,45 @@ class DecomposeAndDelegateV2(Algorithm):
                 return self._manage(ctx)
             return self._plan(ctx)
         return None
+
+    # -- Done status handlers ---------------------------------------------
+
+    def _submit_proof_for_done(self, ctx: TaskContext) -> SpawnPlan:
+        """Child task reached 'done': submit proof so the parent manager can close it."""
+        history = format_comment_history(ctx.comments)
+        prompt = (
+            f'You are the owner of task: "{ctx.task.title}"\n'
+            f"{_description_block(ctx)}\n"
+            f"{_parent_block(ctx)}\n\n"
+            f"Previous activity:\n{history}\n\n"
+            "This task has been completed (aiStatus: done). Your parent manager is waiting\n"
+            "to review and close your task. Call submit_proof now with a summary of what\n"
+            "was accomplished, referencing any PRs, commits, or outputs from the activity above.\n\n"
+            f"Your task ID is: {ctx.task.id}"
+        )
+        return SpawnPlan(
+            prompt=prompt,
+            tools=_worker_execute_tools(),
+            on_complete=_bump_run_count,
+            metadata={"algo_tools": ["submit_proof"]},
+        )
+
+    def _add_completion_notice(self, ctx: TaskContext) -> SpawnPlan:
+        """Top-level task reached 'done': post a completion summary for the user to review."""
+        history = format_comment_history(ctx.comments)
+        prompt = (
+            f'You are the owner of task: "{ctx.task.title}"\n'
+            f"{_description_block(ctx)}\n\n"
+            f"Previous activity:\n{history}\n\n"
+            "This task has been completed (aiStatus: done). The user needs to review\n"
+            "your work and manually close the task when satisfied. Call submit_summary\n"
+            "with a clear summary of what was accomplished, so the user knows it is ready\n"
+            "for review.\n\n"
+            f"Your task ID is: {ctx.task.id}"
+        )
+        return SpawnPlan(
+            prompt=prompt,
+            tools=_worker_execute_tools(),
+            on_complete=_bump_run_count,
+            metadata={"algo_tools": ["submit_summary"]},
+        )

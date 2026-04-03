@@ -80,6 +80,29 @@ class AgentSpawner:
             logger.warning("Agent limit reached, cannot spawn for task %s", task.id)
             return
 
+        # Guard against race condition: the poller builds TaskContext from a
+        # snapshot fetched at the START of the cycle. If a previous agent posted
+        # a proposal AFTER that snapshot was taken (but before this spawn call),
+        # evaluate() would have seen zero pending proposals and returned a plan.
+        # Re-checking fresh comments here prevents spawning a second planning
+        # agent while one is already in-flight or has just posted its proposal.
+        try:
+            fresh_comments = self._api.list_comments(task.id)
+            if any(
+                c.comment_type == "PROPOSAL" and c.proposal_status == "PENDING"
+                for c in fresh_comments
+            ):
+                logger.info(
+                    "Task %s: fresh comment check found existing PENDING proposal — skipping spawn",
+                    task.id,
+                )
+                return
+        except Exception:
+            logger.warning(
+                "Task %s: failed fresh pending-proposal check; proceeding with spawn",
+                task.id,
+            )
+
         ai_status = task.props.get("aiStatus", "?")
         logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s, model=%s]",
                      algorithm.name, task.title, task.id, ai_status, plan.model)
