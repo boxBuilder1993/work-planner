@@ -651,3 +651,45 @@ class DecomposeAndDelegateV2(Algorithm):
                 return self._manage(ctx)
             return self._plan(ctx)
         return None
+
+    # -- Done status handlers ---------------------------------------------
+
+    def _submit_proof_for_done(self, ctx: TaskContext) -> SpawnPlan:
+        """Child task reached 'done': submit proof so the parent manager can close it."""
+        history = format_comment_history(ctx.comments)
+        prompt = (
+            f'You are the owner of task: "{ctx.task.title}"\n'
+            f"{_description_block(ctx)}\n"
+            f"{_parent_block(ctx)}\n\n"
+            f"Previous activity:\n{history}\n\n"
+            "This task has been completed (aiStatus: done). Your parent manager is waiting\n"
+            "to review and close your task. Call submit_proof now with a summary of what\n"
+            "was accomplished, referencing any PRs, commits, or outputs from the activity above.\n\n"
+            f"Your task ID is: {ctx.task.id}"
+        )
+        return SpawnPlan(
+            prompt=prompt,
+            tools=_worker_execute_tools(),
+            on_complete=_bump_run_count,
+            metadata={"algo_tools": ["submit_proof"]},
+        )
+
+    def _add_completion_notice(self, ctx: TaskContext) -> SpawnPlan:
+        """Top-level task reached 'done': post a completion summary for the user to review."""
+        history = format_comment_history(ctx.comments)
+        prompt = (
+            f'You are the owner of task: "{ctx.task.title}"\n'
+            f"{_description_block(ctx)}\n\n"
+            f"Previous activity:\n{history}\n\n"
+            "This task has been completed (aiStatus: done). The user needs to review\n"
+            "your work and manually close the task when satisfied. Call submit_summary\n"
+            "with a clear summary of what was accomplished, so the user knows it is ready\n"
+            "for review.\n\n"
+            f"Your task ID is: {ctx.task.id}"
+        )
+        return SpawnPlan(
+            prompt=prompt,
+            tools=_worker_execute_tools(),
+            on_complete=_bump_run_count,
+            metadata={"algo_tools": ["submit_summary"]},
+        )
