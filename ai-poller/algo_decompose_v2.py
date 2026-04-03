@@ -426,17 +426,24 @@ class DecomposeAndDelegateV2(Algorithm):
 
     def evaluate(self, ctx: TaskContext, is_running: bool) -> SpawnPlan | None:
         if is_running:
+            logger.info("Task '%s': skipping, already running", ctx.task.title)
             return None
 
         status = ctx.task.props.get("aiStatus", "planning")
         status = STATUS_ALIASES.get(status, status)
+        logger.info("Task '%s': evaluate status=%s, %d comments, %d children",
+                     ctx.task.title, status, len(ctx.comments), len(ctx.children))
 
         if status == "planning":
-            if find_pending_proposals(ctx):
+            pending = find_pending_proposals(ctx)
+            if pending:
+                logger.info("Task '%s': planning, %d pending proposals — waiting", ctx.task.title, len(pending))
                 return None
             approved = _find_approved_after_latest_denial(ctx)
             if approved:
+                logger.info("Task '%s': planning, approved proposal found — executing plan", ctx.task.title)
                 return self._execute_plan(ctx)
+            logger.info("Task '%s': planning, no proposals — spawning planner", ctx.task.title)
             return self._plan(ctx)
 
         if status == "plan_approved":
@@ -483,6 +490,14 @@ class DecomposeAndDelegateV2(Algorithm):
                 return plan
             return None
 
+        if status == "done":
+            if ctx.task.parent_id:
+                # Child task completed: submit proof so the parent manager can review and close it
+                return self._submit_proof_for_done(ctx)
+            else:
+                # Top-level task: post a completion notice so the user can review and close
+                return self._add_completion_notice(ctx)
+
         if status == "awaiting_input":
             return self._handle_awaiting_input(ctx)
 
@@ -524,6 +539,11 @@ class DecomposeAndDelegateV2(Algorithm):
         def on_plan_executed(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
             run_count = ctx.task.props.get("runCount", 0) + 1
             status = ctx.task.props.get("aiStatus")
+            # Normalize legacy statuses (e.g. "plan_proposed" → "planning")
+            # so tasks that started with a legacy aiStatus still transition correctly
+            # after plan execution. Without this, tasks with aiStatus="plan_proposed"
+            # would never match ("plan_approved", "planning") and stay stuck re-planning.
+            status = STATUS_ALIASES.get(status, status)
             if status in ("plan_approved", "planning"):
                 if ctx.children:
                     return PropsUpdate(self_props={"aiStatus": "managing", "runCount": run_count})
