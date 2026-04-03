@@ -3,208 +3,275 @@
 ## Philosophy
 
 Model a software company. You are the CEO. You send requests, the company delivers.
-The company clarifies before building, debates architecture, reviews everything heavily.
+Every decision is debated by two agents before being finalized. The company clarifies
+before building and reviews everything heavily.
 
 **Priorities**: Clarification > Quality > Speed
+
+**Core principle**: Every role is a debate pair. Two agents propose independently,
+critique each other, and iterate until they converge. This produces higher quality
+outputs than any single agent.
+
+---
+
+## The Debate Primitive
+
+The fundamental unit of work in Company v1. Every role uses this.
+
+### How it works
+
+```
+Round 1 (parallel):
+  Agent A proposes independently
+  Agent B proposes independently
+
+Round 2+ (parallel, after reading each other):
+  Agent A reads B's position → critiques, steals good ideas, revises
+  Agent B reads A's position → critiques, steals good ideas, revises
+  Both call declare_position(agree_with_other, disagreements, position)
+
+Convergence check:
+  If both agents' disagreements are empty → CONVERGED → parent synthesizes
+  If not converged and under round limit → next round
+  If not converged and at limit → parent synthesizes anyway (notes non-consensus)
+```
+
+### Convergence detection
+
+Each agent calls `declare_position` at the end of every round:
+
+```
+declare_position(
+  agree_with_other: bool,
+  disagreements: ["list of remaining disagreements"],
+  position: "full current position text"
+)
+```
+
+**Converged** = both agents call with `agree_with_other=true` AND `disagreements=[]`.
+Parent is notified and writes the synthesis.
+
+### Round limits
+
+```json
+{
+  "config": {
+    "debate_rounds": {
+      "director": 0,
+      "architect": 0,
+      "manager": 5,
+      "engineer": 3,
+      "reviewer": 3,
+      "integration": 0
+    },
+    "max_debate_rounds": 10,
+    "debate_timeout_minutes": 30
+  }
+}
+```
+
+- `0` = no limit, debate until convergence (capped by `max_debate_rounds`)
+- `N` = max N rounds, converge early if possible
+- `1` = one round each, minimal debate (fast mode)
+- `max_debate_rounds` = hard safety cap even for unlimited debates (default 10)
+- `debate_timeout_minutes` = force synthesis after this long (default 30)
+
+### Debate state tracking
+
+Stored in the parent task's `props["debate"]`:
+
+```json
+{
+  "debate": {
+    "round": 2,
+    "max_rounds": 0,
+    "a_task_id": "...",
+    "b_task_id": "...",
+    "a_done_round": 2,
+    "b_done_round": 2,
+    "a_converged": false,
+    "b_converged": true,
+    "started_at": 1234567890
+  }
+}
+```
+
+### What happens when they don't converge
+
+Parent synthesizes and notes: "Agents did not reach consensus after N rounds.
+[Role] decided based on the strongest arguments from both sides." This is normal —
+if two architects can't agree, the Director makes the call.
+
+### Task tree for a debate
+
+```
+[Task: Clarify requirements] (role: director, state: debating)
+  ├── [Director-A] (role: debater)
+  └── [Director-B] (role: debater)
+```
+
+Both debaters post on their own tasks. Each reads the other's task via
+`get_task_comments(other_task_id)`. The parent reads both after convergence.
 
 ---
 
 ## Roles
 
-| Role | Count | Responsibility | Talks to |
-|------|-------|---------------|----------|
-| **Director** | 1 | Interviews CEO, owns requirements, final delivery | CEO (you) |
-| **Architect A** | 1 | Proposes approach, critiques B, refines | Director |
-| **Architect B** | 1 | Proposes approach, critiques A, refines | Director |
-| **Manager** | 1 | Plans work, coordinates engineers, merges PRs | Director |
-| **Engineer** | N | Implements, opens PRs | Manager |
-| **Reviewer** | 1 per PR | Reviews code quality, tests, correctness | Manager |
+Every role is a debate pair. The parent of each debate writes the synthesis.
 
----
-
-## Configuration
-
-Stored in `props`:
-
-```json
-{
-  "algorithm": "company_v1",
-  "config": {
-    "debate_rounds": 3,
-    "auto_approve_architecture": false
-  }
-}
-```
-
-- `debate_rounds`: Number of architect debate rounds (default 3, min 1, max 5)
-- `auto_approve_architecture`: If true, Director approves architecture without asking CEO
+| Role | Debate pair | Synthesized by | Output |
+|------|------------|---------------|--------|
+| **Director** | Director-A + Director-B | CEO (or auto) | Requirements spec |
+| **Architect** | Architect-A + Architect-B | Director | Architecture Decision Record |
+| **Manager** | Manager-A + Manager-B | Director | Task plan with acceptance criteria |
+| **Engineer** | Engineer-A + Engineer-B | Manager | Implementation approach → one executes |
+| **Reviewer** | Reviewer-A + Reviewer-B | Manager | Review decision (approve/reject with feedback) |
+| **Integration** | Integration-A + Integration-B | Director | Holistic sign-off or gap list |
 
 ---
 
 ## Phases
 
-### Phase 1: CLARIFICATION
+### Phase 1: CLARIFICATION (Director debate)
 
-**Owner**: Director
 **State**: `clarifying`
 
-Director reads the request and posts clarifying questions to the CEO as proposals.
-One question at a time. CEO answers (comments) or says "just decide."
-
-The Director keeps asking until confident it understands:
+Director-A and Director-B independently read the request and propose clarifying
+questions. They debate what needs clarification and converge on:
 - What to build
 - What NOT to build (non-goals)
 - Success criteria
-- Constraints (tech stack, timeline, etc.)
+- Constraints
+- Key clarifying questions for the CEO
 
-When satisfied, Director writes a **requirements spec** and posts it as a proposal.
+**Synthesis**: Director posts the converged questions to the CEO as a proposal.
+CEO answers. Director may follow up with more questions.
 
-**State**: `spec_proposed`
+When confident, the Directors debate the **requirements spec** and converge.
+Synthesized spec posted as proposal.
 
-CEO approves → Phase 2. CEO denies with feedback → Director revises.
+**State**: `spec_proposed` → CEO approves → Phase 2
 
 ---
 
-### Phase 2: ARCHITECTURE (Dual-Architect Debate)
+### Phase 2: ARCHITECTURE (Architect debate)
 
-**Owner**: Director (orchestrates)
-**Participants**: Architect A, Architect B
+**State**: `architecting`
 
-The Director creates two subtasks: `Architect A` and `Architect B`.
+Architect-A and Architect-B independently:
+1. Query the knowledge base for past decisions on similar projects
+2. Read the requirements spec
+3. Propose a technical approach
 
-#### Round structure (repeats `debate_rounds` times)
+They debate across `debate_rounds.architect` rounds (default: unlimited until convergence).
 
-**Round N (odd) — Propose/Revise**:
-- Architect A posts a proposal (or revision) on its own task
-- Architect B posts a proposal (or revision) on its own task
-- Both run in parallel
+Each round they must:
+- Explicitly state what they agree/disagree with from the other
+- Incorporate good ideas from the other
+- Challenge assumptions
+- Call `declare_position` with current stance
 
-**Round N (even) — Critique**:
-- Architect A reads B's latest proposal → posts critique + what to steal
-- Architect B reads A's latest proposal → posts critique + what to steal
-- Both run in parallel
-
-After the first round, every proposal must reference the other architect's work:
-- "I agree with B's suggestion on X"
-- "I disagree with B's approach to Y because..."
-- "I'm incorporating B's idea about Z"
-
-#### Final round — Position statements
-
-After all debate rounds:
-- Architect A posts final recommendation with explicit agree/disagree list
-- Architect B posts final recommendation with explicit agree/disagree list
-
-#### Synthesis
-
-Director reads all debate comments from both architects.
-Director writes an **Architecture Decision Record (ADR)**:
-- Decision
-- Alternatives considered (from both architects)
-- Why this approach won (synthesized from the debate)
+**Synthesis**: Director reads both final positions and writes an ADR:
+- Decision (synthesized from both)
+- Alternatives considered
+- Why this approach won
 - Risks acknowledged
-- Posts as proposal
+- Stores ADR to knowledge base
 
-**State**: `arch_proposed`
-
-CEO approves (or auto-approve if configured) → Phase 3.
+**State**: `arch_proposed` → CEO approves (or auto-approve) → Phase 3
 
 ---
 
-### Phase 3: PLANNING
+### Phase 3: PLANNING (Manager debate)
 
-**Owner**: Manager
 **State**: `planning`
 
-Manager reads:
-- Requirements spec (from Phase 1)
-- ADR (from Phase 2)
+Manager-A and Manager-B independently read:
+- Requirements spec
+- ADR
+- Knowledge base (past plans for similar projects)
 
-Manager creates subtasks with:
-- Clear title and description
-- Acceptance criteria (what "done" looks like)
-- Dependencies noted
+They debate how to break the work into tasks:
+- What subtasks to create
+- What order (dependencies)
+- Acceptance criteria for each
+- Which can run in parallel
 
-Manager posts the plan as a proposal on its own task.
-Director reviews the plan for completeness against the spec.
-Architect A or B reviews for technical soundness.
+**Synthesis**: Director reads both plans, synthesizes the best, posts as proposal.
+Director + one Architect review for completeness.
 
 **State**: `plan_proposed` → approved → `plan_approved`
 
-Manager creates the actual subtasks → `implementing`
+Manager creates actual subtasks → `implementing`
 
 ---
 
-### Phase 4: IMPLEMENTATION
+### Phase 4: IMPLEMENTATION (Engineer debates, parallel)
 
-**Owner**: Manager (coordinates)
 **State**: `implementing`
 
-Each Engineer subtask follows:
+For each subtask, the Manager creates an Engineer debate pair.
 
-```
-propose_work → (Manager approves) → implement → open PR →
-  → Reviewer reviews PR →
-    → approved → Manager merges
-    → rejected → Engineer fixes → Reviewer re-reviews
-```
+**Engineer debate** (per subtask):
+- Engineer-A and Engineer-B independently propose implementation approaches
+- They debate: which patterns, which libraries, which structure
+- They converge on the approach
+- Manager synthesizes → picks one engineer to execute
 
-Engineers work in parallel where dependencies allow.
-Manager tracks progress and unblocks engineers.
+**Execution** (single agent):
+- The chosen engineer implements the synthesized approach
+- Creates a branch, writes code, runs tests, opens a PR
+- Calls `submit_proof` with PR link
 
-**Reviewer for each PR**:
-- Different agent than the one that wrote the code
-- Checks: code quality, test coverage, matches acceptance criteria, no obvious bugs
-- Must approve before Manager can merge
+**Reviewer debate** (per PR):
+- Reviewer-A and Reviewer-B independently review the PR
+- They debate: is it correct? edge cases? test coverage? code quality?
+- They converge on: approve, or reject with specific feedback
+- Manager synthesizes the review → approves PR or sends back to engineer
+
+If rejected → engineer fixes → reviewers re-debate.
 
 ---
 
-### Phase 5: INTEGRATION REVIEW
+### Phase 5: INTEGRATION REVIEW (Integration debate)
 
-**Owner**: Manager + Architect
 **State**: `integration_review`
 
 After all PRs are merged:
 
-1. Manager verifies:
-   - All subtasks closed
-   - All tests pass
-   - No merge conflicts
+Integration-A and Integration-B independently review the complete codebase:
+- Does it match the ADR?
+- Is the code cohesive across PRs?
+- Are there architectural violations?
+- Any missing pieces?
+- Do all tests pass together?
 
-2. Architect (A or B, Director picks) reviews the complete codebase:
-   - Does the implementation match the ADR?
-   - Are there architectural violations?
-   - Is the code cohesive across PRs?
-   - Any missing pieces?
+They debate and converge on: sign off, or list of gaps.
 
-3. If gaps found:
-   - New subtasks created → back to `implementing`
-
-4. If all good:
-   - Manager posts completion report → Director
+**Synthesis**: Director reads the integration review.
+- If gaps → new subtasks created → back to `implementing`
+- If approved → Phase 6
 
 **State**: `review_complete`
 
 ---
 
-### Phase 6: DELIVERY
+### Phase 6: DELIVERY (Director — no debate, just assembly)
 
-**Owner**: Director
 **State**: `delivering`
 
-Director writes a delivery report:
-- Original request (what CEO asked for)
-- Requirements spec (what was clarified)
-- Architecture decision (what was debated)
-- What was built (list of PRs, files, features)
-- Requirement → deliverable mapping (every requirement traced to code)
-- What was NOT built (explicit non-goals confirmed)
+Director writes the delivery report:
+- Original request
+- Requirements spec
+- Architecture decision
+- What was built (PR links, files, features)
+- Requirement → deliverable mapping
+- What was NOT built (confirmed non-goals)
+- Knowledge base entries created
 
-Director posts as proposal on the top-level task.
+Posts as proposal.
 
-**State**: `delivered`
-
-CEO reviews and closes.
+**State**: `delivered` → CEO reviews and closes
 
 ---
 
@@ -212,137 +279,162 @@ CEO reviews and closes.
 
 | State | Owner | What's happening |
 |-------|-------|-----------------|
-| `clarifying` | Director | Asking CEO questions |
-| `spec_proposed` | Director | Spec posted, waiting for CEO approval |
-| `architecting` | Director | Dual-architect debate in progress |
+| `clarifying` | Director pair | Debating clarifications + spec |
+| `spec_proposed` | Director | Spec posted, waiting for CEO |
+| `architecting` | Architect pair | Debating architecture |
 | `arch_proposed` | Director | ADR posted, waiting for approval |
-| `planning` | Manager | Breaking work into tasks |
-| `plan_proposed` | Manager | Plan posted, waiting for approval |
-| `implementing` | Manager | Engineers working, PRs being reviewed |
-| `integration_review` | Architect | Holistic review of all merged work |
-| `review_complete` | Manager | Reported to Director |
+| `planning` | Manager pair | Debating task plan |
+| `plan_proposed` | Director | Plan posted, waiting for approval |
+| `implementing` | Engineer pairs | Debating + implementing + reviewing PRs |
+| `integration_review` | Integration pair | Debating holistic review |
+| `review_complete` | Director | Integration approved |
 | `delivering` | Director | Writing delivery report |
-| `delivered` | Director | Report posted, waiting for CEO to close |
-| `awaiting_input` | Any | Question escalated, waiting for answer |
+| `delivered` | Director | Report posted, waiting for CEO |
+| `awaiting_input` | Any | Escalated question, waiting for answer |
 
 ---
 
 ## Escalation
 
 ```
-Engineer stuck → Manager
-  Manager can answer → responds via deny_child_proposal with feedback
-  Manager can't answer → escalates to Director
+Engineer debate stuck → Manager synthesizes even without convergence
+Manager debate stuck → Director synthesizes
+Architect debate stuck → Director synthesizes
+Any role has a question → parent debate synthesizes an answer
+Parent can't answer → escalates up the chain
+Director can't answer → asks CEO
 
-Manager stuck → Director
-  Director can answer → responds
-  Director can't answer → asks CEO
-
-CEO is only bothered when:
-  1. Clarifying questions (Phase 1)
+CEO is only bothered for:
+  1. Clarification answers (Phase 1)
   2. Spec approval (Phase 1)
-  3. Architecture approval (Phase 2, if not auto-approve)
+  3. Architecture approval (Phase 2, unless auto-approve)
   4. Delivery acceptance (Phase 6)
   5. Genuine blockers escalated from Director
 ```
 
 ---
 
-## Task tree structure
+## MCP tools for debates
+
+### Debate-specific tools (algo server)
 
 ```
-[Your request] (algorithm: company_v1)
-  ├── [Architect A] (role: architect)
-  ├── [Architect B] (role: architect)
-  ├── [Subtask 1] (role: engineer)
-  │     └── [Review: Subtask 1] (role: reviewer)
-  ├── [Subtask 2] (role: engineer)
-  │     └── [Review: Subtask 2] (role: reviewer)
-  ├── [Subtask 3] (role: engineer)
-  │     └── [Review: Subtask 3] (role: reviewer)
-  └── [Integration Review] (role: architect)
+declare_position(agree_with_other, disagreements, position)
+  → Records agent's current stance
+  → System checks for convergence after both agents declare
+
+read_other_position(debate_partner_task_id)
+  → Reads the other debater's latest position
+  → Convenience wrapper around get_task_comments
 ```
 
-All are children of the top-level task. The Manager is the top-level task's agent.
-The Director is also the top-level task's agent (different phases).
-
----
-
-## Debate round detail
-
-For `debate_rounds = 3`:
-
-```
-Round 1 (parallel):
-  A proposes: "I suggest using Flask with SQLite because..."
-  B proposes: "I suggest using FastAPI with JSON files because..."
-
-Round 2 (parallel, after reading each other):
-  A critiques B: "JSON files won't scale, but I like FastAPI's async. Revised: FastAPI + SQLite"
-  B critiques A: "SQLite is overkill for this, but Flask is simpler. Revised: Flask + JSON with migration path"
-
-Round 3 (parallel, final positions):
-  A: "Final: FastAPI + SQLite. I agree with B on simplicity but disagree on storage."
-  B: "Final: Flask + JSON. I agree with A on async benefits but disagree on complexity."
-
-Director synthesizes: "Using FastAPI (A's choice, B acknowledged async benefits) with JSON storage
-  (B's choice, simpler for MVP) with a documented migration path to SQLite (A's concern addressed)."
-```
-
----
-
-## Knowledge Base (ChromaDB)
-
-The knowledge base is the **company wiki**. Every agent can read and write to it
-at any point during their work via MCP tools. One collection per user, all projects
-together — cross-project learning happens naturally via semantic similarity.
-
-### MCP tools (available to all agents)
+### All agents also have
 
 ```
 query_knowledge(query, limit?)
-  → Searches the entire knowledge base for this user
-  → Returns relevant documents ranked by semantic similarity
-  → Agent can call this multiple times during a single run
+  → Search company knowledge base at any point
 
 store_knowledge(content, work_type, tags?)
-  → Saves knowledge for future reference
-  → work_type: "requirements_spec", "adr", "plan", "implementation_note",
-    "review_feedback", "delivery_report", "clarification", "debug_note"
-  → tags: free-form list for additional context (e.g. ["contact-book", "cli", "python"])
+  → Save to knowledge base for future reference
+
+propose_plan / submit_proof / request_clarification
+  → Standard workflow tools
 ```
-
-### What each role stores
-
-| Role | Stores | Example |
-|------|--------|---------|
-| Director | Requirements specs, clarification Q&A, delivery reports | "Contact book: CRUD CLI, JSON storage, pytest tests" |
-| Architect | ADRs, design rationale, rejected approaches | "Chose FastAPI over Flask because async needed for future websocket support" |
-| Manager | Task plans, what decomposition worked | "CLI projects work best split into: core module, CLI interface, tests, push" |
-| Engineer | Implementation notes, patterns used, gotchas | "JSON file locking: use fcntl.flock on write, no locking on read" |
-| Reviewer | Common issues found, quality patterns | "Repeatedly missing: input validation on CLI args" |
-
-### When to query
-
-Agents are instructed to query the knowledge base:
-- **Before proposing** — check what already exists for this project/domain
-- **When stuck** — search for similar problems and how they were solved
-- **During review** — check if known issues are addressed
-- **When making decisions** — check if this was decided before
-
-### No upfront injection
-
-The spawner does NOT pre-inject knowledge into the prompt. Agents query what they
-need, when they need it. This keeps prompts lean and lets agents make targeted queries
-rather than getting a dump of potentially irrelevant context.
 
 ---
 
-## Quality enforcement
+## Knowledge Base usage
 
-- **No code without approved spec** — Phase 1 gates Phase 3
-- **No code without debated architecture** — Phase 2 gates Phase 3
-- **No merge without peer review** — every PR reviewed by a separate agent
-- **No delivery without integration review** — Architect checks the whole thing
-- **No delivery without requirement mapping** — Director traces every requirement to code
-- **Escalation after 3 failures** — if an engineer fails 3 times, escalate to Manager
+Every role queries and stores knowledge throughout their work:
+
+| Phase | Queries | Stores |
+|-------|---------|--------|
+| Clarification | Past specs for similar projects | Final spec, Q&A |
+| Architecture | Past ADRs, patterns, rejected approaches | ADR, debate summary |
+| Planning | Past plans, what decomposition worked | Plan, task structure |
+| Implementation | Past code patterns, gotchas | Implementation notes |
+| Review | Past review feedback, common issues | Review feedback |
+| Integration | Full project knowledge | Integration findings |
+| Delivery | Everything (for the report) | Delivery report |
+
+---
+
+## Configuration defaults
+
+```json
+{
+  "algorithm": "company_v1",
+  "config": {
+    "debate_rounds": {
+      "director": 0,
+      "architect": 0,
+      "manager": 5,
+      "engineer": 3,
+      "reviewer": 3,
+      "integration": 0
+    },
+    "max_debate_rounds": 10,
+    "debate_timeout_minutes": 30,
+    "auto_approve_architecture": false
+  }
+}
+```
+
+### Quality presets
+
+```
+"quality": "fast"     → all rounds = 1 (minimal debate)
+"quality": "standard" → director=2, architect=3, others=2
+"quality": "thorough" → director=0, architect=0, manager=5, engineer=3, reviewer=3, integration=0
+```
+
+---
+
+## Estimated agent runs
+
+For a 3-subtask project with "thorough" quality:
+
+| Phase | Debates | Rounds (avg) | Runs per debate | Total |
+|-------|---------|-------------|----------------|-------|
+| Director clarification | 1 | 3 | 7 | 7 |
+| Architect | 1 | 4 | 9 | 9 |
+| Manager planning | 1 | 3 | 7 | 7 |
+| 3 Engineer debates | 3 | 2 | 5 each | 15 |
+| 3 Executions | 3 | - | 1 each | 3 |
+| 3 Reviewer debates | 3 | 2 | 5 each | 15 |
+| Integration debate | 1 | 3 | 7 | 7 |
+| Director delivery | 1 | - | 1 | 1 |
+| CEO interactions | - | - | ~3 | 3 |
+| **Total** | | | | **~67** |
+
+At 2-3 minutes per run: **~2-3 hours end-to-end**, running autonomously.
+
+---
+
+## Task tree example
+
+```
+[Build a contact book CLI] (company_v1)
+  ├── [Director-A] (debater, clarification)
+  ├── [Director-B] (debater, clarification)
+  ├── [Architect-A] (debater, architecture)
+  ├── [Architect-B] (debater, architecture)
+  ├── [Engineer: Core module]
+  │     ├── [Engineer-A] (debater)
+  │     ├── [Engineer-B] (debater)
+  │     ├── [Reviewer-A] (debater)
+  │     └── [Reviewer-B] (debater)
+  ├── [Engineer: CLI interface]
+  │     ├── [Engineer-A] (debater)
+  │     ├── [Engineer-B] (debater)
+  │     ├── [Reviewer-A] (debater)
+  │     └── [Reviewer-B] (debater)
+  ├── [Engineer: Tests]
+  │     ├── [Engineer-A] (debater)
+  │     ├── [Engineer-B] (debater)
+  │     ├── [Reviewer-A] (debater)
+  │     └── [Reviewer-B] (debater)
+  └── [Integration Review]
+        ├── [Integration-A] (debater)
+        └── [Integration-B] (debater)
+```
