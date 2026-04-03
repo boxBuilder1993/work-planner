@@ -291,6 +291,53 @@ Director synthesizes: "Using FastAPI (A's choice, B acknowledged async benefits)
 
 ---
 
+## Knowledge Base (ChromaDB)
+
+The knowledge base is the **company wiki**. Every agent can read and write to it
+at any point during their work via MCP tools. One collection per user, all projects
+together — cross-project learning happens naturally via semantic similarity.
+
+### MCP tools (available to all agents)
+
+```
+query_knowledge(query, limit?)
+  → Searches the entire knowledge base for this user
+  → Returns relevant documents ranked by semantic similarity
+  → Agent can call this multiple times during a single run
+
+store_knowledge(content, work_type, tags?)
+  → Saves knowledge for future reference
+  → work_type: "requirements_spec", "adr", "plan", "implementation_note",
+    "review_feedback", "delivery_report", "clarification", "debug_note"
+  → tags: free-form list for additional context (e.g. ["contact-book", "cli", "python"])
+```
+
+### What each role stores
+
+| Role | Stores | Example |
+|------|--------|---------|
+| Director | Requirements specs, clarification Q&A, delivery reports | "Contact book: CRUD CLI, JSON storage, pytest tests" |
+| Architect | ADRs, design rationale, rejected approaches | "Chose FastAPI over Flask because async needed for future websocket support" |
+| Manager | Task plans, what decomposition worked | "CLI projects work best split into: core module, CLI interface, tests, push" |
+| Engineer | Implementation notes, patterns used, gotchas | "JSON file locking: use fcntl.flock on write, no locking on read" |
+| Reviewer | Common issues found, quality patterns | "Repeatedly missing: input validation on CLI args" |
+
+### When to query
+
+Agents are instructed to query the knowledge base:
+- **Before proposing** — check what already exists for this project/domain
+- **When stuck** — search for similar problems and how they were solved
+- **During review** — check if known issues are addressed
+- **When making decisions** — check if this was decided before
+
+### No upfront injection
+
+The spawner does NOT pre-inject knowledge into the prompt. Agents query what they
+need, when they need it. This keeps prompts lean and lets agents make targeted queries
+rather than getting a dump of potentially irrelevant context.
+
+---
+
 ## Quality enforcement
 
 - **No code without approved spec** — Phase 1 gates Phase 3

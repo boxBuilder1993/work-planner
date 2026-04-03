@@ -80,18 +80,8 @@ class AgentSpawner:
         logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s, model=%s]",
                      algorithm.name, task.title, task.id, ai_status, plan.model)
 
-        # Enrich prompt with knowledge
+        # Agents query knowledge themselves via MCP tools — no upfront injection
         system_prompt = plan.prompt
-        if knowledge:
-            try:
-                context = knowledge.query_knowledge(
-                    f"context for: {task.title} {task.description}", limit=3)
-                if context:
-                    system_prompt += "\n\nRelevant knowledge from previous work:\n"
-                    for doc in context:
-                        system_prompt += f"- {doc['document'][:200]}\n"
-            except Exception:
-                logger.warning("Failed to query knowledge base for task %s", task.id)
 
         run = AgentRun(task_id=task.id, algorithm_name=algorithm.name)
         self._active_runs[task.id] = run
