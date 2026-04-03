@@ -58,6 +58,14 @@ async def list_tools() -> list[Tool]:
              inputSchema={"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}),
         Tool(name="get_subtasks", description="Get child tasks",
              inputSchema={"type": "object", "properties": {"parent_task_id": {"type": "string"}}, "required": ["parent_task_id"]}),
+        Tool(name="search_tasks",
+             description="Search all tasks with filters. Find tasks by status, AI status, algorithm, or aiEnabled flag.",
+             inputSchema={"type": "object", "properties": {
+                 "status": {"type": "string", "description": "Filter by task status: PENDING or CLOSED"},
+                 "ai_status": {"type": "string", "description": "Filter by AI status: planning, managing, working, etc."},
+                 "algorithm": {"type": "string", "description": "Filter by algorithm: simple_answer, decompose_and_delegate, decompose_and_delegate_v2, company_v1"},
+                 "ai_enabled": {"type": "boolean", "description": "Filter by aiEnabled flag"},
+             }}),
         Tool(name="get_parent_chain", description="Get ancestor chain from root to task",
              inputSchema={"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}),
         Tool(name="get_task_comments", description="Get comments for a task",
@@ -119,6 +127,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "get_subtasks":
             return _text(json.dumps(client.list_children(arguments["parent_task_id"]), indent=2))
+
+        if name == "search_tasks":
+            results = client.search_tasks(
+                status=arguments.get("status"),
+                ai_status=arguments.get("ai_status"),
+                algorithm=arguments.get("algorithm"),
+                ai_enabled=arguments.get("ai_enabled"),
+            )
+            return _text(json.dumps(results, indent=2))
 
         if name == "get_parent_chain":
             return _text(json.dumps(client.get_breadcrumbs(arguments["task_id"]), indent=2))

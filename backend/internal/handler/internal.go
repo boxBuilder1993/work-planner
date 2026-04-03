@@ -49,6 +49,37 @@ func (h *InternalHandler) setUserIDFromTask(ctx context.Context, taskID string) 
 	return context.WithValue(ctx, auth.UserIDKey, task.UserID), nil
 }
 
+// GET /api/internal/tasks/search?status=...&aiStatus=...&algorithm=...&aiEnabled=true
+func (h *InternalHandler) SearchTasks(w http.ResponseWriter, r *http.Request) {
+	var statusPtr, aiStatusPtr, algorithmPtr *string
+	var aiEnabledPtr *bool
+
+	if s := r.URL.Query().Get("status"); s != "" {
+		statusPtr = &s
+	}
+	if s := r.URL.Query().Get("aiStatus"); s != "" {
+		aiStatusPtr = &s
+	}
+	if s := r.URL.Query().Get("algorithm"); s != "" {
+		algorithmPtr = &s
+	}
+	if s := r.URL.Query().Get("aiEnabled"); s != "" {
+		val := s == "true"
+		aiEnabledPtr = &val
+	}
+
+	tasks, err := h.store.SearchAllTasks(r.Context(), statusPtr, aiStatusPtr, algorithmPtr, aiEnabledPtr)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if tasks == nil {
+		tasks = []model.Task{}
+	}
+
+	writeJSON(w, http.StatusOK, tasks)
+}
+
 // GET /api/internal/tasks?status=...
 func (h *InternalHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	var statusPtr *string
@@ -334,6 +365,10 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.CreateTask(w, r)
 
 	// GET /api/internal/tasks
+	// GET /api/internal/tasks/search?status=...&aiStatus=...&algorithm=...&aiEnabled=true
+	case r.Method == http.MethodGet && path == "/api/internal/tasks/search":
+		h.SearchTasks(w, r)
+
 	case r.Method == http.MethodGet && path == "/api/internal/tasks":
 		h.ListTasks(w, r)
 

@@ -447,6 +447,37 @@ func (s *Store) ListAllRootTasks(ctx context.Context, status *string) ([]model.T
 	return s.scanTasks(ctx, query, args...)
 }
 
+func (s *Store) SearchAllTasks(ctx context.Context, status *string, aiStatus *string, algorithm *string, aiEnabled *bool) ([]model.Task, error) {
+	query := `SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
+		FROM tasks WHERE 1=1`
+	var args []any
+	argIdx := 1
+
+	if status != nil {
+		query += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, *status)
+		argIdx++
+	}
+	if aiEnabled != nil {
+		query += fmt.Sprintf(" AND ai_enabled = $%d", argIdx)
+		args = append(args, *aiEnabled)
+		argIdx++
+	}
+	if aiStatus != nil {
+		query += fmt.Sprintf(" AND props->>'aiStatus' = $%d", argIdx)
+		args = append(args, *aiStatus)
+		argIdx++
+	}
+	if algorithm != nil {
+		query += fmt.Sprintf(" AND props->>'algorithm' = $%d", argIdx)
+		args = append(args, *algorithm)
+		argIdx++
+	}
+	query += " ORDER BY created_at DESC"
+
+	return s.scanTasks(ctx, query, args...)
+}
+
 func (s *Store) ListAllChildren(ctx context.Context, parentID string) ([]model.Task, error) {
 	return s.scanTasks(ctx, `
 		SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at

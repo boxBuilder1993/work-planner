@@ -49,6 +49,19 @@ class ApiClient:
     def list_children(self, task_id: str) -> list[dict]:
         return self._get(f"/api/internal/tasks/{task_id}/children")
 
+    def search_tasks(self, status: str | None = None, ai_status: str | None = None,
+                     algorithm: str | None = None, ai_enabled: bool | None = None) -> list[dict]:
+        params: dict[str, str] = {}
+        if status:
+            params["status"] = status
+        if ai_status:
+            params["aiStatus"] = ai_status
+        if algorithm:
+            params["algorithm"] = algorithm
+        if ai_enabled is not None:
+            params["aiEnabled"] = str(ai_enabled).lower()
+        return self._get("/api/internal/tasks/search", params or None)
+
     def create_task(self, body: dict) -> dict:
         return self._post("/api/internal/tasks", body)
 
