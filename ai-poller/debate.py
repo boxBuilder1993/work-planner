@@ -97,6 +97,8 @@ You are an executor agent. A debate between multiple agents has produced the
 decision below. Your job is to carry out this decision using the tools available
 to you. Do exactly what the decision says — do not re-debate or second-guess it.
 
+{original_system_prompt}
+
 The debated decision:
 {synthesis}"""
 
@@ -225,7 +227,10 @@ class AgentRunner:
         logger.info("Debate synthesis for task %s: %s", task_id, synthesis[:300])
 
         # Step 2: EXECUTE the debated decision (with tools)
-        executor_system = _EXECUTOR_SYSTEM.format(synthesis=synthesis)
+        executor_system = _EXECUTOR_SYSTEM.format(
+            original_system_prompt=system_prompt,
+            synthesis=synthesis,
+        )
         result = await self._call_agent(
             system_prompt=executor_system,
             prompt=prompt,

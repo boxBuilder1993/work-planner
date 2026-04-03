@@ -32,6 +32,7 @@ from algorithm import (
     latest_proposal_denied,
     has_proposal_resolved,
     has_new_user_reply,
+    _is_own_proposal,
 )
 
 logger = logging.getLogger(__name__)
@@ -361,6 +362,23 @@ def _approved_plan_text(ctx: TaskContext) -> str:
     return "(no approved plan found)"
 
 
+def _latest_denial_timestamp(ctx: TaskContext) -> int:
+    """Get the timestamp of the most recent denied proposal, or 0 if none."""
+    denied = find_denied_proposals(ctx)
+    if not denied:
+        return 0
+    return max(c.created_at for c in denied)
+
+
+def _find_approved_after_latest_denial(ctx: TaskContext) -> list:
+    """Find approved proposals that are newer than the most recent denial."""
+    cutoff = _latest_denial_timestamp(ctx)
+    return [
+        c for c in find_approved_proposals(ctx)
+        if c.created_at > cutoff
+    ]
+
+
 def _bump_run_count(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
     return PropsUpdate(self_props={"runCount": ctx.task.props.get("runCount", 0) + 1})
 
@@ -388,13 +406,20 @@ class DecomposeAndDelegateV2(Algorithm):
                 updates["algorithm"] = self.name
 
         # Auto-fix: has children but stuck in planning with no pending proposals
+        # BUT don't auto-fix if the latest proposal was denied (re-planning in progress)
         status = updates.get("aiStatus", ctx.task.props.get("aiStatus", "planning"))
         if ctx.children and status == "planning":
             has_pending = any(
                 c.comment_type == "PROPOSAL" and c.proposal_status == "PENDING"
                 for c in ctx.comments
             )
-            if not has_pending:
+            has_recent_denial = False
+            own_proposals = [c for c in ctx.comments if c.comment_type == "PROPOSAL" and _is_own_proposal(c, ctx)]
+            if own_proposals:
+                latest = max(own_proposals, key=lambda c: c.created_at)
+                has_recent_denial = latest.proposal_status == "DENIED"
+
+            if not has_pending and not has_recent_denial:
                 updates["aiStatus"] = "managing"
 
         return PropsUpdate(self_props=updates) if updates else None
@@ -409,7 +434,8 @@ class DecomposeAndDelegateV2(Algorithm):
         if status == "planning":
             if find_pending_proposals(ctx):
                 return None
-            if find_approved_proposals(ctx):
+            approved = _find_approved_after_latest_denial(ctx)
+            if approved:
                 return self._execute_plan(ctx)
             return self._plan(ctx)
 
@@ -422,11 +448,25 @@ class DecomposeAndDelegateV2(Algorithm):
         if status == "working":
             if find_pending_proposals(ctx):
                 return None
-            if find_approved_proposals(ctx):
+            approved = _find_approved_after_latest_denial(ctx)
+            if approved:
                 return self._worker_execute(ctx)
             return self._worker_propose(ctx)
 
         if status == "work_approved":
+            run_count = ctx.task.props.get("runCount", 0)
+            if run_count > 5:
+                logger.warning("Task %s hit retry cap (runCount=%d), resetting to planning",
+                               ctx.task.id, run_count)
+                plan = self._plan(ctx)
+                original_on_complete = plan.on_complete
+                def on_retry_cap(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
+                    result = original_on_complete(ctx, result_text)
+                    props = result.self_props if result else {}
+                    props["aiStatus"] = "planning"
+                    return PropsUpdate(self_props=props)
+                plan.on_complete = on_retry_cap
+                return plan
             return self._worker_execute(ctx)
 
         if status == "proof_submitted":
