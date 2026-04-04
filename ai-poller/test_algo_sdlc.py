@@ -165,6 +165,15 @@ class TestSDLCRuntimeFallbacks(unittest.TestCase):
         self.assertIsNotNone(plan)
         self.assertIn("Assess the current state and propose your next action.", plan.prompt)
 
+    def test_propose_prompt_encourages_grouped_actions(self):
+        ctx = _make_ctx(_make_task("todo"))
+
+        plan = self.algo.evaluate(ctx, is_running=False)
+
+        self.assertIsNotNone(plan)
+        self.assertIn("coherent batch of related actions", plan.prompt)
+        self.assertIn("Do not create a proposal for a trivial one-step action", plan.prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

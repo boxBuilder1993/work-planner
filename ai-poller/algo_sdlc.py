@@ -100,7 +100,8 @@ Previous activity:
 {history}
 
 Assess the current state and propose your next action.
-Call propose_plan with a specific, single action.
+Call propose_plan with a coherent batch of related actions that together accomplish one meaningful goal.
+Do not create a proposal for a trivial one-step action by itself when it can be grouped with closely related discovery or implementation steps.
 If you need clarification, call request_clarification.
 
 Your task ID is: {task_id}\
