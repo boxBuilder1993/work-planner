@@ -311,7 +311,7 @@ class SDLC(Algorithm):
 
         status = ctx.task.props.get("aiStatus", "propose")
         # Normalize aliases from D&D and other algorithms
-        if status in ("planning", "needs_planning", "plan", "plan_proposed", "work_proposed", "worker_ready", "working"):
+        if status in ("planning", "needs_planning", "plan", "plan_proposed", "work_proposed", "worker_ready", "working", "todo"):
             status = "propose"
         elif status in ("plan_approved", "work_approved", "implementing"):
             status = "execute"
