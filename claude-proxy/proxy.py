@@ -137,13 +137,8 @@ async def _execute_job(job: Job, req: RunRequest) -> None:
             "--disallowedTools",
             "CronCreate", "CronDelete", "CronList",
             "RemoteTrigger",
-            "EnterPlanMode", "ExitPlanMode",
-            "EnterWorktree", "ExitWorktree",
-            "NotebookEdit",
-            "TodoWrite",
-            "AskUserQuestion",
-            "WebSearch", "WebFetch",
             "Agent",
+            "AskUserQuestion",
         ]
 
         if has_algo_config:
