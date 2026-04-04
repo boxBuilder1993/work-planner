@@ -216,12 +216,27 @@ class AgentRunner:
                 algo_tools, max_turns,
             )
 
-        # Step 1: DEBATE (no tools — pure reasoning)
+        # Read-only tools for debaters — they can read but not write
+        read_only_tools: list[str] = [
+            "mcp__workplanner__get_task",
+            "mcp__workplanner__get_subtasks",
+            "mcp__workplanner__get_task_comments",
+            "mcp__workplanner__query_knowledge",
+            "mcp__workplanner__search_tasks",
+            "mcp__github__*",
+            "Read", "Glob", "Grep",
+            "WebSearch", "WebFetch",
+        ]
+
+        # Step 1: DEBATE (read-only tools)
         synthesis = await self._debate(
             prompt=prompt,
             system_prompt=system_prompt,
             model=model,
             task_id=task_id,
+            workplanner_api_url=workplanner_api_url,
+            internal_api_key=internal_api_key,
+            read_only_tools=read_only_tools,
         )
 
         logger.info("Debate synthesis for task %s: %s", task_id, synthesis[:300])
@@ -252,9 +267,14 @@ class AgentRunner:
         system_prompt: str,
         model: str,
         task_id: str,
+        workplanner_api_url: str = "",
+        internal_api_key: str = "",
+        read_only_tools: list[str] | None = None,
     ) -> str:
-        """Run the debate rounds. No tools. Returns the judge's synthesis."""
+        """Run the debate rounds. Debaters get read-only tools. Returns the judge's synthesis."""
 
+        # Debaters get read-only tools, judge gets no tools (just evaluates)
+        debater_tools: tuple[dict, list[str]] = ({}, read_only_tools or [])
         no_tools: tuple[dict, list[str]] = ({}, [])
         start_time = time.time()
         rounds: list[DebateRound] = []
@@ -265,15 +285,19 @@ class AgentRunner:
         result_a, result_b = await asyncio.gather(
             self._call_agent(
                 system_prompt + _DEBATER_A_SUFFIX, prompt,
-                no_tools, model, task_id,
+                debater_tools, model, task_id,
+                workplanner_api_url=workplanner_api_url,
+                internal_api_key=internal_api_key,
             ),
             self._call_agent(
                 system_prompt + _DEBATER_B_SUFFIX, prompt,
-                no_tools, model, task_id,
+                debater_tools, model, task_id,
+                workplanner_api_url=workplanner_api_url,
+                internal_api_key=internal_api_key,
             ),
         )
 
-        # Judge round 1
+        # Judge round 1 — no tools, just evaluates
         judge_result = await self._call_agent(
             _JUDGE_SYSTEM,
             f"Original question:\n{prompt}\n\nAgent A's position:\n{result_a}\n\nAgent B's position:\n{result_b}",
@@ -303,7 +327,7 @@ class AgentRunner:
             logger.info("Debate round %d for task %s", round_num, task_id)
             history = _format_history(rounds)
 
-            # Both agents revise with full history
+            # Both agents revise with full history (read-only tools)
             result_a, result_b = await asyncio.gather(
                 self._call_agent(
                     system_prompt + _DEBATER_A_SUFFIX,
@@ -312,7 +336,9 @@ class AgentRunner:
                         debate_history=history,
                         latest_feedback=verdict.feedback,
                     ),
-                    no_tools, model, task_id,
+                    debater_tools, model, task_id,
+                    workplanner_api_url=workplanner_api_url,
+                    internal_api_key=internal_api_key,
                 ),
                 self._call_agent(
                     system_prompt + _DEBATER_B_SUFFIX,
@@ -321,11 +347,13 @@ class AgentRunner:
                         debate_history=history,
                         latest_feedback=verdict.feedback,
                     ),
-                    no_tools, model, task_id,
+                    debater_tools, model, task_id,
+                    workplanner_api_url=workplanner_api_url,
+                    internal_api_key=internal_api_key,
                 ),
             )
 
-            # Judge evaluates
+            # Judge evaluates — no tools, just evaluates
             history_with_latest = history + f"\n== Round {round_num} ==\nAgent A:\n{result_a}\n\nAgent B:\n{result_b}\n"
             judge_result = await self._call_agent(
                 _JUDGE_SYSTEM,
