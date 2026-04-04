@@ -10,6 +10,7 @@ import logging
 
 from algo_decompose import DecomposeAndDelegate
 from algo_decompose_v2 import DecomposeAndDelegateV2
+from algo_sdlc import SDLC
 from algo_simple_answer import SimpleAnswer
 from algorithm import AlgorithmRegistry, TaskContext
 from api_client import ApiClient
@@ -30,6 +31,7 @@ def build_registry() -> AlgorithmRegistry:
     registry.register(SimpleAnswer())
     registry.register(DecomposeAndDelegate())
     registry.register(DecomposeAndDelegateV2())
+    registry.register(SDLC())
     registry.set_default("simple_answer")
     return registry
 

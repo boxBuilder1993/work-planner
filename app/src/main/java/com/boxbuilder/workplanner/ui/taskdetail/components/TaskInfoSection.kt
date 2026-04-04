@@ -219,7 +219,7 @@ fun TaskInfoEditMode(
         // AI Algorithm picker (only when AI is enabled)
         if (editState.aiEnabled) {
             var algoExpanded by remember { mutableStateOf(false) }
-            val algoOptions = listOf("simple_answer" to "Simple Answer", "decompose_and_delegate" to "D&D (v1)", "decompose_and_delegate_v2" to "D&D v2")
+            val algoOptions = listOf("simple_answer" to "Simple Answer", "decompose_and_delegate" to "D&D (v1)", "decompose_and_delegate_v2" to "D&D v2", "sdlc" to "SDLC")
             val currentLabel = algoOptions.firstOrNull { it.first == editState.aiAlgorithm }?.second ?: "Simple Answer"
             ExposedDropdownMenuBox(
                 expanded = algoExpanded,
