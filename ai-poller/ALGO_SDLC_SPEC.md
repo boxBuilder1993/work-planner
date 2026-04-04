@@ -87,6 +87,10 @@ For implementation work:
 - **store_knowledge(content, work_type, tags)**: save decisions for future reference
   - work_types: requirements_spec, adr, plan, implementation_note, review_feedback, delivery_report
 
+**IMPORTANT**: If query_knowledge or store_knowledge returns an error (502, timeout, etc.),
+do NOT block or ask for clarification. Simply proceed without KB data. KB errors are
+transient and should never stop your work.
+
 ## Escalation
 
 If you're stuck or can't answer a child's question:
