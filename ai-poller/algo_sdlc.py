@@ -49,6 +49,19 @@ _SPEC = (Path(__file__).parent / "ALGO_SDLC_SPEC.md").read_text()
 
 _COMPLETED = frozenset({"done", "proof_submitted", "complete"})
 
+
+def _normalize_status(status: str) -> str:
+    """Normalize persisted legacy aiStatus values into SDLC phases."""
+    if status in ("planning", "needs_planning", "plan", "plan_proposed", "work_proposed", "worker_ready", "working", "todo"):
+        return "propose"
+    if status in ("plan_approved", "work_approved", "implementing", "execute"):
+        return "execute"
+    if status in ("in_progress", "managing", "manage"):
+        return "manage"
+    if status in ("proof_submitted", "complete", "done"):
+        return "done"
+    return status
+
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
@@ -309,16 +322,7 @@ class SDLC(Algorithm):
         if is_running:
             return None
 
-        status = ctx.task.props.get("aiStatus", "propose")
-        # Normalize aliases from D&D and other algorithms
-        if status in ("planning", "needs_planning", "plan", "plan_proposed", "work_proposed", "worker_ready", "working", "todo"):
-            status = "propose"
-        elif status in ("plan_approved", "work_approved", "implementing"):
-            status = "execute"
-        elif status in ("in_progress", "managing"):
-            status = "manage"
-        elif status in ("proof_submitted", "complete"):
-            status = "done"
+        status = _normalize_status(ctx.task.props.get("aiStatus", "propose"))
 
         # The core loop
         if status == "propose":
@@ -346,9 +350,11 @@ class SDLC(Algorithm):
 
         if status == "awaiting_input":
             if has_proposal_resolved(ctx) or has_new_user_reply(ctx):
-                resume = ctx.task.props.get("resumeState", "propose")
+                resume = _normalize_status(ctx.task.props.get("resumeState", "propose"))
                 if resume == "manage":
                     return self._manage(ctx)
+                if resume == "execute":
+                    return self._execute(ctx)
                 return self._propose(ctx)
             return None
 
@@ -399,7 +405,7 @@ class SDLC(Algorithm):
 
         def on_executed(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
             run_count = ctx.task.props.get("runCount", 0) + 1
-            current = ctx.task.props.get("aiStatus")
+            current = _normalize_status(ctx.task.props.get("aiStatus", ""))
             # Mark this approval as consumed
             props: dict = {"runCount": run_count, "lastExecutedApprovalTs": approved_ts}
             if current in ("execute", "propose"):
@@ -450,7 +456,7 @@ class SDLC(Algorithm):
         def on_managed(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
             run_count = ctx.task.props.get("runCount", 0) + 1
             all_done = all(c.status == "CLOSED" for c in ctx.children) if ctx.children else False
-            if all_done and ctx.task.props.get("aiStatus") == "manage":
+            if all_done and _normalize_status(ctx.task.props.get("aiStatus", "")) == "manage":
                 return PropsUpdate(self_props={"aiStatus": "done", "runCount": run_count})
             return PropsUpdate(self_props={"runCount": run_count})
 

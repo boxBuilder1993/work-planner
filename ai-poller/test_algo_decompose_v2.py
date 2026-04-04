@@ -7,8 +7,25 @@ to "managing" after plan execution instead of getting stuck re-planning.
 
 from __future__ import annotations
 
+import sys
+import types
 import unittest
 from unittest.mock import MagicMock, patch
+
+if "claude_agent_sdk" not in sys.modules:
+    sdk = types.ModuleType("claude_agent_sdk")
+
+    def _tool(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
+
+    def _create_sdk_mcp_server(*args, **kwargs):
+        return {"name": kwargs.get("name", "algo")}
+
+    sdk.tool = _tool
+    sdk.create_sdk_mcp_server = _create_sdk_mcp_server
+    sys.modules["claude_agent_sdk"] = sdk
 
 from models import TaskEntity, CommentEntity
 from algorithm import TaskContext, PropsUpdate

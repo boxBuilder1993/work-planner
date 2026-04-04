@@ -41,6 +41,10 @@ def _text(text: str) -> list[TextContent]:
     return [TextContent(type="text", text=text)]
 
 
+def _is_manager_status(status: str) -> bool:
+    return status in {"in_progress", "managing", "manage"}
+
+
 # The tool list is dynamic based on ALGO_TOOLS env var
 # Proxy sets this to control which tools are available per phase
 def _enabled_tools() -> set[str]:
@@ -171,8 +175,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "commentType": "PROPOSAL",
                 "createdBy": task_id,
             })
-            if _ai_status() != "in_progress":
-                client.update_task(task_id, {"props": {"aiStatus": "awaiting_input"}})
+            current_status = _ai_status() or "propose"
+            if not _is_manager_status(current_status):
+                client.update_task(task_id, {"props": {
+                    "aiStatus": "awaiting_input",
+                    "resumeState": current_status,
+                }})
                 return _text("Question posted. Task paused.")
             return _text("Question posted. Continuing management.")
 
@@ -237,8 +245,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 client.update_task(comment["taskId"], {"props": {"aiStatus": "plan_approved"}})
             elif child_status == "work_proposed":
                 client.update_task(comment["taskId"], {"props": {"aiStatus": "work_approved"}})
-            elif child_status == "awaiting_input":
-                client.update_task(comment["taskId"], {"props": {"aiStatus": "needs_planning"}})
             return _text("Proposal approved and child state updated.")
 
         if name == "deny_child_proposal":
@@ -249,8 +255,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 client.update_task(comment["taskId"], {"props": {"aiStatus": "needs_planning"}})
             elif child_status == "work_proposed":
                 client.update_task(comment["taskId"], {"props": {"aiStatus": "worker_ready"}})
-            elif child_status == "awaiting_input":
-                client.update_task(comment["taskId"], {"props": {"aiStatus": "needs_planning"}})
             return _text("Proposal denied. Child state reset.")
 
         if name == "close_subtask":
