@@ -71,6 +71,7 @@ class RunRequest(BaseModel):
     model: str = "claude-sonnet-4-6"
     max_turns: int = 20
     allowed_tools: list[str] = []
+    disallowed_tools: list[str] = []
     algo_tools: list[str] = []
     task_id: str = ""
     ai_status: str = ""
@@ -139,6 +140,7 @@ async def _execute_job(job: Job, req: RunRequest) -> None:
             "RemoteTrigger",
             "Agent",
             "AskUserQuestion",
+            *req.disallowed_tools,
         ]
 
         if has_algo_config:

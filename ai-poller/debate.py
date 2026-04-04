@@ -276,6 +276,17 @@ class AgentRunner:
         # Debaters get read-only tools, judge gets no tools (just evaluates)
         debater_tools: tuple[dict, list[str]] = ({}, read_only_tools or [])
         no_tools: tuple[dict, list[str]] = ({}, [])
+
+        # Block all write tools for debaters
+        debater_blocked: list[str] = [
+            "Write", "Edit", "Bash",
+            "mcp__workplanner__add_comment",
+            "mcp__workplanner__create_task",
+            "mcp__workplanner__run_command",
+            "mcp__workplanner__store_knowledge",
+            "mcp__algo__*",
+            "mcp__git__*",
+        ]
         start_time = time.time()
         rounds: list[DebateRound] = []
         max_rounds = self._config.max_rounds
@@ -288,12 +299,14 @@ class AgentRunner:
                 debater_tools, model, task_id,
                 workplanner_api_url=workplanner_api_url,
                 internal_api_key=internal_api_key,
+                disallowed_tools=debater_blocked,
             ),
             self._call_agent(
                 system_prompt + _DEBATER_B_SUFFIX, prompt,
                 debater_tools, model, task_id,
                 workplanner_api_url=workplanner_api_url,
                 internal_api_key=internal_api_key,
+                disallowed_tools=debater_blocked,
             ),
         )
 
@@ -405,6 +418,7 @@ class AgentRunner:
         internal_api_key: str = "",
         algo_tools: list[str] | None = None,
         max_turns: int = 20,
+        disallowed_tools: list[str] | None = None,
     ) -> str:
         """Single agent call via the proxy."""
         _, allowed_tools = tools if tools else ({}, [])
@@ -415,6 +429,7 @@ class AgentRunner:
             "model": model,
             "max_turns": max_turns,
             "allowed_tools": allowed_tools if allowed_tools else [],
+            "disallowed_tools": disallowed_tools or [],
             "algo_tools": algo_tools or [],
             "task_id": task_id,
             "ai_status": ai_status,
