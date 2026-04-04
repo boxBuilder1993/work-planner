@@ -317,11 +317,16 @@ class SDLC(Algorithm):
             return self._execute(ctx)
 
         if status == "manage":
+            # User comment on this task → re-propose (user wants something changed)
+            if has_new_user_reply(ctx):
+                return self._propose(ctx)
             return self._manage(ctx)
 
         if status == "done":
             if latest_proposal_denied(ctx):
                 return self._reset_to_propose(ctx)  # denied → re-propose
+            if has_new_user_reply(ctx):
+                return self._reset_to_propose(ctx)  # user commented → re-assess
             return None                             # waiting for parent to close
 
         if status == "awaiting_input":
