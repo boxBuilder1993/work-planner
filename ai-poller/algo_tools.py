@@ -102,8 +102,8 @@ async def propose_plan(args: dict[str, Any]) -> dict[str, Any]:
             created_by=task_id,
         )
         logger.info("Comment created: %s on task %s", comment.id, task_id)
-        api.update_task(task_id, props={"aiStatus": "plan_proposed"})
-        logger.info("Task %s aiStatus set to plan_proposed", task_id)
+        api.update_task(task_id, props={"aiStatus": "propose"})
+        logger.info("Task %s aiStatus set to propose", task_id)
         return _result("Plan proposed. Waiting for approval from parent/user.")
     except Exception as e:
         logger.exception("propose_plan failed for task %s", task_id)
@@ -137,7 +137,7 @@ async def request_clarification(args: dict[str, Any]) -> dict[str, Any]:
         )
         # Managers stay in managing/in_progress — they can keep reviewing children
         current = _ai_status()
-        if current in ("in_progress", "managing"):
+        if current in ("in_progress", "managing", "manage"):
             return _result("Question posted to parent. Continuing management duties.")
         api.update_task(task_id, props={"aiStatus": "awaiting_input", "resumeState": current})
         return _result("Question posted. Task paused until parent responds.")
@@ -172,14 +172,14 @@ async def mark_as_planned(args: dict[str, Any]) -> dict[str, Any]:
             text=f"[PLANNING COMPLETE] {args['summary']}",
             created_by=task_id,
         )
-        api.update_task(task_id, props={"aiStatus": "in_progress"})
+        api.update_task(task_id, props={"aiStatus": "manage"})
 
         children = api.list_children(task_id)
         for child in children:
             if not child.props.get("algorithm"):
                 api.update_task(child.id, props={
                     "algorithm": "decompose_and_delegate",
-                    "aiStatus": "needs_planning",
+                    "aiStatus": "propose",
                 })
 
         return _result(f"Task in management mode. {len(children)} child task(s) initialized.")
@@ -211,7 +211,7 @@ async def mark_as_worker_ready(args: dict[str, Any]) -> dict[str, Any]:
             text=f"[WORKER READY] {args['reason']}",
             created_by=task_id,
         )
-        api.update_task(task_id, props={"aiStatus": "worker_ready"})
+        api.update_task(task_id, props={"aiStatus": "propose"})
         return _result("Task marked as worker_ready.")
     except Exception as e:
         return _result(f"Error: {e}")
@@ -246,7 +246,7 @@ async def propose_work(args: dict[str, Any]) -> dict[str, Any]:
             comment_type="PROPOSAL",
             created_by=task_id,
         )
-        api.update_task(task_id, props={"aiStatus": "work_proposed"})
+        api.update_task(task_id, props={"aiStatus": "propose"})
         return _result("Work proposal posted. Waiting for approval before executing.")
     except Exception as e:
         return _result(f"Error: {e}")
@@ -339,12 +339,8 @@ async def approve_child_proposal(args: dict[str, Any]) -> dict[str, Any]:
         # Transition child's state based on what was approved
         child_task = api.get_task(comment.task_id)
         child_status = child_task.props.get("aiStatus", "")
-        if child_status == "plan_proposed":
-            api.update_task(comment.task_id, props={"aiStatus": "plan_approved"})
-        elif child_status == "work_proposed":
-            api.update_task(comment.task_id, props={"aiStatus": "work_approved"})
-        elif child_status == "awaiting_input":
-            api.update_task(comment.task_id, props={"aiStatus": "needs_planning"})
+        # Approval → child executes (regardless of previous status)
+        api.update_task(comment.task_id, props={"aiStatus": "execute"})
         return _result(f"Proposal approved and child state updated.")
     except Exception as e:
         return _result(f"Error: {e}")
@@ -374,12 +370,8 @@ async def deny_child_proposal(args: dict[str, Any]) -> dict[str, Any]:
         comment = api.deny_proposal(args["proposal_id"], feedback=args["feedback"])
         child_task = api.get_task(comment.task_id)
         child_status = child_task.props.get("aiStatus", "")
-        if child_status == "plan_proposed":
-            api.update_task(comment.task_id, props={"aiStatus": "needs_planning"})
-        elif child_status == "work_proposed":
-            api.update_task(comment.task_id, props={"aiStatus": "worker_ready"})
-        elif child_status == "awaiting_input":
-            api.update_task(comment.task_id, props={"aiStatus": "needs_planning"})
+        # Denial → child re-proposes (regardless of previous status)
+        api.update_task(comment.task_id, props={"aiStatus": "propose"})
         return _result(f"Proposal denied with feedback. Child state reset.")
     except Exception as e:
         return _result(f"Error: {e}")
@@ -447,7 +439,7 @@ async def request_rework(args: dict[str, Any]) -> dict[str, Any]:
     try:
         api = _client()
         api.deny_proposal(args["proposal_id"], feedback=args["feedback"])
-        api.update_task(args["subtask_id"], props={"aiStatus": "worker_ready"})
+        api.update_task(args["subtask_id"], props={"aiStatus": "propose"})
         return _result(f"Subtask sent back for rework.")
     except Exception as e:
         return _result(f"Error: {e}")
