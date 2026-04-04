@@ -274,9 +274,12 @@ class SDLC(Algorithm):
     def initialize(self, ctx: TaskContext) -> PropsUpdate | None:
         updates: dict = {}
 
-        if not ctx.task.props.get("aiStatus"):
+        current_status = ctx.task.props.get("aiStatus", "")
+        if not current_status:
             updates["aiStatus"] = "propose"
             updates["algorithm"] = self.name
+        elif current_status in ("planning", "needs_planning", "plan"):
+            updates["aiStatus"] = "propose"
 
         if ctx.parent:
             parent_algo = ctx.parent.props.get("algorithm", "simple_answer")
@@ -304,6 +307,9 @@ class SDLC(Algorithm):
             return None
 
         status = ctx.task.props.get("aiStatus", "propose")
+        # Normalize aliases
+        if status in ("planning", "needs_planning", "plan"):
+            status = "propose"
 
         # The core loop
         if status == "propose":
