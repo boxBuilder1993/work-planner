@@ -87,6 +87,7 @@ fun TaskInfoViewMode(
                 val algoLabel = when (task.props["algorithm"]?.toString()) {
                     "decompose_and_delegate" -> "AI: D&D v1"
                     "decompose_and_delegate_v2" -> "AI: D&D v2"
+                    "sdlc" -> "AI: SDLC"
                     else -> "AI: Simple"
                 }
                 Surface(
