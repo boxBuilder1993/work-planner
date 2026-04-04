@@ -45,6 +45,19 @@ def _is_manager_status(status: str) -> bool:
     return status in {"in_progress", "managing", "manage"}
 
 
+def _find_matching_pending_proposal(task_id: str, text: str) -> dict[str, Any] | None:
+    client = _api()
+    for comment in client.list_comments(task_id):
+        if (
+            comment.get("commentType") == "PROPOSAL"
+            and comment.get("proposalStatus") == "PENDING"
+            and comment.get("createdBy") == task_id
+            and comment.get("text") == text
+        ):
+            return comment
+    return None
+
+
 # The tool list is dynamic based on ALGO_TOOLS env var
 # Proxy sets this to control which tools are available per phase
 def _enabled_tools() -> set[str]:
@@ -161,8 +174,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         task_id = _task_id()
 
         if name == "propose_plan":
+            text = f"[PLAN PROPOSAL] {arguments['plan']}"
+            if _find_matching_pending_proposal(task_id, text):
+                return _text("Existing pending plan already posted. Waiting for approval.")
             client.create_comment(task_id, {
-                "text": f"[PLAN PROPOSAL] {arguments['plan']}",
+                "text": text,
                 "commentType": "PROPOSAL",
                 "createdBy": task_id,
             })
@@ -170,8 +186,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return _text("Plan proposed. Waiting for approval.")
 
         if name == "request_clarification":
+            text = f"[QUESTION] {arguments['question']}"
+            if _find_matching_pending_proposal(task_id, text):
+                return _text("Existing pending question already posted. Waiting for input.")
             client.create_comment(task_id, {
-                "text": f"[QUESTION] {arguments['question']}",
+                "text": text,
                 "commentType": "PROPOSAL",
                 "createdBy": task_id,
             })

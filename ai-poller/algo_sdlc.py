@@ -351,6 +351,8 @@ class SDLC(Algorithm):
         if status == "awaiting_input":
             if has_proposal_resolved(ctx) or has_new_user_reply(ctx):
                 resume = _normalize_status(ctx.task.props.get("resumeState", "propose"))
+                if resume == "awaiting_input":
+                    resume = "propose"
                 if resume == "manage":
                     return self._manage(ctx)
                 if resume == "execute":

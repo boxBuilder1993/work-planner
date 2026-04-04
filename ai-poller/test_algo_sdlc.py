@@ -64,13 +64,14 @@ def _make_comment(
     status: str,
     text: str = "[PLAN PROPOSAL] do the thing",
     created_at: int = 1000,
+    created_by: str = "task-001",
 ) -> CommentEntity:
     return CommentEntity(
         id=f"comment-{created_at}",
         taskId="task-001",
         text=text,
         commentType="PROPOSAL",
-        createdBy="task-001",
+        createdBy=created_by,
         proposalStatus=status,
         createdAt=created_at,
         updatedAt=created_at,
@@ -143,6 +144,26 @@ class TestSDLCRuntimeFallbacks(unittest.TestCase):
 
         self.assertIsNotNone(plan)
         self.assertIn("You are the manager of task:", plan.prompt)
+
+    def test_awaiting_input_resume_uses_same_own_proposal_rule(self):
+        approved = _make_comment(status="APPROVED", created_by="claude-agent")
+        task = _make_task("awaiting_input", extra_props={"resumeState": "propose"})
+        ctx = _make_ctx(task, comments=[approved])
+
+        plan = self.algo.evaluate(ctx, is_running=False)
+
+        self.assertIsNotNone(plan)
+        self.assertIn("Assess the current state and propose your next action.", plan.prompt)
+
+    def test_awaiting_input_bad_resume_state_falls_back_to_propose(self):
+        approved = _make_comment(status="APPROVED")
+        task = _make_task("awaiting_input", extra_props={"resumeState": "awaiting_input"})
+        ctx = _make_ctx(task, comments=[approved])
+
+        plan = self.algo.evaluate(ctx, is_running=False)
+
+        self.assertIsNotNone(plan)
+        self.assertIn("Assess the current state and propose your next action.", plan.prompt)
 
 
 if __name__ == "__main__":

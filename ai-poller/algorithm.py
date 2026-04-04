@@ -187,7 +187,7 @@ def has_proposal_resolved(ctx: TaskContext) -> bool:
     proposals = [
         c for c in ctx.comments
         if c.comment_type == "PROPOSAL"
-        and c.created_by == ctx.task.id
+        and _is_own_proposal(c, ctx)
     ]
     if not proposals:
         return False
