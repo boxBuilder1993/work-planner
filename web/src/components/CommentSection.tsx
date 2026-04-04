@@ -233,6 +233,40 @@ export default function CommentSection({ taskId }: Props) {
     <div className={styles.section}>
       <h3 className={styles.header}>Comments ({comments.length})</h3>
 
+      {/* Reply indicator */}
+      {replyingToComment && (
+        <div className={styles.replyIndicator}>
+          <span>
+            Replying to: &ldquo;{replyingToComment.text.slice(0, 60)}
+            {replyingToComment.text.length > 60 ? '...' : ''}&rdquo;
+          </span>
+          <button
+            className={styles.cancelReply}
+            onClick={() => setReplyingTo(null)}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      <div className={styles.addForm}>
+        <input
+          className={styles.addInput}
+          type="text"
+          placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <button
+          className={styles.sendButton}
+          onClick={handleAdd}
+          disabled={!text.trim()}
+        >
+          Send
+        </button>
+      </div>
+
       {/* Deny feedback modal */}
       {denyCommentId && (
         <div className={styles.denyModal}>
@@ -281,40 +315,6 @@ export default function CommentSection({ taskId }: Props) {
             onDeny={handleDenyStart}
           />
         ))}
-      </div>
-
-      {/* Reply indicator */}
-      {replyingToComment && (
-        <div className={styles.replyIndicator}>
-          <span>
-            Replying to: &ldquo;{replyingToComment.text.slice(0, 60)}
-            {replyingToComment.text.length > 60 ? '...' : ''}&rdquo;
-          </span>
-          <button
-            className={styles.cancelReply}
-            onClick={() => setReplyingTo(null)}
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      <div className={styles.addForm}>
-        <input
-          className={styles.addInput}
-          type="text"
-          placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <button
-          className={styles.sendButton}
-          onClick={handleAdd}
-          disabled={!text.trim()}
-        >
-          Send
-        </button>
       </div>
     </div>
   );

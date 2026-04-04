@@ -64,22 +64,6 @@ fun CommentSection(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        comments.forEach { comment ->
-            if (comment.isProposal) {
-                ProposalCard(
-                    comment = comment,
-                    onLongClick = { commentToDelete = comment },
-                    onApprove = { onApproveProposal(comment.id) },
-                    onDeny = { proposalToDeny = comment }
-                )
-            } else {
-                CommentCard(
-                    comment = comment,
-                    onLongClick = { commentToDelete = comment }
-                )
-            }
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -101,6 +85,22 @@ fun CommentSection(
                 }
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+            }
+        }
+
+        comments.forEach { comment ->
+            if (comment.isProposal) {
+                ProposalCard(
+                    comment = comment,
+                    onLongClick = { commentToDelete = comment },
+                    onApprove = { onApproveProposal(comment.id) },
+                    onDeny = { proposalToDeny = comment }
+                )
+            } else {
+                CommentCard(
+                    comment = comment,
+                    onLongClick = { commentToDelete = comment }
+                )
             }
         }
     }
