@@ -55,6 +55,8 @@ class RunRequest(BaseModel):
     prompt: str
     system_prompt: str = ""
     model: str = "claude-sonnet-4-6"
+    preferred_runtime: str = ""
+    fallback_runtimes: list[dict[str, str]] = []
     max_turns: int = 20
     allowed_tools: list[str] = []
     disallowed_tools: list[str] = []
@@ -308,7 +310,7 @@ class ClaudeRuntime:
     name = "claude"
 
     async def run(self, req: RunRequest) -> RuntimeOutcome:
-        model = _resolve_claude_model(req.model)
+        model = _resolve_claude_model(req.model) if not req.preferred_runtime else req.model
         config_path = Path(tempfile.mktemp(suffix=".json", prefix="claude-mcp-", dir="/tmp"))
         system_prompt_path: str | None = None
 
@@ -398,7 +400,7 @@ class CodexRuntime:
     name = "codex"
 
     async def run(self, req: RunRequest) -> RuntimeOutcome:
-        model = _resolve_codex_model(req.model)
+        model = _resolve_codex_model(req.model) if not req.preferred_runtime else req.model
         codex_home: Path | None = None
         output_path = Path(tempfile.mktemp(suffix=".txt", prefix="codex-last-", dir="/tmp"))
 
@@ -470,7 +472,30 @@ class RuntimeRouter:
     def __init__(self, runtimes: dict[str, RuntimeAdapter]) -> None:
         self._runtimes = runtimes
 
-    def candidates(self) -> list[RuntimeAdapter]:
+    def candidates(self, req: RunRequest) -> list[tuple[RuntimeAdapter, RunRequest]]:
+        if req.preferred_runtime:
+            ordered = [{"runtime": req.preferred_runtime, "model": req.model}, *req.fallback_runtimes]
+            selected_recommended: list[tuple[RuntimeAdapter, RunRequest]] = []
+            for candidate in ordered:
+                name = candidate.get("runtime", "").strip()
+                if not name:
+                    continue
+                runtime = self._runtimes.get(name)
+                if runtime is None:
+                    continue
+                if _runtime_is_degraded(name):
+                    logger.warning("Skipping degraded runtime %s", name)
+                    continue
+                selected_recommended.append((
+                    runtime,
+                    req.model_copy(update={
+                        "preferred_runtime": name,
+                        "model": candidate.get("model", req.model),
+                        "fallback_runtimes": [],
+                    }),
+                ))
+            return selected_recommended
+
         selected: list[RuntimeAdapter] = []
         for name in RUNTIME_ORDER:
             runtime = self._runtimes.get(name)
@@ -480,12 +505,12 @@ class RuntimeRouter:
                 logger.warning("Skipping degraded runtime %s", name)
                 continue
             selected.append(runtime)
-        return selected
+        return [(runtime, req) for runtime in selected]
 
     async def run(self, req: RunRequest, job: Job) -> RuntimeOutcome:
         failures: list[RuntimeFailure] = []
-        for runtime in self.candidates():
-            outcome = await runtime.run(req)
+        for runtime, runtime_req in self.candidates(req):
+            outcome = await runtime.run(runtime_req)
             job.attempts.append(f"{outcome.runtime}:{outcome.model}")
             if isinstance(outcome, RuntimeSuccess):
                 return outcome

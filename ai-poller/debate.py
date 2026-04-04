@@ -199,6 +199,8 @@ class AgentRunner:
         system_prompt: str,
         tools: tuple[dict, list[str]],
         model: str = "claude-sonnet-4-6",
+        runtime: str = "",
+        fallbacks: list[dict[str, str]] | None = None,
         task_id: str = "",
         ai_status: str = "",
         workplanner_api_url: str = "",
@@ -212,8 +214,14 @@ class AgentRunner:
             # Single agent — no debate, just execute directly
             return await self._call_agent(
                 system_prompt, prompt, tools, model,
-                task_id, ai_status, workplanner_api_url, internal_api_key,
-                algo_tools, max_turns,
+                runtime=runtime,
+                fallbacks=fallbacks,
+                task_id=task_id,
+                ai_status=ai_status,
+                workplanner_api_url=workplanner_api_url,
+                internal_api_key=internal_api_key,
+                algo_tools=algo_tools,
+                max_turns=max_turns,
             )
 
         # Read-only tools for debaters — they can read but not write
@@ -233,6 +241,8 @@ class AgentRunner:
             prompt=prompt,
             system_prompt=system_prompt,
             model=model,
+            runtime=runtime,
+            fallbacks=fallbacks,
             task_id=task_id,
             workplanner_api_url=workplanner_api_url,
             internal_api_key=internal_api_key,
@@ -251,6 +261,8 @@ class AgentRunner:
             prompt=prompt,
             tools=tools,
             model=model,
+            runtime=runtime,
+            fallbacks=fallbacks,
             task_id=task_id,
             ai_status=ai_status,
             workplanner_api_url=workplanner_api_url,
@@ -266,6 +278,8 @@ class AgentRunner:
         prompt: str,
         system_prompt: str,
         model: str,
+        runtime: str,
+        fallbacks: list[dict[str, str]] | None,
         task_id: str,
         workplanner_api_url: str = "",
         internal_api_key: str = "",
@@ -296,14 +310,20 @@ class AgentRunner:
         result_a, result_b = await asyncio.gather(
             self._call_agent(
                 system_prompt + _DEBATER_A_SUFFIX, prompt,
-                debater_tools, model, task_id,
+                debater_tools, model,
+                task_id=task_id,
+                runtime=runtime,
+                fallbacks=fallbacks,
                 workplanner_api_url=workplanner_api_url,
                 internal_api_key=internal_api_key,
                 disallowed_tools=debater_blocked,
             ),
             self._call_agent(
                 system_prompt + _DEBATER_B_SUFFIX, prompt,
-                debater_tools, model, task_id,
+                debater_tools, model,
+                task_id=task_id,
+                runtime=runtime,
+                fallbacks=fallbacks,
                 workplanner_api_url=workplanner_api_url,
                 internal_api_key=internal_api_key,
                 disallowed_tools=debater_blocked,
@@ -314,7 +334,10 @@ class AgentRunner:
         judge_result = await self._call_agent(
             _JUDGE_SYSTEM,
             f"Original question:\n{prompt}\n\nAgent A's position:\n{result_a}\n\nAgent B's position:\n{result_b}",
-            no_tools, model, task_id,
+            no_tools, model,
+            task_id=task_id,
+            runtime=runtime,
+            fallbacks=fallbacks,
         )
         verdict = _parse_verdict(judge_result)
         rounds.append(DebateRound(
@@ -349,7 +372,10 @@ class AgentRunner:
                         debate_history=history,
                         latest_feedback=verdict.feedback,
                     ),
-                    debater_tools, model, task_id,
+                    debater_tools, model,
+                    task_id=task_id,
+                    runtime=runtime,
+                    fallbacks=fallbacks,
                     workplanner_api_url=workplanner_api_url,
                     internal_api_key=internal_api_key,
                 ),
@@ -360,7 +386,10 @@ class AgentRunner:
                         debate_history=history,
                         latest_feedback=verdict.feedback,
                     ),
-                    debater_tools, model, task_id,
+                    debater_tools, model,
+                    task_id=task_id,
+                    runtime=runtime,
+                    fallbacks=fallbacks,
                     workplanner_api_url=workplanner_api_url,
                     internal_api_key=internal_api_key,
                 ),
@@ -371,7 +400,10 @@ class AgentRunner:
             judge_result = await self._call_agent(
                 _JUDGE_SYSTEM,
                 f"Original question:\n{prompt}\n\n{history_with_latest}",
-                no_tools, model, task_id,
+                no_tools, model,
+                task_id=task_id,
+                runtime=runtime,
+                fallbacks=fallbacks,
             )
             verdict = _parse_verdict(judge_result)
             rounds.append(DebateRound(
@@ -402,7 +434,10 @@ class AgentRunner:
                 debate_history=history,
                 rounds=len(rounds),
             ),
-            no_tools, model, task_id,
+            no_tools, model,
+            task_id=task_id,
+            runtime=runtime,
+            fallbacks=fallbacks,
         )
         return _parse_verdict(force_result).synthesis
 
@@ -413,6 +448,8 @@ class AgentRunner:
         tools: tuple[dict, list[str]],
         model: str,
         task_id: str = "",
+        runtime: str = "",
+        fallbacks: list[dict[str, str]] | None = None,
         ai_status: str = "",
         workplanner_api_url: str = "",
         internal_api_key: str = "",
@@ -427,6 +464,8 @@ class AgentRunner:
             "prompt": prompt,
             "system_prompt": system_prompt,
             "model": model,
+            "preferred_runtime": runtime,
+            "fallback_runtimes": fallbacks or [],
             "max_turns": max_turns,
             "allowed_tools": allowed_tools if allowed_tools else [],
             "disallowed_tools": disallowed_tools or [],

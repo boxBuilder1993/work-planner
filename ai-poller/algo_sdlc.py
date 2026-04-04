@@ -24,6 +24,7 @@ from algorithm import (
     TaskContext,
     SpawnPlan,
     PropsUpdate,
+    RuntimeRecommendation,
     format_comment_history,
     find_approved_proposals,
     find_denied_proposals,
@@ -48,6 +49,24 @@ _SPEC = (Path(__file__).parent / "ALGO_SDLC_SPEC.md").read_text()
 # ---------------------------------------------------------------------------
 
 _COMPLETED = frozenset({"done", "proof_submitted", "complete"})
+
+_STRONG_MODELS = [
+    RuntimeRecommendation(runtime="codex", model="gpt-5-codex"),
+    RuntimeRecommendation(runtime="claude", model="claude-sonnet-4-6"),
+]
+
+_CHEAP_MODELS = [
+    RuntimeRecommendation(runtime="codex", model="gpt-5-codex-mini"),
+    RuntimeRecommendation(runtime="claude", model="claude-sonnet-4-6"),
+]
+
+
+def _with_recommendations(plan: SpawnPlan, recommendations: list[RuntimeRecommendation]) -> SpawnPlan:
+    if recommendations:
+        plan.runtime = recommendations[0].runtime
+        plan.model = recommendations[0].model
+        plan.fallbacks = recommendations[1:]
+    return plan
 
 
 def _normalize_status(status: str) -> str:
@@ -375,12 +394,12 @@ class SDLC(Algorithm):
             history=history,
             task_id=ctx.task.id,
         )
-        return SpawnPlan(
+        return _with_recommendations(SpawnPlan(
             prompt=prompt,
             tools=_propose_tools(),
             on_complete=_bump,
             metadata={"algo_tools": ["propose_plan", "request_clarification"]},
-        )
+        ), _STRONG_MODELS)
 
     # -- Execute -----------------------------------------------------------
 
@@ -423,7 +442,7 @@ class SDLC(Algorithm):
                     return PropsUpdate(self_props=props)
             return PropsUpdate(self_props=props)
 
-        return SpawnPlan(
+        return _with_recommendations(SpawnPlan(
             prompt=prompt,
             tools=_execute_tools(),
             on_complete=on_executed,
@@ -431,7 +450,7 @@ class SDLC(Algorithm):
                 "mark_as_planned", "mark_as_worker_ready",
                 "submit_proof", "request_clarification",
             ]},
-        )
+        ), _CHEAP_MODELS)
 
     # -- Manage ------------------------------------------------------------
 
@@ -462,7 +481,7 @@ class SDLC(Algorithm):
                 return PropsUpdate(self_props={"aiStatus": "done", "runCount": run_count})
             return PropsUpdate(self_props={"runCount": run_count})
 
-        return SpawnPlan(
+        return _with_recommendations(SpawnPlan(
             prompt=prompt,
             tools=_manage_tools(),
             on_complete=on_managed,
@@ -471,7 +490,7 @@ class SDLC(Algorithm):
                 "close_subtask", "request_rework",
                 "submit_proof", "propose_plan", "request_clarification",
             ]},
-        )
+        ), _STRONG_MODELS)
 
     # -- Helpers -----------------------------------------------------------
 

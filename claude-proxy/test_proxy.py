@@ -69,7 +69,27 @@ class ProxyRoutingTests(unittest.TestCase):
 
         proxy._degrade_runtime("claude", "rate_limit", "too many requests")
         router = proxy.RuntimeRouter({"claude": DummyRuntime("claude"), "codex": DummyRuntime("codex")})
-        self.assertEqual([rt.name for rt in router.candidates()], ["codex"])
+        req = proxy.RunRequest(prompt="x")
+        self.assertEqual([rt.name for rt, _ in router.candidates(req)], ["codex"])
+
+    def test_router_uses_explicit_runtime_recommendations(self):
+        class DummyRuntime:
+            def __init__(self, name: str):
+                self.name = name
+
+            async def run(self, req):
+                raise AssertionError("should not run")
+
+        router = proxy.RuntimeRouter({"claude": DummyRuntime("claude"), "codex": DummyRuntime("codex")})
+        req = proxy.RunRequest(
+            prompt="x",
+            model="gpt-5-codex",
+            preferred_runtime="codex",
+            fallback_runtimes=[{"runtime": "claude", "model": "claude-sonnet-4-6"}],
+        )
+        candidates = router.candidates(req)
+        self.assertEqual([rt.name for rt, _ in candidates], ["codex", "claude"])
+        self.assertEqual([candidate_req.model for _, candidate_req in candidates], ["gpt-5-codex", "claude-sonnet-4-6"])
 
 
 if __name__ == "__main__":

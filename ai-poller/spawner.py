@@ -104,8 +104,8 @@ class AgentSpawner:
             )
 
         ai_status = task.props.get("aiStatus", "?")
-        logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s, model=%s]",
-                     algorithm.name, task.title, task.id, ai_status, plan.model)
+        logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s, runtime=%s, model=%s]",
+                     algorithm.name, task.title, task.id, ai_status, plan.runtime or "default", plan.model)
 
         run = AgentRun(task_id=task.id, algorithm_name=algorithm.name)
         self._active_runs[task.id] = run
@@ -137,6 +137,8 @@ class AgentSpawner:
                 system_prompt=plan.prompt,
                 tools=plan.tools,
                 model=plan.model,
+                runtime=plan.runtime,
+                fallbacks=[{"runtime": rec.runtime, "model": rec.model} for rec in plan.fallbacks],
                 task_id=task_id,
                 ai_status=task.props.get("aiStatus", ""),
                 workplanner_api_url=self._public_api_url,

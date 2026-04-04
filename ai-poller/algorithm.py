@@ -40,6 +40,12 @@ class PropsUpdate:
     child_props: dict[str, Any] | None = None  # applied to newly created children
 
 
+@dataclass(frozen=True)
+class RuntimeRecommendation:
+    runtime: str
+    model: str
+
+
 @dataclass
 class SpawnPlan:
     """Everything the poller needs to run an agent."""
@@ -47,6 +53,8 @@ class SpawnPlan:
     tools: tuple[dict[str, Any], list[str]]  # (mcp_servers, allowed_tools)
     on_complete: Callable[[TaskContext, str], PropsUpdate | None]
     model: str = "claude-sonnet-4-6"  # subscription-based, no per-token cost
+    runtime: str = ""
+    fallbacks: list[RuntimeRecommendation] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
