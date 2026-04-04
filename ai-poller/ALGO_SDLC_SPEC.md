@@ -64,6 +64,8 @@ For implementation work:
   - `railway up` — deploy
 - **gh**: GitHub CLI for PRs, issues, releases
   - `gh pr create`, `gh pr merge`, `gh pr view`, `gh pr checks`
+- **git**: version control
+  - `git clone`, `git checkout -b`, `git add`, `git commit`, `git push`
 
 ### Knowledge Base
 - **query_knowledge(query)**: search past decisions, patterns, and context across all projects
