@@ -259,8 +259,11 @@ def _bump(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
 
 
 def _has_fresh_approval(ctx: TaskContext) -> bool:
+    """Check for approved proposals newer than the latest denial AND not yet executed."""
     denied = find_denied_proposals(ctx)
-    cutoff = max((c.created_at for c in denied), default=0)
+    denial_cutoff = max((c.created_at for c in denied), default=0)
+    executed_cutoff = ctx.task.props.get("lastExecutedApprovalTs", 0)
+    cutoff = max(denial_cutoff, executed_cutoff)
     return any(c.created_at > cutoff for c in find_approved_proposals(ctx))
 
 
@@ -379,19 +382,32 @@ class SDLC(Algorithm):
 
         is_top_level = ctx.task.parent_id is None
 
+        # Track which approval we're executing so we don't re-execute it
+        approved = _approved_action(ctx)
+        approved_ts = 0
+        denied = find_denied_proposals(ctx)
+        cutoff = max((c.created_at for c in denied), default=0)
+        fresh = [c for c in find_approved_proposals(ctx) if c.created_at > cutoff]
+        if fresh:
+            approved_ts = max(c.created_at for c in fresh)
+
         def on_executed(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
             run_count = ctx.task.props.get("runCount", 0) + 1
             current = ctx.task.props.get("aiStatus")
+            # Mark this approval as consumed
+            props: dict = {"runCount": run_count, "lastExecutedApprovalTs": approved_ts}
             if current in ("execute", "propose"):
                 if ctx.children:
-                    return PropsUpdate(self_props={"aiStatus": "manage", "runCount": run_count})
-                # Top-level tasks must delegate — force back to propose
+                    props["aiStatus"] = "manage"
+                    return PropsUpdate(self_props=props)
                 if is_top_level and current != "done":
                     logger.info("Top-level task %s tried to implement directly — forcing back to propose", ctx.task.id)
-                    return PropsUpdate(self_props={"aiStatus": "propose", "runCount": run_count})
+                    props["aiStatus"] = "propose"
+                    return PropsUpdate(self_props=props)
                 if current != "done":
-                    return PropsUpdate(self_props={"aiStatus": "propose", "runCount": run_count})
-            return PropsUpdate(self_props={"runCount": run_count})
+                    props["aiStatus"] = "propose"
+                    return PropsUpdate(self_props=props)
+            return PropsUpdate(self_props=props)
 
         return SpawnPlan(
             prompt=prompt,
