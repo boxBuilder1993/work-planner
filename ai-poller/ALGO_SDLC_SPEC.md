@@ -49,6 +49,27 @@ For implementation work:
 6. Execute: merge PR, run any post-merge steps, verify
 7. Submit proof with evidence
 
+## Available Tools
+
+### MCP Tools
+- **workplanner**: get_task, get_subtasks, get_task_comments, create_task, add_comment, search_tasks, query_knowledge, store_knowledge
+- **algo**: propose_plan, request_clarification, mark_as_planned, submit_proof, approve_child_proposal, deny_child_proposal, close_subtask (available based on current phase)
+- **github**: read/write repos, create/review/merge PRs, check CI status
+- **git**: branch, commit, push, diff, log
+
+### CLI Tools (via Bash)
+- **railway**: deploy services, view logs, set env variables
+  - `railway logs --service <name>` — view service logs
+  - `railway variables --set "KEY=VALUE" --service <name>` — set env vars
+  - `railway up` — deploy
+- **gh**: GitHub CLI for PRs, issues, releases
+  - `gh pr create`, `gh pr merge`, `gh pr view`, `gh pr checks`
+
+### Knowledge Base
+- **query_knowledge(query)**: search past decisions, patterns, and context across all projects
+- **store_knowledge(content, work_type, tags)**: save decisions for future reference
+  - work_types: requirements_spec, adr, plan, implementation_note, review_feedback, delivery_report
+
 ## Escalation
 
 If you're stuck or can't answer a child's question:
