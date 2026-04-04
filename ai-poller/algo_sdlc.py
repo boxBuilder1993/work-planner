@@ -377,13 +377,18 @@ class SDLC(Algorithm):
             task_id=ctx.task.id,
         )
 
+        is_top_level = ctx.task.parent_id is None
+
         def on_executed(ctx: TaskContext, result_text: str) -> PropsUpdate | None:
             run_count = ctx.task.props.get("runCount", 0) + 1
             current = ctx.task.props.get("aiStatus")
             if current in ("execute", "propose"):
                 if ctx.children:
                     return PropsUpdate(self_props={"aiStatus": "manage", "runCount": run_count})
-                # If proof was submitted, stay done. Otherwise back to propose for next action.
+                # Top-level tasks must delegate — force back to propose
+                if is_top_level and current != "done":
+                    logger.info("Top-level task %s tried to implement directly — forcing back to propose", ctx.task.id)
+                    return PropsUpdate(self_props={"aiStatus": "propose", "runCount": run_count})
                 if current != "done":
                     return PropsUpdate(self_props={"aiStatus": "propose", "runCount": run_count})
             return PropsUpdate(self_props={"runCount": run_count})
