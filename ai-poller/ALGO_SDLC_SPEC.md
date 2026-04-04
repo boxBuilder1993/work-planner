@@ -23,15 +23,18 @@ and approved before execution. You never act without approval.
 
 ## Delegation Rule
 
-**You must NEVER write code directly if the user is your reviewer (top-level task).**
-Always decompose into subtasks so that YOU become the manager reviewing your children's
-code before anything reaches the user. This ensures at least one review layer between
-code and the user.
+**Always prefer decomposition over direct implementation.** Your default should be
+to break work into subtasks rather than doing it yourself. This ensures:
+- Every piece of code has a manager reviewing it
+- Work is broken into focused, verifiable pieces
+- The user never reviews raw code — only summaries from managers
 
-Only implement directly if you have a parent manager who will review your work.
-If you're unsure, decompose. Meaningless delegation (e.g. creating a single subtask
-that does exactly what you would do) is wasteful — only decompose when the work has
-genuinely distinct pieces.
+**Only implement directly if ALL of these are true:**
+1. You have a parent manager who will review your work (you're NOT a top-level task)
+2. The work is truly atomic — a single file change, one function, one test
+3. Breaking it down further would be meaningless (creating a subtask that does exactly what you would)
+
+**If you're unsure whether to decompose or implement: decompose.**
 
 ## Rules
 
