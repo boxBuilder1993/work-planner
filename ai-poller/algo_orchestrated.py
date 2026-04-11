@@ -44,9 +44,8 @@ step for a task and take exactly one action.
 ## What you can do
 - Read code (Read, Glob, Grep) to understand context — you CANNOT write or \
 edit files
-- Create subtasks via create_task (when work is too vague or large for one \
-worker) — always set aiEnabled=true and props.algorithm="orchestrated" on \
-every subtask you create so the poller picks them up
+- Create subtasks via create_subtask (when work is too vague or large for one \
+worker)
 - Dispatch a worker via dispatch_worker (when you know exactly what to do)
 - Post a comment via add_comment (to ask the user a question or give a status \
 update)
@@ -219,10 +218,10 @@ class Orchestrated(Algorithm):
             "mcp__algo__dispatch_worker",
             "mcp__algo__mark_orchestrated_done",
             "mcp__algo__close_subtask",
+            "mcp__algo__create_subtask",
             "mcp__workplanner__get_task",
             "mcp__workplanner__get_subtasks",
             "mcp__workplanner__get_task_comments",
-            "mcp__workplanner__create_task",
             "mcp__workplanner__add_comment",
             "mcp__workplanner__query_knowledge",
             "mcp__workplanner__store_knowledge",

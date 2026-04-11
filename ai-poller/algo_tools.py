@@ -638,10 +638,44 @@ async def mark_orchestrated_done(args: dict[str, Any]) -> dict[str, Any]:
         return _result(f"Error: {e}")
 
 
+@tool(
+    "create_subtask",
+    "Create a subtask under the current task. Always sets aiEnabled=true and "
+    "algorithm=orchestrated so the poller picks it up automatically.",
+    {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Subtask title"},
+            "description": {"type": "string", "description": "Subtask description"},
+            "priority": {"type": "integer", "description": "Priority 1-5 (1=urgent)"},
+        },
+        "required": ["title"],
+    },
+)
+async def create_subtask(args: dict[str, Any]) -> dict[str, Any]:
+    task_id = _task_id()
+    try:
+        api = _client()
+        body: dict[str, Any] = {
+            "title": args["title"],
+            "parentId": task_id,
+            "aiEnabled": True,
+            "props": {"algorithm": "orchestrated"},
+        }
+        if args.get("description"):
+            body["description"] = args["description"]
+        if args.get("priority") is not None:
+            body["priority"] = args["priority"]
+        result = api.create_task(body)
+        return _result(f"Subtask created: {result.get('id')} — {args['title']}")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
 def create_orchestrator_mcp() -> Any:
     return create_sdk_mcp_server(
         name="algo", version="1.0.0",
-        tools=[dispatch_worker, mark_orchestrated_done, close_subtask],
+        tools=[dispatch_worker, mark_orchestrated_done, close_subtask, create_subtask],
     )
 
 
