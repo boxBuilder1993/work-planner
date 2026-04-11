@@ -308,6 +308,10 @@ class SDLC(Algorithm):
     name = "sdlc"
 
     def initialize(self, ctx: TaskContext) -> PropsUpdate | None:
+        return None
+
+    def _old_initialize(self, ctx: TaskContext) -> PropsUpdate | None:
+        """Disabled — kept for reference."""
         updates: dict = {}
 
         current_status = ctx.task.props.get("aiStatus", "")
@@ -339,6 +343,10 @@ class SDLC(Algorithm):
         return PropsUpdate(self_props=updates) if updates else None
 
     def evaluate(self, ctx: TaskContext, is_running: bool) -> SpawnPlan | None:
+        logger.info("Task '%s': SDLC algorithm is disabled, skipping", ctx.task.title)
+        return None
+
+    def _old_evaluate(self, ctx: TaskContext, is_running: bool) -> SpawnPlan | None:
         if is_running:
             return None
 
