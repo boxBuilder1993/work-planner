@@ -101,12 +101,21 @@ class PollCycleProcessor:
                 else:
                     children_comments[child.id] = self._api.list_comments(child.id)
 
+            # Build full ancestor chain (root → parent) from in-memory map
+            ancestors: list = []
+            cursor = parent
+            while cursor:
+                ancestors.append(cursor)
+                cursor = tasks_by_id.get(cursor.parent_id) if cursor.parent_id else None
+            ancestors.reverse()
+
             ctx = TaskContext(
                 task=task,
                 comments=comments,
                 children=children,
                 parent=parent,
                 children_comments=children_comments,
+                ancestors=ancestors,
             )
 
             # Look up algorithm

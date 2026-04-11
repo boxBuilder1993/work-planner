@@ -27,6 +27,8 @@ class TaskContext:
     parent: TaskEntity | None
     # Comments on each child task, keyed by child task ID
     children_comments: dict[str, list[CommentEntity]] = field(default_factory=dict)
+    # Full ancestor chain from root down to parent (excludes the task itself)
+    ancestors: list[TaskEntity] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
