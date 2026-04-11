@@ -127,7 +127,10 @@ def _build_context(ctx: TaskContext, recovery: bool = False) -> str:
     parts.append(f"Task ID: {ctx.task.id}")
 
     if ctx.parent:
-        parts.append(f'Parent: "{ctx.parent.title}" (id: {ctx.parent.id})')
+        parent_line = f'Parent: "{ctx.parent.title}" (id: {ctx.parent.id})'
+        if ctx.parent.description:
+            parent_line += f'\nParent description: {ctx.parent.description}'
+        parts.append(parent_line)
     else:
         parts.append("This is a top-level task — the user reviews your output.")
 
