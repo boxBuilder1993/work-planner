@@ -97,22 +97,25 @@ class AgentSpawner:
         # evaluate() would have seen zero pending proposals and returned a plan.
         # Re-checking fresh comments here prevents spawning a second planning
         # agent while one is already in-flight or has just posted its proposal.
-        try:
-            fresh_comments = self._api.list_comments(task.id)
-            if any(
-                c.comment_type == "PROPOSAL" and c.proposal_status == "PENDING"
-                for c in fresh_comments
-            ):
-                logger.info(
-                    "Task %s: fresh comment check found existing PENDING proposal — skipping spawn",
+        # Skip this check for orchestrated plans — the orchestrator manages its
+        # own state via aiStatus and is not gated by proposal approval.
+        if not plan.is_orchestrator:
+            try:
+                fresh_comments = self._api.list_comments(task.id)
+                if any(
+                    c.comment_type == "PROPOSAL" and c.proposal_status == "PENDING"
+                    for c in fresh_comments
+                ):
+                    logger.info(
+                        "Task %s: fresh comment check found existing PENDING proposal — skipping spawn",
+                        task.id,
+                    )
+                    return
+            except Exception:
+                logger.warning(
+                    "Task %s: failed fresh pending-proposal check; proceeding with spawn",
                     task.id,
                 )
-                return
-        except Exception:
-            logger.warning(
-                "Task %s: failed fresh pending-proposal check; proceeding with spawn",
-                task.id,
-            )
 
         ai_status = task.props.get("aiStatus", "?")
         logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s, runtime=%s, model=%s]",
