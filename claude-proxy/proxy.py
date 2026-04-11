@@ -43,7 +43,7 @@ RUNTIME_ORDER = tuple(
 
 # Cheap defaults. Requests can still override them via explicit env vars, but the
 # proxy maps the poller's old expensive defaults to these cheaper models.
-CLAUDE_DEFAULT_MODEL = os.environ.get("CLAUDE_DEFAULT_MODEL", "claude-3-5-haiku-latest")
+CLAUDE_DEFAULT_MODEL = os.environ.get("CLAUDE_DEFAULT_MODEL", "claude-haiku-4-5")
 CODEX_DEFAULT_MODEL = os.environ.get("CODEX_DEFAULT_MODEL", "gpt-5-codex-mini")
 
 # ai-poller still sends Claude-specific models today; remap those to the cheaper

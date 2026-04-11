@@ -56,6 +56,7 @@ class SpawnPlan:
     runtime: str = ""
     fallbacks: list[RuntimeRecommendation] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    is_orchestrator: bool = False
 
 
 # ---------------------------------------------------------------------------

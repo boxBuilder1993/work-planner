@@ -28,6 +28,7 @@ class AgentRun:
     algorithm_name: str
     started_at: float = field(default_factory=time.time)
     task_handle: asyncio.Task | None = None
+    is_orchestrator: bool = False
 
 
 class AgentSpawner:
@@ -60,11 +61,21 @@ class AgentSpawner:
     def active_count(self) -> int:
         return len(self._active_runs)
 
+    @property
+    def active_orchestrators(self) -> int:
+        return sum(1 for r in self._active_runs.values() if r.is_orchestrator)
+
     def is_running(self, task_id: str) -> bool:
         return task_id in self._active_runs
 
     def can_spawn(self) -> bool:
         return self.active_count < self._config.agent_limits.max_global_agents
+
+    def can_spawn_orchestrator(self) -> bool:
+        return (
+            self.can_spawn()
+            and self.active_orchestrators < self._config.agent_limits.max_orchestrators
+        )
 
     async def spawn(
         self,
@@ -107,7 +118,7 @@ class AgentSpawner:
         logger.info("Spawning %s agent for task '%s' (%s) [aiStatus=%s, runtime=%s, model=%s]",
                      algorithm.name, task.title, task.id, ai_status, plan.runtime or "default", plan.model)
 
-        run = AgentRun(task_id=task.id, algorithm_name=algorithm.name)
+        run = AgentRun(task_id=task.id, algorithm_name=algorithm.name, is_orchestrator=plan.is_orchestrator)
         self._active_runs[task.id] = run
         run.task_handle = asyncio.create_task(
             self._run_agent(task, plan, algorithm, knowledge)

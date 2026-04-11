@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 class AgentLimits:
     """Caps on concurrent agent activity."""
     max_global_agents: int = 10
+    max_orchestrators: int = 1
     max_tasks_per_agent: int = 3
     max_turns_per_run: int = 20
 
@@ -91,6 +92,7 @@ def load_config(env_path: str | None = None) -> Config:
         poll_interval_seconds=_int("POLL_INTERVAL_SECONDS", 60),
         agent_limits=AgentLimits(
             max_global_agents=_int("MAX_GLOBAL_AGENTS", 20),
+            max_orchestrators=_int("MAX_ORCHESTRATORS", 1),
             max_tasks_per_agent=_int("MAX_TASKS_PER_AGENT", 3),
             max_turns_per_run=_int("MAX_TURNS_PER_RUN", 10),
         ),

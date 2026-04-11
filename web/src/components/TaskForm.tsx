@@ -188,6 +188,7 @@ export default function TaskForm({
             }
           >
             <option value="simple_answer">Simple Answer</option>
+            <option value="orchestrated">Orchestrated</option>
             <option value="decompose_and_delegate">Decompose &amp; Delegate (v1)</option>
             <option value="decompose_and_delegate_v2">Decompose &amp; Delegate v2</option>
             <option value="sdlc">SDLC</option>

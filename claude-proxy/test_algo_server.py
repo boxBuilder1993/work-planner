@@ -115,6 +115,18 @@ class AlgoServerIdempotencyTests(unittest.TestCase):
         self.assertEqual(algo_server.api.created_comments, [])
         self.assertEqual(algo_server.api.updated_tasks, [])
 
+    def test_request_clarification_clamps_awaiting_input_resume_state(self):
+        os.environ["ALGO_AI_STATUS"] = "awaiting_input"
+        algo_server.api = _DummyClient()
+
+        result = asyncio.run(algo_server.call_tool("request_clarification", {"question": "next?"}))
+
+        self.assertEqual(result[0].text, "Question posted. Task paused.")
+        self.assertEqual(
+            algo_server.api.updated_tasks,
+            [("task-123", {"props": {"aiStatus": "awaiting_input", "resumeState": "propose"}})],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

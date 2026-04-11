@@ -10,6 +10,7 @@ import logging
 
 from algo_decompose import DecomposeAndDelegate
 from algo_decompose_v2 import DecomposeAndDelegateV2
+from algo_orchestrated import Orchestrated
 from algo_sdlc import SDLC
 from algo_simple_answer import SimpleAnswer
 from algorithm import AlgorithmRegistry, TaskContext
@@ -32,6 +33,7 @@ def build_registry() -> AlgorithmRegistry:
     registry.register(DecomposeAndDelegate())
     registry.register(DecomposeAndDelegateV2())
     registry.register(SDLC())
+    registry.register(Orchestrated())
     registry.set_default("simple_answer")
     return registry
 
@@ -139,6 +141,15 @@ class PollCycleProcessor:
                     logger.warning("Failed to init knowledge base for user %s", task.user_id)
 
             ai_status = task.props.get("aiStatus", "?")
+
+            # Orchestrator plans are subject to their own concurrent limit
+            if plan.is_orchestrator and not self._spawner.can_spawn_orchestrator():
+                logger.info(
+                    "Task '%s' [%s/%s]: orchestrator limit reached, deferring",
+                    task.title, algo_name, ai_status,
+                )
+                continue
+
             logger.info("Task '%s' [%s/%s]: spawning agent", task.title, algo_name, ai_status)
             await self._spawner.spawn(task, plan, algorithm, knowledge)
             actions += 1

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import time
 from typing import Any
 
 from claude_agent_sdk import tool, create_sdk_mcp_server
@@ -525,4 +526,127 @@ def create_simple_answer_mcp() -> Any:
     return create_sdk_mcp_server(
         name="algo", version="1.0.0",
         tools=[submit_answer, request_clarification],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Orchestrated algorithm tools
+# ---------------------------------------------------------------------------
+
+@tool(
+    "dispatch_worker",
+    "Dispatch a worker agent to execute specific instructions on this task. "
+    "Only call when you know exactly what needs to be done — specific files, "
+    "commands, and deliverables. The worker will run on the next poll cycle "
+    "and post its result as a comment.",
+    {
+        "type": "object",
+        "properties": {
+            "instructions": {
+                "type": "string",
+                "description": (
+                    "Clear, specific instructions for the worker: what to implement, "
+                    "which files/repos, what commands to run, what the deliverable is."
+                ),
+            },
+        },
+        "required": ["instructions"],
+    },
+)
+async def dispatch_worker(args: dict[str, Any]) -> dict[str, Any]:
+    task_id = _task_id()
+    try:
+        api = _client()
+        instructions = args["instructions"]
+        api.create_comment(
+            task_id=task_id,
+            text=f"[WORKER DISPATCHED] {instructions}",
+            created_by=task_id,
+        )
+        api.update_task(task_id, props={
+            "aiStatus": "worker_running",
+            "workerInstructions": instructions,
+            "workerStartedAt": int(time.time() * 1000),
+        })
+        return _result("Worker dispatched. It will execute on the next poll cycle and post its result as a comment.")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
+@tool(
+    "report_complete",
+    "Report that your work is done. Posts your result as a comment and hands "
+    "control back to the orchestrator.",
+    {
+        "type": "object",
+        "properties": {
+            "result": {
+                "type": "string",
+                "description": (
+                    "What you did and evidence: PR links, file paths, "
+                    "command output, test results, or a description of what was done. "
+                    "If blocked, describe what you tried and where you got stuck."
+                ),
+            },
+        },
+        "required": ["result"],
+    },
+)
+async def report_complete(args: dict[str, Any]) -> dict[str, Any]:
+    task_id = _task_id()
+    try:
+        api = _client()
+        api.create_comment(
+            task_id=task_id,
+            text=f"[WORKER COMPLETE] {args['result']}",
+            created_by=task_id,
+        )
+        api.update_task(task_id, props={"aiStatus": "orchestrating"})
+        return _result("Result posted. Orchestrator will review on the next cycle.")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
+@tool(
+    "mark_orchestrated_done",
+    "Mark this task as complete. Posts a summary for the user to review. "
+    "The user (or parent task) will close the task when satisfied.",
+    {
+        "type": "object",
+        "properties": {
+            "summary": {
+                "type": "string",
+                "description": "What was accomplished, with links to PRs, commits, or other evidence.",
+            },
+        },
+        "required": ["summary"],
+    },
+)
+async def mark_orchestrated_done(args: dict[str, Any]) -> dict[str, Any]:
+    task_id = _task_id()
+    try:
+        api = _client()
+        api.create_comment(
+            task_id=task_id,
+            text=f"[COMPLETE] {args['summary']}",
+            comment_type="PROPOSAL",
+            created_by=task_id,
+        )
+        api.update_task(task_id, props={"aiStatus": "done"})
+        return _result("Task marked complete. Waiting for user review.")
+    except Exception as e:
+        return _result(f"Error: {e}")
+
+
+def create_orchestrator_mcp() -> Any:
+    return create_sdk_mcp_server(
+        name="algo", version="1.0.0",
+        tools=[dispatch_worker, mark_orchestrated_done, close_subtask],
+    )
+
+
+def create_orchestrated_worker_mcp() -> Any:
+    return create_sdk_mcp_server(
+        name="algo", version="1.0.0",
+        tools=[report_complete],
     )

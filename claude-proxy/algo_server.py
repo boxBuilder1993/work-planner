@@ -195,6 +195,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "createdBy": task_id,
             })
             current_status = _ai_status() or "propose"
+            if current_status == "awaiting_input":
+                current_status = "propose"
             if not _is_manager_status(current_status):
                 client.update_task(task_id, {"props": {
                     "aiStatus": "awaiting_input",
