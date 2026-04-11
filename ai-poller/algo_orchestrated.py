@@ -45,7 +45,8 @@ step for a task and take exactly one action.
 - Read code (Read, Glob, Grep) to understand context — you CANNOT write or \
 edit files
 - Create subtasks via create_task (when work is too vague or large for one \
-worker)
+worker) — always set aiEnabled=true and props.algorithm="orchestrated" on \
+every subtask you create so the poller picks them up
 - Dispatch a worker via dispatch_worker (when you know exactly what to do)
 - Post a comment via add_comment (to ask the user a question or give a status \
 update)
