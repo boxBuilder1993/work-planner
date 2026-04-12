@@ -1,14 +1,67 @@
 services:
+
   postgres:
     image: postgres:16-alpine
-    ports:
-      - "5432:5432"
+    restart: unless-stopped
     environment:
       POSTGRES_DB: workplanner
       POSTGRES_USER: workplanner
       POSTGRES_PASSWORD: workplanner
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workplanner"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  chromadb:
+    image: chromadb/chroma:1.0.7
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /chroma/chroma
+    volumes:
+      - chromadata:/chroma/chroma
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://workplanner:workplanner@postgres:5432/workplanner?sslmode=disable
+      MIGRATIONS_DIR: /migrations
+      PORT: "8080"
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8080:8080"
+
+  ai-poller:
+    build: ./ai-poller
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - chromadb
+    env_file: .env
+    environment:
+      WORKPLANNER_API_URL: http://backend:8080
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: "8000"
+      CLAUDE_PROXY_URL: http://host.docker.internal:8400
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_API_URL: http://localhost:8080
+        VITE_GOOGLE_CLIENT_ID: ""
+    restart: unless-stopped
+    ports:
+      - "3000:80"
 
 volumes:
   pgdata:
+  chromadata:

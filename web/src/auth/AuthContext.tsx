@@ -5,7 +5,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import { requestGoogleSignIn } from './GoogleAuth';
+import { requestLocalSignIn } from './LocalAuth';
 
 interface AuthState {
   token: string | null;
@@ -17,7 +17,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  signIn: () => Promise<void>;
+  signIn: (email: string, name: string) => Promise<void>;
   signOut: () => void;
   getToken: () => string;
 }
@@ -75,10 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   });
 
-  const signIn = useCallback(async () => {
+  const signIn = useCallback(async (email: string, name: string) => {
     setState((s) => ({ ...s, isLoading: true, error: null }));
     try {
-      const { token, user } = await requestGoogleSignIn();
+      const { token, user } = await requestLocalSignIn(email, name);
       saveSession(token, { name: user.name, email: user.email });
       setState({
         token,

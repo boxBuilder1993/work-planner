@@ -60,6 +60,11 @@ type AuthGoogleRequest struct {
 	RefreshToken string `json:"refreshToken,omitempty"`
 }
 
+type AuthLocalRequest struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
 type AuthResponse struct {
 	Token string `json:"token"`
 	User  User   `json:"user"`

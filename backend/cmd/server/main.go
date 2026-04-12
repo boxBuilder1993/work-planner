@@ -84,6 +84,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Public routes.
+	mux.HandleFunc("/auth/local", authHandler.HandleLocalAuth)
 	mux.HandleFunc("/auth/google", authHandler.HandleGoogleAuth)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
