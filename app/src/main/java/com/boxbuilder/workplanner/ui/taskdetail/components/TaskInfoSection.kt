@@ -85,6 +85,7 @@ fun TaskInfoViewMode(
         if (task.aiEnabled) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val algoLabel = when (task.props["algorithm"]?.toString()) {
+                    "orchestrated" -> "AI: Orchestrated"
                     "decompose_and_delegate" -> "AI: D&D v1"
                     "decompose_and_delegate_v2" -> "AI: D&D v2"
                     "sdlc" -> "AI: SDLC"
@@ -220,7 +221,7 @@ fun TaskInfoEditMode(
         // AI Algorithm picker (only when AI is enabled)
         if (editState.aiEnabled) {
             var algoExpanded by remember { mutableStateOf(false) }
-            val algoOptions = listOf("simple_answer" to "Simple Answer", "decompose_and_delegate" to "D&D (v1)", "decompose_and_delegate_v2" to "D&D v2", "sdlc" to "SDLC")
+            val algoOptions = listOf("simple_answer" to "Simple Answer", "orchestrated" to "Orchestrated", "decompose_and_delegate" to "D&D (v1)", "decompose_and_delegate_v2" to "D&D v2", "sdlc" to "SDLC")
             val currentLabel = algoOptions.firstOrNull { it.first == editState.aiAlgorithm }?.second ?: "Simple Answer"
             ExposedDropdownMenuBox(
                 expanded = algoExpanded,
