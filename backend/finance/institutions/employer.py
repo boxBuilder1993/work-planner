@@ -21,6 +21,10 @@ from backend.finance.products.espp import (
     ESPPState,
     PurchaseDateSchedule,
 )
+from backend.finance.products.health_insurance_80d import (
+    HealthInsurance80DProduct,
+    HealthInsurance80DState,
+)
 from backend.finance.products.stock import StockState
 from backend.finance.core.product import ProductType
 from backend.finance.tax import compute_annual_tax
@@ -236,6 +240,7 @@ class Employer:
         tax_refund_products: Optional[Dict] = None,
         espp_products: Optional[List[ESPPProduct]] = None,
         stock_states: Optional[Dict[str, StockState]] = None,
+        health_insurance_80d_products: Optional[List[HealthInsurance80DProduct]] = None,
     ):
         """
         Initialize employer.
@@ -245,6 +250,7 @@ class Employer:
             tax_refund_products: Optional dictionary of tax refund products by salary_id
             espp_products: Optional list of ESPP products linked to salaries
             stock_states: Optional dictionary of StockState by stock_id for ESPP share purchases
+            health_insurance_80d_products: Optional list of Health Insurance 80D products linked to salaries
         """
         self.employee_states: Dict[str, SalaryState] = {}
         self.product_states: Dict[str, ProductState] = {}
@@ -252,8 +258,10 @@ class Employer:
         self.tax_refund_products: Dict[str, any] = tax_refund_products or {}  # Tax refund products by salary_id
         self.espp_products: List[ESPPProduct] = espp_products or []  # ESPP products linked to salaries
         self.stock_states: Dict[str, StockState] = stock_states or {}  # Stock states for ESPP share purchases
+        self.health_insurance_80d_products: List[HealthInsurance80DProduct] = health_insurance_80d_products or []  # Health Insurance 80D products linked to salaries
         self.refund_states: Dict[str, TaxRefundState] = {}  # Track refund states by tax_refund_id
         self.espp_states: Dict[str, ESPPState] = {}  # Track ESPP states by espp_id
+        self.health_insurance_80d_states: Dict[str, HealthInsurance80DState] = {}  # Track 80D states by product_id
 
     def _get_fy_dates(self, current_date: date) -> Tuple[date, date]:
         """
@@ -312,6 +320,21 @@ class Employer:
             List of ESPPProduct instances linked to the salary
         """
         return [espp for espp in self.espp_products if espp.config.salary_id == salary_id]
+
+    def _find_80d_for_salary(self, salary_id: str) -> Optional[HealthInsurance80DProduct]:
+        """
+        Find Health Insurance 80D product linked to a given salary.
+
+        Args:
+            salary_id: The salary product ID
+
+        Returns:
+            HealthInsurance80DProduct if found, None otherwise
+        """
+        for hp in self.health_insurance_80d_products:
+            if hp.config.salary_id == salary_id:
+                return hp
+        return None
 
     def _is_purchase_date(
         self, d: date, purchase_dates: List[PurchaseDateSchedule]
@@ -440,6 +463,30 @@ class Employer:
         state.employee_pf = pf_contrib.employee_pf
         state.employer_pf = pf_contrib.employer_pf
 
+        # Process 80D health insurance deduction
+        computed_deduction_80d = deduction_80d
+        if salary_id:
+            hp_product = self._find_80d_for_salary(salary_id)
+            if hp_product and tax_regime.lower() == "old":
+                # Compute allowed deduction from the product
+                computed_deduction_80d = hp_product.compute_allowed_deduction(
+                    regime=tax_regime
+                )
+
+                # Initialize or get existing 80D state
+                if hp_product.config.id not in self.health_insurance_80d_states:
+                    self.health_insurance_80d_states[hp_product.config.id] = (
+                        hp_product.initial_state()
+                    )
+
+                # Update the state with computed deduction
+                state_80d = self.health_insurance_80d_states[hp_product.config.id]
+                state_80d.update_deduction(computed_deduction_80d)
+                state_80d.date = day
+            elif tax_regime.lower() == "new":
+                # No deduction in NEW regime
+                computed_deduction_80d = Decimal("0")
+
         # Calculate TDS
         monthly_tds = _compute_monthly_tds_with_bonus(
             current_date=day,
@@ -531,7 +578,7 @@ class Employer:
             product_id=product_id,
             basic_annual=basic_annual,
             deduction_80c=deduction_80c,
-            deduction_80d=deduction_80d,
+            deduction_80d=computed_deduction_80d,
             hra_exemption=hra_exemption,
             tax_regime=tax_regime,
         )
