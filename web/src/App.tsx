@@ -5,6 +5,21 @@ import SignIn from './components/SignIn';
 import TaskList from './components/TaskList';
 import TaskDetail from './components/TaskDetail';
 import Settings from './components/Settings';
+import ChatPanel from './components/ChatPanel';
+import styles from './components/AppLayout.module.css';
+
+function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className={styles.container}>
+      <div className={styles.content}>
+        {children}
+      </div>
+      <div className={styles.chatPanelWrapper}>
+        <ChatPanel />
+      </div>
+    </div>
+  );
+}
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -21,7 +36,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  return <>{children}</>;
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function AuthRedirect() {
