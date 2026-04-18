@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTasks } from '../hooks/useTasks';
+import { ProfileList } from './ProfileList';
 import styles from './Settings.module.css';
 
 export default function Settings() {
@@ -36,6 +37,12 @@ export default function Settings() {
               {auth.userEmail ?? ''}
             </span>
           </div>
+        </div>
+
+        {/* Profiles card */}
+        <div className={styles.card}>
+          <h2 className={styles.cardTitle}>Profiles</h2>
+          <ProfileList />
         </div>
 
         {/* Sign Out */}

@@ -5,19 +5,24 @@ import SignIn from './components/SignIn';
 import TaskList from './components/TaskList';
 import TaskDetail from './components/TaskDetail';
 import Settings from './components/Settings';
+import { SimulationForm } from './components/SimulationForm';
+import { Header } from './components/Header';
 import ChatPanel from './components/ChatPanel';
 import styles from './components/AppLayout.module.css';
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={styles.container}>
-      <div className={styles.content}>
-        {children}
+    <>
+      <Header />
+      <div className={styles.container}>
+        <div className={styles.content}>
+          {children}
+        </div>
+        <div className={styles.chatPanelWrapper}>
+          <ChatPanel />
+        </div>
       </div>
-      <div className={styles.chatPanelWrapper}>
-        <ChatPanel />
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -90,6 +95,14 @@ function AppRoutes() {
         element={
           <AuthGuard>
             <Settings />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/simulate"
+        element={
+          <AuthGuard>
+            <SimulationForm />
           </AuthGuard>
         }
       />
