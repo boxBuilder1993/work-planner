@@ -113,8 +113,8 @@ async def propose_plan(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "request_clarification",
-    "Ask your parent (or the user) a question. Posts a PROPOSAL on your own task "
-    "and pauses until it's answered. Your parent will see it and respond.",
+    "Ask your parent (or the user) a question. Posts a COMMENT on your own task "
+    "and pauses until the user replies. Resumes automatically when a reply is posted.",
     {
         "type": "object",
         "properties": {
@@ -133,7 +133,7 @@ async def request_clarification(args: dict[str, Any]) -> dict[str, Any]:
         api.create_comment(
             task_id=task_id,
             text=f"[QUESTION] {args['question']}",
-            comment_type="PROPOSAL",
+            comment_type="COMMENT",
             created_by=task_id,
         )
         # Managers stay in managing/in_progress — they can keep reviewing children
