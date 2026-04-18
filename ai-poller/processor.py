@@ -34,7 +34,7 @@ def build_registry() -> AlgorithmRegistry:
     registry.register(DecomposeAndDelegateV2())
     registry.register(SDLC())
     registry.register(Orchestrated())
-    registry.set_default("simple_answer")
+    registry.set_default("orchestrated")
     return registry
 
 
@@ -119,7 +119,7 @@ class PollCycleProcessor:
             )
 
             # Look up algorithm
-            algo_name = task.props.get("algorithm", "simple_answer")
+            algo_name = task.props.get("algorithm", "orchestrated")
             algorithm = self._registry.get(algo_name)
 
             # Let the algorithm handle its own initialization
