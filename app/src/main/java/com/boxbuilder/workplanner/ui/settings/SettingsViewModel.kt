@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.boxbuilder.workplanner.auth.GoogleAuthManager
 import com.boxbuilder.workplanner.data.TaskRepository
 import com.boxbuilder.workplanner.data.api.AuthInterceptor
+import com.boxbuilder.workplanner.ui.theme.ThemeMode
+import com.boxbuilder.workplanner.ui.theme.ThemePreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -14,8 +17,15 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val repository: TaskRepository,
     private val authManager: GoogleAuthManager,
-    private val prefs: SharedPreferences
+    private val prefs: SharedPreferences,
+    private val themePreferences: ThemePreferences
 ) : ViewModel() {
+
+    val themeMode: StateFlow<ThemeMode> = themePreferences.mode
+
+    fun setThemeMode(mode: ThemeMode) {
+        themePreferences.setMode(mode)
+    }
 
     fun signOut(onComplete: () -> Unit) {
         viewModelScope.launch {
