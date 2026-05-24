@@ -13,6 +13,7 @@ tools:
 reply_length_cap: 4000
 version: 1
 includes:
+  - _shared/environment.md
   - _shared/mention_context.md
   - _shared/workspace_intro.md
   - _shared/output_format.md
