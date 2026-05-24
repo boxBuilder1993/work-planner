@@ -128,8 +128,23 @@ class ChatHandler:
             )
             return
 
-        breadcrumbs = self._api.get_breadcrumbs(task.id)
-        ancestors = [t for t in breadcrumbs if t.id != task.id]
+        # Walk parents via the internal /tasks/:id endpoint (which works with
+        # the poller's API-key auth). The user-facing breadcrumbs endpoint
+        # requires a JWT-scoped userID, which the internal auth doesn't supply.
+        ancestors: list[TaskEntity] = []
+        cursor = task
+        visited: set[str] = {task.id}
+        while cursor.parent_id and cursor.parent_id not in visited:
+            visited.add(cursor.parent_id)
+            try:
+                parent = self._api.get_task(cursor.parent_id)
+            except Exception:
+                logger.exception("chat: failed to fetch parent %s of task %s", cursor.parent_id, cursor.id)
+                break
+            if not parent:
+                break
+            ancestors.insert(0, parent)
+            cursor = parent
 
         all_comments = self._api.list_comments(task.id)
         thread = [c for c in all_comments if c.id != mention.id]
