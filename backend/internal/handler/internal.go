@@ -326,6 +326,7 @@ func (h *InternalHandler) UpdateComment(w http.ResponseWriter, r *http.Request) 
 
 	comment, err := h.store.UpdateComment(r.Context(), commentID, &req, time.Now().UnixMilli())
 	if err != nil {
+		log.Printf("UpdateComment(%s): %v", commentID, err)
 		writeError(w, http.StatusInternalServerError, "failed to update comment")
 		return
 	}
