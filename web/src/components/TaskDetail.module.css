@@ -195,12 +195,24 @@
 }
 
 .closedSubtasksTitle {
-  display: block;
+  display: list-item;
+  list-style-position: outside;
+  margin-left: 1.2em;
   font-size: var(--font-size-md);
   font-weight: 500;
   color: var(--on-surface-secondary);
   margin-bottom: var(--spacing-sm);
   opacity: 0.7;
+  cursor: pointer;
+  user-select: none;
+}
+
+.closedSubtasksTitle:hover {
+  opacity: 1;
+}
+
+.closedSubtasksSection[open] > .closedSubtasksTitle {
+  margin-bottom: var(--spacing-md);
 }
 
 .error {

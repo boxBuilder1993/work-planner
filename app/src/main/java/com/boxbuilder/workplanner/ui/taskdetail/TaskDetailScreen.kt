@@ -1,8 +1,10 @@
 package com.boxbuilder.workplanner.ui.taskdetail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,6 +13,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +64,7 @@ fun TaskDetailScreen(
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var closedSubtasksExpanded by remember { mutableStateOf(false) }
 
     // Show error message as snackbar
     LaunchedEffect(errorMessage) {
@@ -180,23 +186,59 @@ fun TaskDetailScreen(
                 }
             }
 
-            // Sub-tasks section (only for existing tasks)
+            // Sub-tasks section (only for existing tasks).
+            // Split into open + closed so the closed cards don't clutter the view.
             if (!uiState.isNewTask) {
+                val openChildren = uiState.children.filter { it.status != TaskStatus.CLOSED }
+                val closedChildren = uiState.children.filter { it.status == TaskStatus.CLOSED }
+
                 item {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
                         Text(
-                            text = "Sub-tasks (${uiState.children.size})",
+                            text = "Sub-tasks (${openChildren.size} open)",
                             style = MaterialTheme.typography.titleSmall
                         )
                     }
                 }
 
-                items(uiState.children, key = { it.id }) { child ->
+                items(openChildren, key = { it.id }) { child ->
                     TaskCard(
                         task = child,
                         onClick = { onTaskClick(child.id) },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
+                }
+
+                if (closedChildren.isNotEmpty()) {
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { closedSubtasksExpanded = !closedSubtasksExpanded }
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (closedSubtasksExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                contentDescription = if (closedSubtasksExpanded) "Collapse completed" else "Expand completed"
+                            )
+                            Text(
+                                text = "Completed (${closedChildren.size})",
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+
+                    if (closedSubtasksExpanded) {
+                        items(closedChildren, key = { it.id }) { child ->
+                            TaskCard(
+                                task = child,
+                                onClick = { onTaskClick(child.id) },
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
                 }
 
                 // Hide "+ Add Child" for closed tasks

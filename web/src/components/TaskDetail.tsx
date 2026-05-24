@@ -411,16 +411,16 @@ export default function TaskDetail() {
               ))}
             </div>
             {closedChildren.length > 0 && (
-              <div className={styles.closedSubtasksSection}>
-                <span className={styles.closedSubtasksTitle}>
+              <details className={styles.closedSubtasksSection}>
+                <summary className={styles.closedSubtasksTitle}>
                   Completed ({closedChildren.length})
-                </span>
+                </summary>
                 <div className={styles.subtaskList}>
                   {closedChildren.map((child) => (
                     <TaskItem key={child.id} task={child} showDescription />
                   ))}
                 </div>
-              </div>
+              </details>
             )}
           </div>
         )}
