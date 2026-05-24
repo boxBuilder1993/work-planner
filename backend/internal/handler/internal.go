@@ -439,11 +439,11 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.CreateComment(w, r)
 
 	// GET /api/internal/tasks/:id
-	case r.Method == http.MethodGet && strings.Count(path, "/") == 4:
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/internal/tasks/") && strings.Count(path, "/") == 4:
 		h.GetTask(w, r)
 
 	// PATCH /api/internal/tasks/:id
-	case r.Method == http.MethodPatch && strings.Count(path, "/") == 4:
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/tasks/") && strings.Count(path, "/") == 4:
 		h.UpdateTask(w, r)
 
 	// POST /api/internal/comments/:id/approve
