@@ -7,7 +7,6 @@ import TaskDetail from './components/TaskDetail';
 import Settings from './components/Settings';
 import { SimulationForm } from './components/SimulationForm';
 import { Header } from './components/Header';
-import ChatPanel from './components/ChatPanel';
 import styles from './components/AppLayout.module.css';
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -17,9 +16,6 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <div className={styles.container}>
         <div className={styles.content}>
           {children}
-        </div>
-        <div className={styles.chatPanelWrapper}>
-          <ChatPanel />
         </div>
       </div>
     </>
