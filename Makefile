@@ -1,10 +1,16 @@
-.PHONY: ai-ollama ai-claude dev-backend help test test-backend test-poller test-proxy test-web test-mobile test-app
+.PHONY: ai-ollama ai-claude dev-backend dev-stack dev-stack-down dev-stack-logs dev-proxy help test test-backend test-poller test-proxy test-web test-mobile test-app
 
 help:
-	@echo "AI / runtime targets:"
-	@echo "  make ai-ollama      - Start Ollama and configure for qwen2.5:14b model"
-	@echo "  make ai-claude      - Configure for Claude Haiku (requires 1Password CLI)"
-	@echo "  make dev-backend    - Start backend with configured AI provider"
+	@echo "Local dev (Docker Compose):"
+	@echo "  make dev-proxy        - Start claude-proxy on Mac (port 8400). Run in a separate terminal."
+	@echo "  make dev-stack        - Bring up postgres + chromadb + backend + ai-poller + web"
+	@echo "  make dev-stack-down   - Stop the stack (keeps data)"
+	@echo "  make dev-stack-logs   - Tail logs from all services"
+	@echo ""
+	@echo "Legacy AI targets (Ollama / Claude direct):"
+	@echo "  make ai-ollama        - Start Ollama and configure for qwen2.5:14b model"
+	@echo "  make ai-claude        - Configure for Claude Haiku (requires 1Password CLI)"
+	@echo "  make dev-backend      - Start backend with configured AI provider"
 	@echo ""
 	@echo "Test targets:"
 	@echo "  make test           - Run every component's tests sequentially"
@@ -53,6 +59,29 @@ dev-backend:
 		exit 1; \
 	fi
 	cd backend && python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+
+# ─── Local dev stack (Docker Compose) ──────────────────────────────────────
+# claude-proxy runs on the Mac directly; ai-poller (in Docker) reaches it
+# via http://host.docker.internal:8400 — no Cloudflare Tunnel needed.
+# Set ENABLE_CHAT_HANDLER=true on ai-poller and forward WORKPLANNER_WORKSPACE_BASE
+# to the host home dir so claude-proxy can mkdir there.
+
+# Prereq: `.env` exists (copy from `.env.example` and fill in JWT_SECRET +
+# INTERNAL_API_KEY). Then run this in a SEPARATE terminal first:
+dev-proxy:
+	@command -v uv >/dev/null 2>&1 || (echo "uv not found. brew install uv"; exit 1)
+	cd claude-proxy && uv run python proxy.py
+
+# Then in this terminal:
+dev-stack:
+	@test -f .env || (echo "Missing .env — copy from .env.example and edit. JWT_SECRET + INTERNAL_API_KEY required."; exit 1)
+	docker compose up --build
+
+dev-stack-down:
+	docker compose down
+
+dev-stack-logs:
+	docker compose logs -f --tail=50
 
 # ─── Test targets ──────────────────────────────────────────────────────────
 

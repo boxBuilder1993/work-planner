@@ -51,6 +51,16 @@ services:
       CHROMADB_HOST: chromadb
       CHROMADB_PORT: "8000"
       CLAUDE_PROXY_URL: http://host.docker.internal:8400
+      # Skip the legacy algorithm path; route @ai mentions to claude-proxy.
+      ENABLE_CHAT_HANDLER: "true"
+      # Fast poll for local iteration.
+      POLL_INTERVAL_SECONDS: "15"
+      # The poller is root inside the container, so `~` expands to /root —
+      # which isn't writable on the host Mac where claude-proxy mkdirs the
+      # workspace. Point at the host's ~/.workplanner/workspaces so paths
+      # match across the Docker / host boundary.
+      # `${HOME}` resolves from the shell that runs `docker compose up`.
+      WORKPLANNER_WORKSPACE_BASE: ${HOME}/.workplanner/workspaces
 
   web:
     build:

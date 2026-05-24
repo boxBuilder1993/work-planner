@@ -62,13 +62,19 @@ class Config:
     vector_db: VectorDBConfig = field(default_factory=VectorDBConfig)
 
     def validate(self) -> None:
-        """Raise ValueError if required fields are missing."""
+        """Raise ValueError if required fields are missing.
+
+        ANTHROPIC_API_KEY is only required for the legacy algorithm path
+        (which spawns claude-agent-sdk directly). The chat handler dispatches
+        through claude-proxy, which uses the user's claude.ai subscription —
+        so when ENABLE_CHAT_HANDLER is on, no Anthropic API key is needed.
+        """
         missing = []
         if not self.api_url:
             missing.append("WORKPLANNER_API_URL")
         if not self.jwt and not self.internal_api_key:
             missing.append("WORKPLANNER_JWT or INTERNAL_API_KEY")
-        if not self.anthropic_api_key:
+        if not self.enable_chat_handler and not self.anthropic_api_key:
             missing.append("ANTHROPIC_API_KEY")
         if missing:
             raise ValueError(f"Missing required config: {', '.join(missing)}")
