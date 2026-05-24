@@ -1,5 +1,5 @@
 import { db } from '@database/init';
-import type { TaskEntity, TaskStatus } from '@types/index';
+import type { TaskEntity, TaskStatus } from '../types';
 
 export class TaskService {
   static async getTasks(): Promise<TaskEntity[]> {

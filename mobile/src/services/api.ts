@@ -1,4 +1,4 @@
-import { TaskEntity, CommentEntity } from '@types/index';
+import { TaskEntity, CommentEntity } from '../types';
 import { getStoredAuthToken } from './auth';
 
 const API_BASE_URL = process.env.API_URL || 'http://localhost:3000/api';

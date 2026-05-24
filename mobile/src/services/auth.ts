@@ -15,6 +15,7 @@ export const initiateGoogleSignIn = async (): Promise<AuthToken | null> => {
       'https://accounts.google.com'
     );
 
+    // @ts-expect-error -- expo-auth-session API changed; tracked in task d4dfaff6 (mobile auth needs migration to the new request/response API)
     const authResult = await AuthSession.startAsync({
       promptUser: true,
       discovery,
