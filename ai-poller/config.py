@@ -50,6 +50,12 @@ class Config:
     # Polling
     poll_interval_seconds: int = 60
 
+    # Dispatch mode. When True, the chat-mention handler runs and the legacy
+    # algorithm dispatch (SDLC / orchestrated / etc.) is fully bypassed. When
+    # False, legacy dispatch runs as before. Defaults to False for safety;
+    # flip to True on Railway env to switch over. See docs/CHAT_DESIGN.md.
+    enable_chat_handler: bool = False
+
     # Sub-configs
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
@@ -84,12 +90,19 @@ def load_config(env_path: str | None = None) -> Config:
     def _int(key: str, default: int) -> int:
         return int(os.environ.get(key, str(default)))
 
+    def _bool(key: str, default: bool) -> bool:
+        v = os.environ.get(key, "").strip().lower()
+        if not v:
+            return default
+        return v in ("1", "true", "yes", "on")
+
     return Config(
         api_url=_env("WORKPLANNER_API_URL"),
         jwt=_env("WORKPLANNER_JWT"),
         internal_api_key=_env("INTERNAL_API_KEY"),
         anthropic_api_key=_env("ANTHROPIC_API_KEY"),
         poll_interval_seconds=_int("POLL_INTERVAL_SECONDS", 60),
+        enable_chat_handler=_bool("ENABLE_CHAT_HANDLER", False),
         agent_limits=AgentLimits(
             max_global_agents=_int("MAX_GLOBAL_AGENTS", 20),
             max_orchestrators=_int("MAX_ORCHESTRATORS", 1),

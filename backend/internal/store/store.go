@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/boxBuilder1993/work-planner/backend/internal/model"
@@ -213,7 +214,7 @@ func (s *Store) scanTasks(ctx context.Context, query string, args ...any) ([]mod
 
 func (s *Store) ListComments(ctx context.Context, userID, taskID string, commentType *string) ([]model.Comment, error) {
 	query := `
-		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.created_at, c.updated_at
+		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.props, c.created_at, c.updated_at
 		FROM comments c JOIN tasks t ON c.task_id = t.id
 		WHERE c.task_id = $1 AND t.user_id = $2`
 	args := []any{taskID, userID}
@@ -230,10 +231,10 @@ func (s *Store) ListComments(ctx context.Context, userID, taskID string, comment
 func (s *Store) GetComment(ctx context.Context, userID, commentID string) (*model.Comment, error) {
 	var c model.Comment
 	err := s.pool.QueryRow(ctx, `
-		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.created_at, c.updated_at
+		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.props, c.created_at, c.updated_at
 		FROM comments c JOIN tasks t ON c.task_id = t.id
 		WHERE c.id = $1 AND t.user_id = $2
-	`, commentID, userID).Scan(&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.CreatedAt, &c.UpdatedAt)
+	`, commentID, userID).Scan(&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.Props, &c.CreatedAt, &c.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -251,11 +252,67 @@ func (s *Store) CreateComment(ctx context.Context, userID string, c *model.Comme
 		return pgx.ErrNoRows
 	}
 
+	props := c.Props
+	if len(props) == 0 {
+		props = json.RawMessage("{}")
+	}
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO comments (id, task_id, parent_comment_id, text, comment_type, created_by, proposal_status, proposal_feedback, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, c.ID, c.TaskID, c.ParentCommentID, c.Text, c.CommentType, c.CreatedBy, c.ProposalStatus, c.ProposalFeedback, c.CreatedAt, c.UpdatedAt)
+		INSERT INTO comments (id, task_id, parent_comment_id, text, comment_type, created_by, proposal_status, proposal_feedback, props, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, c.ID, c.TaskID, c.ParentCommentID, c.Text, c.CommentType, c.CreatedBy, c.ProposalStatus, c.ProposalFeedback, props, c.CreatedAt, c.UpdatedAt)
 	return err
+}
+
+// UpdateComment performs a partial update on a comment. Currently supports text
+// edits and partial-merge updates to props (top-level keys replace, arrays are
+// replaced wholesale — same semantics as task props). Unscoped (no user check);
+// intended for the internal API used by the ai-poller.
+func (s *Store) UpdateComment(ctx context.Context, commentID string, req *model.UpdateCommentRequest, updatedAt int64) (*model.Comment, error) {
+	setClauses := []string{"updated_at = @updated_at"}
+	args := pgx.NamedArgs{
+		"id":         commentID,
+		"updated_at": updatedAt,
+	}
+
+	if req.Text != nil {
+		setClauses = append(setClauses, "text = @text")
+		args["text"] = *req.Text
+	}
+	if req.Props != nil {
+		setClauses = append(setClauses, "props = props || @props")
+		args["props"] = req.Props
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE comments SET %s
+		WHERE id = @id
+		RETURNING id, task_id, parent_comment_id, text, comment_type, created_by, proposal_status, proposal_feedback, props, created_at, updated_at
+	`, joinStrings(setClauses, ", "))
+
+	var c model.Comment
+	err := s.pool.QueryRow(ctx, query, args).Scan(
+		&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.Props, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &c, err
+}
+
+// ListCommentsNeedingAIReply returns comments that:
+//   - contain an @ai mention (loose ILIKE match; poller does final regex check)
+//   - have no value set for props->>'ai-comment-status' (i.e., never dispatched).
+//
+// Failed/replied/dispatched comments are excluded. The poller is expected to be
+// the sole caller; no user scoping.
+func (s *Store) ListCommentsNeedingAIReply(ctx context.Context) ([]model.Comment, error) {
+	return s.scanComments(ctx, `
+		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.props, c.created_at, c.updated_at
+		FROM comments c
+		WHERE c.text ILIKE '%@ai%'
+		  AND (c.props->>'ai-comment-status') IS NULL
+		ORDER BY c.created_at ASC
+	`)
 }
 
 func (s *Store) UpdateProposalStatus(ctx context.Context, userID, commentID, status string, feedback *string, updatedAt int64) (*model.Comment, error) {
@@ -264,9 +321,9 @@ func (s *Store) UpdateProposalStatus(ctx context.Context, userID, commentID, sta
 		UPDATE comments SET proposal_status = $1, proposal_feedback = $2, updated_at = $3
 		WHERE id = $4 AND comment_type = 'PROPOSAL'
 		AND task_id IN (SELECT id FROM tasks WHERE user_id = $5)
-		RETURNING id, task_id, parent_comment_id, text, comment_type, created_by, proposal_status, proposal_feedback, created_at, updated_at
+		RETURNING id, task_id, parent_comment_id, text, comment_type, created_by, proposal_status, proposal_feedback, props, created_at, updated_at
 	`, status, feedback, updatedAt, commentID, userID).Scan(
-		&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.CreatedAt, &c.UpdatedAt,
+		&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.Props, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -279,9 +336,9 @@ func (s *Store) UpdateProposalStatusUnscoped(ctx context.Context, commentID, sta
 	err := s.pool.QueryRow(ctx, `
 		UPDATE comments SET proposal_status = $1, proposal_feedback = $2, updated_at = $3
 		WHERE id = $4 AND comment_type = 'PROPOSAL'
-		RETURNING id, task_id, parent_comment_id, text, comment_type, created_by, proposal_status, proposal_feedback, created_at, updated_at
+		RETURNING id, task_id, parent_comment_id, text, comment_type, created_by, proposal_status, proposal_feedback, props, created_at, updated_at
 	`, status, feedback, updatedAt, commentID).Scan(
-		&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.CreatedAt, &c.UpdatedAt,
+		&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.Props, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -314,7 +371,7 @@ func (s *Store) scanComments(ctx context.Context, query string, args ...any) ([]
 	var comments []model.Comment
 	for rows.Next() {
 		var c model.Comment
-		if err := rows.Scan(&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.TaskID, &c.ParentCommentID, &c.Text, &c.CommentType, &c.CreatedBy, &c.ProposalStatus, &c.ProposalFeedback, &c.Props, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, err
 		}
 		comments = append(comments, c)
@@ -487,7 +544,7 @@ func (s *Store) ListAllChildren(ctx context.Context, parentID string) ([]model.T
 
 func (s *Store) ListAllComments(ctx context.Context, taskID string, commentType *string) ([]model.Comment, error) {
 	query := `
-		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.created_at, c.updated_at
+		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.props, c.created_at, c.updated_at
 		FROM comments c
 		WHERE c.task_id = $1`
 	args := []any{taskID}

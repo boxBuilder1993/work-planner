@@ -30,6 +30,7 @@ export default function TaskList() {
   // Fetch search results asynchronously
   useEffect(() => {
     if (!searchQuery.trim()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- quarantined; tracked in task d4dfaff6
       setRawSearchResults([]);
       return;
     }

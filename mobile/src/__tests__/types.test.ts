@@ -3,7 +3,7 @@ import {
   CommentEntity,
   DEFAULT_SEARCH_FILTERS,
   PRIORITY_COLORS,
-} from '@types/index';
+} from '../types';
 
 describe('Types', () => {
   it('should have valid default search filters', () => {

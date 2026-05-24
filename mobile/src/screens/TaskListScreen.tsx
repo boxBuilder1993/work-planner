@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { TaskService } from '@services/taskService';
-import type { TaskEntity } from '@types/index';
+import type { TaskEntity } from '../types';
 
 export function TaskListScreen() {
   const [tasks, setTasks] = useState<TaskEntity[]>([]);

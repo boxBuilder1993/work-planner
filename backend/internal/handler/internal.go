@@ -223,6 +223,7 @@ func (h *InternalHandler) CreateComment(w http.ResponseWriter, r *http.Request) 
 		CommentType:     commentType,
 		CreatedBy:       createdBy,
 		ProposalStatus:  proposalStatus,
+		Props:           req.Props,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -302,6 +303,50 @@ func (h *InternalHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, task)
+}
+
+// PATCH /api/internal/comments/:id
+// Partial update of a comment. Currently supports text edits and partial-merge
+// updates to props (top-level keys replace; arrays replaced wholesale).
+func (h *InternalHandler) UpdateComment(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSuffix(r.URL.Path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+	commentID := parts[4]
+
+	var req model.UpdateCommentRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	comment, err := h.store.UpdateComment(r.Context(), commentID, &req, time.Now().UnixMilli())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update comment")
+		return
+	}
+	if comment == nil {
+		writeError(w, http.StatusNotFound, "comment not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, comment)
+}
+
+// GET /api/internal/comments?needs_ai_reply=true
+// Returns comments containing an @ai mention with no ai-comment-status set yet.
+func (h *InternalHandler) ListCommentsNeedingAIReply(w http.ResponseWriter, r *http.Request) {
+	comments, err := h.store.ListCommentsNeedingAIReply(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if comments == nil {
+		comments = []model.Comment{}
+	}
+	writeJSON(w, http.StatusOK, comments)
 }
 
 // POST /api/internal/comments/:id/approve
@@ -399,6 +444,14 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// POST /api/internal/comments/:id/deny
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/deny"):
 		h.DenyProposal(w, r)
+
+	// GET /api/internal/comments?needs_ai_reply=true
+	case r.Method == http.MethodGet && path == "/api/internal/comments" && r.URL.Query().Get("needs_ai_reply") == "true":
+		h.ListCommentsNeedingAIReply(w, r)
+
+	// PATCH /api/internal/comments/:id
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/comments/") && strings.Count(path, "/") == 4:
+		h.UpdateComment(w, r)
 
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")

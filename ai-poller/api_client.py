@@ -148,6 +148,49 @@ class ApiClient:
             return CommentEntity(**self._post(f"/api/internal/tasks/{task_id}/comments", body))
         return CommentEntity(**self._post(f"/api/tasks/{task_id}/comments", body))
 
+    def create_comment_with_props(
+        self,
+        task_id: str,
+        text: str,
+        parent_comment_id: str | None,
+        comment_type: str,
+        created_by: str,
+        props: dict[str, Any],
+    ) -> CommentEntity:
+        """Create a comment carrying initial props (chat dispatch uses this for AI replies)."""
+        body: dict[str, Any] = {
+            "text": text,
+            "commentType": comment_type,
+            "createdBy": created_by,
+            "props": props,
+        }
+        if parent_comment_id is not None:
+            body["parentCommentId"] = parent_comment_id
+        if self._is_internal:
+            return CommentEntity(**self._post(f"/api/internal/tasks/{task_id}/comments", body))
+        return CommentEntity(**self._post(f"/api/tasks/{task_id}/comments", body))
+
+    def update_comment_props(self, comment_id: str, props_patch: dict[str, Any]) -> dict[str, Any]:
+        """Partial merge of `props` onto a comment (internal only).
+
+        Top-level keys in `props_patch` overwrite existing keys; arrays are
+        replaced wholesale. Mirrors the task.props merge semantics in the backend.
+        """
+        if not self._is_internal:
+            raise RuntimeError("update_comment_props requires INTERNAL_API_KEY (internal endpoint only)")
+        return self._patch(f"/api/internal/comments/{comment_id}", {"props": props_patch})
+
+    def list_comments_needing_ai_reply(self) -> list[CommentEntity]:
+        """Return comments containing @ai mentions that have not yet been dispatched.
+
+        Filters server-side on text ILIKE '%@ai%' AND props->>'ai-comment-status' IS NULL.
+        Internal endpoint only — the chat poller is the sole caller.
+        """
+        if not self._is_internal:
+            raise RuntimeError("list_comments_needing_ai_reply requires INTERNAL_API_KEY")
+        params = {"needs_ai_reply": "true"}
+        return [CommentEntity(**c) for c in self._get("/api/internal/comments", params)]
+
     def approve_proposal(self, comment_id: str) -> CommentEntity:
         """Approve a PROPOSAL comment."""
         if self._is_internal:

@@ -120,6 +120,35 @@
   color: var(--on-surface-secondary);
 }
 
+.workspaceChip {
+  background: var(--background);
+  color: var(--on-surface-secondary);
+  cursor: copy;
+  user-select: text;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceChip:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.workspaceChipLabel {
+  font-family: var(--font-family, system-ui), sans-serif;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  margin-right: var(--spacing-xs);
+}
+
+.workspaceChipCopied {
+  background: #E8F5E9;
+  color: var(--success);
+}
+
 .dueDateChipOverdue {
   background: #FFEBEE;
   color: var(--error);

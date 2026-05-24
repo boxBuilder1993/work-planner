@@ -15,6 +15,7 @@ from algo_sdlc import SDLC
 from algo_simple_answer import SimpleAnswer
 from algorithm import AlgorithmRegistry, TaskContext
 from api_client import ApiClient
+from chat_handler import ChatHandler
 from config import Config
 from knowledge import KnowledgeBase, KnowledgeBaseFactory
 from models import TaskEntity
@@ -57,9 +58,31 @@ class PollCycleProcessor:
         self._spawner = spawner
         self._knowledge_factory = knowledge_factory
         self._registry = build_registry()
+        # Built eagerly — cheap, idle when ENABLE_CHAT_HANDLER is false.
+        self._chat_handler = ChatHandler(api=api, config=config)
 
     async def run_cycle(self) -> int:
-        """Run one poll cycle. Returns the number of actions taken."""
+        """Run one poll cycle. Returns the number of actions taken.
+
+        When `config.enable_chat_handler` is True, legacy algorithm dispatch
+        is fully bypassed and the chat-mention handler runs instead. The
+        chat handler currently no-ops; full implementation is task [5] in
+        the chat-poller refocus (see docs/CHAT_DESIGN.md).
+        """
+        if self._config.enable_chat_handler:
+            return await self._run_chat_cycle()
+        return await self._run_legacy_cycle()
+
+    async def _run_chat_cycle(self) -> int:
+        """Chat-mention dispatch path. Delegates to ChatHandler.run_cycle()."""
+        return await self._chat_handler.run_cycle()
+
+    async def _run_legacy_cycle(self) -> int:
+        """Legacy algorithm dispatch path (SDLC / orchestrated / etc.).
+
+        Kept intact to preserve the rollback path: setting
+        ENABLE_CHAT_HANDLER=false restores the original behavior.
+        """
         self._spawner.cleanup_stale()
 
         # Fetch all tasks

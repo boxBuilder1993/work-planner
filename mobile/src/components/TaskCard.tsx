@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import type { TaskEntity } from '@types/index';
+import type { TaskEntity } from '../types';
 
 interface TaskCardProps {
   task: TaskEntity;
