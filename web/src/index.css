@@ -1,12 +1,12 @@
 :root {
-  /* Priority colors */
+  /* Priority colors (stable across themes) */
   --priority-1: #E53935;
   --priority-2: #F57C00;
   --priority-3: #FDD835;
   --priority-4: #43A047;
   --priority-5: #1E88E5;
 
-  /* App colors */
+  /* Light theme (default) */
   --primary: #1976D2;
   --primary-dark: #1565C0;
   --primary-light: #BBDEFB;
@@ -18,6 +18,44 @@
   --error: #D32F2F;
   --success: #388E3C;
   --warning: #F57C00;
+}
+
+/* Dark theme tokens — applied by either:
+ *   • <html data-theme="dark">  (explicit user choice in Settings)
+ *   • prefers-color-scheme: dark + no data-theme attr (system-following)
+ * The :not([data-theme]) gate prevents the system override from leaking
+ * through when the user explicitly chose "light". */
+:root[data-theme="dark"] {
+  --primary: #64B5F6;
+  --primary-dark: #1976D2;
+  --primary-light: #1565C0;
+  --surface: #1E1E1E;
+  --background: #121212;
+  --on-surface: #E6E6E6;
+  --on-surface-secondary: #A0A0A0;
+  --divider: #2E2E2E;
+  --error: #EF5350;
+  --success: #66BB6A;
+  --warning: #FFA726;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --primary: #64B5F6;
+    --primary-dark: #1976D2;
+    --primary-light: #1565C0;
+    --surface: #1E1E1E;
+    --background: #121212;
+    --on-surface: #E6E6E6;
+    --on-surface-secondary: #A0A0A0;
+    --divider: #2E2E2E;
+    --error: #EF5350;
+    --success: #66BB6A;
+    --warning: #FFA726;
+  }
+}
+
+:root {
 
   /* Spacing */
   --spacing-xs: 4px;

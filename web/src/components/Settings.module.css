@@ -130,3 +130,42 @@
 .signOutButton:hover {
   opacity: 0.9;
 }
+
+.themePickerLabel {
+  font-size: var(--font-size-md);
+  color: var(--on-surface-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.themePicker {
+  display: flex;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.themeOption {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--on-surface);
+  border: none;
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  border-right: 1px solid var(--divider);
+  transition: background 0.15s, color 0.15s;
+}
+
+.themeOption:last-child {
+  border-right: none;
+}
+
+.themeOption:hover {
+  background: var(--background);
+}
+
+.themeOptionActive,
+.themeOptionActive:hover {
+  background: var(--primary);
+  color: white;
+}
