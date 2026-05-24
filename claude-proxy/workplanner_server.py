@@ -23,12 +23,59 @@ server = Server("workplanner")
 api: ApiClient | None = None
 _chroma_collection = None
 
+# Workspace confinement for `run_command`. Set by claude-proxy when dispatching
+# a chat persona; absent when the legacy algorithm path invokes the MCP.
+WORKSPACE_PATH = os.environ.get("WORKPLANNER_WORKSPACE_PATH", "")
+
 
 def _api() -> ApiClient:
     global api
     if api is None:
         api = ApiClient()
     return api
+
+
+def _resolve_working_dir(requested: str | None) -> tuple[str | None, str | None]:
+    """Resolve and validate a `run_command` working_dir against WORKSPACE_PATH.
+
+    Returns (resolved_path, error_message). If error_message is not None the
+    caller should reject the tool call with that message.
+
+    - If WORKSPACE_PATH is unset (legacy algorithm path), returns requested
+      as-is with no constraint.
+    - If requested is empty/None, defaults to WORKSPACE_PATH.
+    - Relative paths resolve against WORKSPACE_PATH.
+    - Absolute paths must lie inside WORKSPACE_PATH (symlink-safe via realpath).
+    """
+    if not WORKSPACE_PATH:
+        return requested, None
+
+    workspace_real = os.path.realpath(WORKSPACE_PATH)
+
+    if not requested:
+        return WORKSPACE_PATH, None
+
+    target = requested
+    if not os.path.isabs(target):
+        target = os.path.join(WORKSPACE_PATH, target)
+
+    target_real = os.path.realpath(target)
+
+    try:
+        common = os.path.commonpath([workspace_real, target_real])
+    except ValueError:
+        return None, (
+            f"working_dir must be inside the task workspace ({WORKSPACE_PATH}); "
+            f"got '{requested}'"
+        )
+
+    if common != workspace_real:
+        return None, (
+            f"working_dir must be inside the task workspace ({WORKSPACE_PATH}); "
+            f"got '{requested}' (resolved to '{target_real}')"
+        )
+
+    return target_real, None
 
 
 def _knowledge():
@@ -161,10 +208,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return _text(json.dumps(client.create_comment(arguments["task_id"], body), indent=2))
 
         if name == "run_command":
+            resolved_cwd, err = _resolve_working_dir(arguments.get("working_dir"))
+            if err:
+                return _text(f"Error: {err}")
+
             proc = subprocess.run(
                 arguments["command"],
                 shell=True,
-                cwd=arguments.get("working_dir"),
+                cwd=resolved_cwd,
                 capture_output=True,
                 text=True,
                 timeout=arguments.get("timeout", 120),

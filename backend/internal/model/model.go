@@ -22,16 +22,17 @@ type Task struct {
 }
 
 type Comment struct {
-	ID               string  `json:"id"`
-	TaskID           string  `json:"taskId"`
-	ParentCommentID  *string `json:"parentCommentId"`
-	Text             string  `json:"text"`
-	CommentType      string  `json:"commentType"`
-	CreatedBy        string  `json:"createdBy"`
-	ProposalStatus   *string `json:"proposalStatus"`
-	ProposalFeedback *string `json:"proposalFeedback"`
-	CreatedAt        int64   `json:"createdAt"`
-	UpdatedAt        int64   `json:"updatedAt"`
+	ID               string          `json:"id"`
+	TaskID           string          `json:"taskId"`
+	ParentCommentID  *string         `json:"parentCommentId"`
+	Text             string          `json:"text"`
+	CommentType      string          `json:"commentType"`
+	CreatedBy        string          `json:"createdBy"`
+	ProposalStatus   *string         `json:"proposalStatus"`
+	ProposalFeedback *string         `json:"proposalFeedback"`
+	Props            json.RawMessage `json:"props"`
+	CreatedAt        int64           `json:"createdAt"`
+	UpdatedAt        int64           `json:"updatedAt"`
 }
 
 type RepeatingTask struct {
@@ -95,10 +96,16 @@ type UpdateTaskRequest struct {
 }
 
 type CreateCommentRequest struct {
-	Text            string  `json:"text"`
-	ParentCommentID *string `json:"parentCommentId,omitempty"`
-	CommentType     string  `json:"commentType,omitempty"`
-	CreatedBy       string  `json:"createdBy,omitempty"`
+	Text            string          `json:"text"`
+	ParentCommentID *string         `json:"parentCommentId,omitempty"`
+	CommentType     string          `json:"commentType,omitempty"`
+	CreatedBy       string          `json:"createdBy,omitempty"`
+	Props           json.RawMessage `json:"props,omitempty"`
+}
+
+type UpdateCommentRequest struct {
+	Text  *string         `json:"text,omitempty"`
+	Props json.RawMessage `json:"props,omitempty"`
 }
 
 type UpdateProposalRequest struct {

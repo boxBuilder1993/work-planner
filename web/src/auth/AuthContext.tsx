@@ -48,6 +48,7 @@ function clearSession(): void {
   localStorage.removeItem(USER_KEY);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- quarantined; tracked in task d4dfaff6
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

@@ -40,6 +40,7 @@ class CommentEntity(BaseModel):
     created_by: str = "user"  # "user" or agent task ID
     proposal_status: str | None = None  # PENDING | APPROVED | DENIED
     proposal_feedback: str | None = None
+    props: dict = Field(default_factory=dict)
     created_at: int = 0
     updated_at: int = 0
 

@@ -1,10 +1,19 @@
-.PHONY: ai-ollama ai-claude dev-backend help
+.PHONY: ai-ollama ai-claude dev-backend help test test-backend test-poller test-proxy test-web test-mobile test-app
 
 help:
-	@echo "Available AI targets:"
+	@echo "AI / runtime targets:"
 	@echo "  make ai-ollama      - Start Ollama and configure for qwen2.5:14b model"
 	@echo "  make ai-claude      - Configure for Claude Haiku (requires 1Password CLI)"
 	@echo "  make dev-backend    - Start backend with configured AI provider"
+	@echo ""
+	@echo "Test targets:"
+	@echo "  make test           - Run every component's tests sequentially"
+	@echo "  make test-backend   - Go backend: go vet + go build + go test"
+	@echo "  make test-poller    - ai-poller: python -m unittest discover"
+	@echo "  make test-proxy     - claude-proxy: uv-managed unittest discover"
+	@echo "  make test-web       - web: eslint + production build (tsc -b + vite)"
+	@echo "  make test-mobile    - mobile: tsc --noEmit type-check"
+	@echo "  make test-app       - Android: ./gradlew test (unit tests, not APK)"
 
 # Start Ollama and configure for qwen2.5:14b local model
 .PHONY: ai-ollama
@@ -44,3 +53,44 @@ dev-backend:
 		exit 1; \
 	fi
 	cd backend && python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+
+# ─── Test targets ──────────────────────────────────────────────────────────
+
+# Run every component's tests. Fail-fast (Make default). For per-component
+# isolation use the individual targets, or rely on the GH Actions matrix
+# which runs them as parallel jobs.
+test: test-backend test-poller test-proxy test-web test-mobile test-app
+
+# Go backend: static analysis + compile + unit tests. Currently no test files
+# exist; the command is wired so future tests run automatically.
+test-backend:
+	cd backend && go vet ./... && go build ./... && go test ./...
+
+# ai-poller (Python, venv + requirements.txt). Creates the venv on demand,
+# installs/syncs deps, then discovers and runs all test_*.py files.
+test-poller:
+	cd ai-poller && \
+		( [ -d .venv ] || python3 -m venv .venv ) && \
+		. .venv/bin/activate && \
+		pip install --quiet --disable-pip-version-check -r requirements.txt && \
+		python -m unittest discover -p 'test_*.py' -v
+
+# claude-proxy (Python, uv-managed). `uv sync` resolves the lockfile, then
+# `uv run` invokes the discover under the project's virtualenv.
+test-proxy:
+	cd claude-proxy && uv sync --quiet && uv run python -m unittest discover -p 'test_*.py' -v
+
+# web (Vite + React). No jest setup yet — lint + production build catches
+# type errors (tsc -b) and surface-level regressions. Add `vitest` later.
+test-web:
+	cd web && npm ci --silent && npm run lint && npm run build
+
+# mobile (Expo + React Native). jest setup was removed alongside the deleted
+# backup feature; type-checking is the meaningful gate for now.
+test-mobile:
+	cd mobile && npm ci --silent && npm run typescript
+
+# Android app: unit tests only. The release APK build lives in
+# .github/workflows/build.yml — don't duplicate that here.
+test-app:
+	./gradlew test --no-daemon

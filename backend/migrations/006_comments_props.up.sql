@@ -1,0 +1,1 @@
+ALTER TABLE comments ADD COLUMN props JSONB NOT NULL DEFAULT '{}';

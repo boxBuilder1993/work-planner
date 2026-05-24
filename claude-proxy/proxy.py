@@ -65,6 +65,12 @@ class RunRequest(BaseModel):
     ai_status: str = ""
     workplanner_api_url: str = ""
     internal_api_key: str = ""
+    # Chat-dispatch workspace path. When set, the runtime mkdirs the dir,
+    # spawns claude -p with cwd=workspace_path and --add-dir, and exports
+    # WORKPLANNER_WORKSPACE_PATH into the MCP server's env for run_command
+    # enforcement. Empty string preserves legacy behavior (cwd=REPO_ROOT,
+    # no --add-dir, no env injection).
+    workspace_path: str = ""
 
 
 class SubmitResponse(BaseModel):
@@ -76,6 +82,12 @@ class StatusResponse(BaseModel):
     result: str = ""
     error: str = ""
     runtime: str = ""
+    # Full claude -p --output-format json envelope (for the Claude runtime):
+    # {type, duration_ms, total_cost_usd, stop_reason, usage, modelUsage, ...}.
+    # Empty dict for Codex (which does not emit a comparable envelope) and on
+    # error. Lets the poller stamp ai-duration-ms, ai-cost-usd, ai-stop-reason,
+    # and ai-tokens into comments.props without re-parsing the result string.
+    metadata: dict = {}
 
 
 @dataclass
@@ -83,6 +95,7 @@ class RuntimeSuccess:
     runtime: str
     model: str
     result: str
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -116,6 +129,7 @@ class Job:
     result: str = ""
     error: str = ""
     runtime: str = ""
+    metadata: dict = field(default_factory=dict)
     attempts: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     completed_at: float | None = None
@@ -162,6 +176,10 @@ def _workplanner_env(req: RunRequest) -> dict[str, str]:
         "WORKPLANNER_API_URL": req.workplanner_api_url,
         "INTERNAL_API_KEY": req.internal_api_key,
     }
+    if req.workspace_path:
+        # Consumed by workplanner_server.py's run_command tool to confine
+        # shell commands to the per-task workspace directory.
+        env["WORKPLANNER_WORKSPACE_PATH"] = req.workspace_path
     env.update(_chromadb_env())
     return env
 
@@ -346,22 +364,38 @@ class ClaudeRuntime:
                 cmd.append("--allowedTools")
                 cmd.extend(req.allowed_tools)
 
+            # Chat-dispatch: confine claude -p to a per-task workspace dir.
+            # Legacy path (workspace_path == "") falls back to REPO_ROOT.
+            if req.workspace_path:
+                Path(req.workspace_path).mkdir(parents=True, exist_ok=True)
+                cmd.extend(["--add-dir", req.workspace_path])
+                run_cwd: Path = Path(req.workspace_path)
+            else:
+                run_cwd = REPO_ROOT
+
             logger.info("Running Claude runtime for task %s with model %s", req.task_id, model)
             code, stdout_text, stderr_text = await _run_subprocess(
                 cmd,
                 stdin_text=req.prompt,
-                cwd=REPO_ROOT,
+                cwd=run_cwd,
             )
             if stderr_text:
                 logger.warning("Claude stderr: %s", stderr_text[:500])
 
             if code == 0 and stdout_text.strip():
+                metadata: dict = {}
                 try:
                     output = json.loads(stdout_text)
-                    result = str(output.get("result", stdout_text))
+                    if isinstance(output, dict):
+                        metadata = output
+                        result = str(output.get("result", stdout_text))
+                    else:
+                        result = stdout_text.strip()
                 except json.JSONDecodeError:
                     result = stdout_text.strip()
-                return RuntimeSuccess(runtime=self.name, model=model, result=result)
+                return RuntimeSuccess(
+                    runtime=self.name, model=model, result=result, metadata=metadata,
+                )
 
             message = (stderr_text or stdout_text or f"Exit code {code}").strip()
             error_type, retryable = _classify_failure(message)
@@ -565,6 +599,7 @@ async def _execute_job(job: Job, req: RunRequest) -> None:
         job.runtime = outcome.runtime
         if isinstance(outcome, RuntimeSuccess):
             job.result = outcome.result
+            job.metadata = outcome.metadata
             job.status = "done"
             logger.info(
                 "Job %s done via %s (%s)",
@@ -628,6 +663,7 @@ async def get_status(
         result=job.result,
         error=job.error,
         runtime=job.runtime,
+        metadata=job.metadata,
     )
 
 

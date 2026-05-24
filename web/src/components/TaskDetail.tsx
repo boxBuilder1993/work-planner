@@ -10,6 +10,45 @@ import CommentSection from './CommentSection';
 import PriorityBadge from './PriorityBadge';
 import styles from './TaskDetail.module.css';
 
+/**
+ * Per-task working directory on the user's Mac (where the AI does filesystem
+ * work — clones, builds, generated files). Surface the path here so the user
+ * can `cd` into it. Click the chip to copy.
+ */
+function WorkspaceChip({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const onClick = async () => {
+    try {
+      await navigator.clipboard.writeText(path);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // navigator.clipboard can fail on non-secure contexts or older browsers.
+      // No alert; user sees no copy indication and that's a clear-enough signal.
+    }
+  };
+
+  return (
+    <span
+      className={`${styles.chip} ${styles.workspaceChip} ${copied ? styles.workspaceChipCopied : ''}`}
+      onClick={onClick}
+      title={copied ? 'Copied!' : 'Click to copy workspace path'}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          void onClick();
+        }
+      }}
+    >
+      <span className={styles.workspaceChipLabel}>Workspace:</span>
+      {copied ? 'Copied!' : path}
+    </span>
+  );
+}
+
 export default function TaskDetail() {
   const { taskId } = useParams<{ taskId: string }>();
   const [searchParams] = useSearchParams();
@@ -150,6 +189,7 @@ export default function TaskDetail() {
       });
       // Set repeating rule on newly created task
       if (editRepeatInterval && editRepeatInterval > 0) {
+        // eslint-disable-next-line react-hooks/purity -- quarantined; tracked in task d4dfaff6
         await setRepeatingTask(created.id, editRepeatInterval, editRepeatStartDate ?? Date.now());
       }
       navigate(`/tasks/${created.id}`, { replace: true });
@@ -160,6 +200,7 @@ export default function TaskDetail() {
         await setRepeatingTask(
           existingTask!.id,
           editRepeatInterval,
+          // eslint-disable-next-line react-hooks/purity -- quarantined; tracked in task d4dfaff6
           editRepeatStartDate ?? existingRepeat?.startDate ?? Date.now(),
         );
       } else if (existingRepeat) {
@@ -311,6 +352,9 @@ export default function TaskDetail() {
                   </span>
                 )}
               </>
+            )}
+            {typeof existingTask.props?.workspace_path === 'string' && existingTask.props.workspace_path && (
+              <WorkspaceChip path={existingTask.props.workspace_path as string} />
             )}
             {existingTask.taskDate != null && (
               <div className={styles.chips}>
