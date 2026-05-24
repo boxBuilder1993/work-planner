@@ -66,15 +66,20 @@ export default function SignIn() {
           </p>
         )}
 
-        {!showEmailFallback ? (
+        {/*
+          Local email/name auth: dev-only. Prod builds tree-shake this branch
+          since `import.meta.env.DEV` is statically false at build time.
+        */}
+        {import.meta.env.DEV && !showEmailFallback && (
           <button
             type="button"
             className={styles.linkButton}
             onClick={() => setShowEmailFallback(true)}
           >
-            Or sign in with email
+            Or sign in with email (dev only)
           </button>
-        ) : (
+        )}
+        {import.meta.env.DEV && showEmailFallback && (
           <form className={styles.form} onSubmit={handleSubmit}>
             <div>
               <label className={styles.label}>Email</label>
