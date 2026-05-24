@@ -1,11 +1,12 @@
-.PHONY: ai-ollama ai-claude dev-backend dev-stack dev-stack-down dev-stack-logs dev-proxy help test test-backend test-poller test-proxy test-web test-mobile test-app
+.PHONY: ai-ollama ai-claude dev-backend dev dev-stack dev-stack-down dev-stack-logs dev-proxy help test test-backend test-poller test-proxy test-web test-mobile test-app
 
 help:
-	@echo "Local dev (Docker Compose):"
-	@echo "  make dev-proxy        - Start claude-proxy on Mac (port 8400). Run in a separate terminal."
-	@echo "  make dev-stack        - Bring up postgres + chromadb + backend + ai-poller + web"
-	@echo "  make dev-stack-down   - Stop the stack (keeps data)"
-	@echo "  make dev-stack-logs   - Tail logs from all services"
+	@echo "Local dev (Docker Compose + claude-proxy on Mac):"
+	@echo "  make dev              - Start everything (proxy on Mac + Docker stack). Idempotent."
+	@echo "  make dev-proxy        - Start ONLY claude-proxy on Mac (port 8400)."
+	@echo "  make dev-stack        - Start ONLY the Docker stack (postgres + chromadb + backend + ai-poller + web)"
+	@echo "  make dev-stack-down   - Stop the Docker stack (keeps data; doesn't touch the proxy)"
+	@echo "  make dev-stack-logs   - Tail logs from all Docker services"
 	@echo ""
 	@echo "Legacy AI targets (Ollama / Claude direct):"
 	@echo "  make ai-ollama        - Start Ollama and configure for qwen2.5:14b model"
@@ -66,8 +67,13 @@ dev-backend:
 # Set ENABLE_CHAT_HANDLER=true on ai-poller and forward WORKPLANNER_WORKSPACE_BASE
 # to the host home dir so claude-proxy can mkdir there.
 
-# Prereq: `.env` exists (copy from `.env.example` and fill in JWT_SECRET +
-# INTERNAL_API_KEY). Then run this in a SEPARATE terminal first:
+# One-shot: starts the proxy (if not already on :8400) and the Docker stack.
+# Both are idempotent.
+dev:
+	./start-all.sh
+
+# Foreground proxy (separate terminal). Use this if you want the proxy logs
+# in your terminal; otherwise `make dev` handles startup in the background.
 dev-proxy:
 	@command -v uv >/dev/null 2>&1 || (echo "uv not found. brew install uv"; exit 1)
 	cd claude-proxy && uv run python proxy.py

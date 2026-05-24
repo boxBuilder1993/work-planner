@@ -28,3 +28,7 @@ ai-poller/token.json
 backend/server
 web/.vite/
 workplanner-release.jks
+
+# Local dev scratch (managed by start-all.sh)
+.claude-proxy.log
+.claude-proxy.pid
