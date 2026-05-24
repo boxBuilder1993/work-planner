@@ -279,8 +279,10 @@ func (s *Store) UpdateComment(ctx context.Context, commentID string, req *model.
 		args["text"] = *req.Text
 	}
 	if req.Props != nil {
-		setClauses = append(setClauses, "props = props || @props")
-		args["props"] = req.Props
+		// Explicit ::jsonb cast — pgx v5 infers json.RawMessage as bytea
+		// without a hint, and `jsonb || bytea` is not a valid operator.
+		setClauses = append(setClauses, "props = props || @props::jsonb")
+		args["props"] = string(req.Props)
 	}
 
 	query := fmt.Sprintf(`
