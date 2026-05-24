@@ -419,6 +419,12 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "/api/internal/tasks":
 		h.ListTasks(w, r)
 
+	// GET /api/internal/comments?needs_ai_reply=true
+	// Must come BEFORE the suffix-match for /comments, otherwise it routes
+	// to ListComments (per-task) and produces a malformed query.
+	case r.Method == http.MethodGet && path == "/api/internal/comments" && r.URL.Query().Get("needs_ai_reply") == "true":
+		h.ListCommentsNeedingAIReply(w, r)
+
 	// GET /api/internal/tasks/:id/children
 	case r.Method == http.MethodGet && strings.HasSuffix(path, "/children"):
 		h.ListChildren(w, r)
@@ -446,10 +452,6 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// POST /api/internal/comments/:id/deny
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/deny"):
 		h.DenyProposal(w, r)
-
-	// GET /api/internal/comments?needs_ai_reply=true
-	case r.Method == http.MethodGet && path == "/api/internal/comments" && r.URL.Query().Get("needs_ai_reply") == "true":
-		h.ListCommentsNeedingAIReply(w, r)
 
 	// PATCH /api/internal/comments/:id
 	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/comments/") && strings.Count(path, "/") == 4:
