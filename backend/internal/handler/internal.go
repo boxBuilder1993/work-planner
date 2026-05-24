@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -340,6 +341,7 @@ func (h *InternalHandler) UpdateComment(w http.ResponseWriter, r *http.Request) 
 func (h *InternalHandler) ListCommentsNeedingAIReply(w http.ResponseWriter, r *http.Request) {
 	comments, err := h.store.ListCommentsNeedingAIReply(r.Context())
 	if err != nil {
+		log.Printf("ListCommentsNeedingAIReply: %v", err)
 		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
