@@ -294,41 +294,6 @@
   color: var(--error);
 }
 
-/* Reply indicator */
-.replyIndicator {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin-top: var(--spacing-sm);
-  padding: 6px 10px;
-  background: var(--surface, #f5f5f5);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  color: var(--on-surface-secondary);
-}
-
-.replyIndicator span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cancelReply {
-  background: none;
-  border: none;
-  color: var(--on-surface-secondary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  text-decoration: underline;
-  flex-shrink: 0;
-}
-
-.cancelReply:hover {
-  color: var(--on-surface);
-}
-
 /* Deny modal */
 .denyModal {
   position: fixed;
@@ -365,11 +330,60 @@
   justify-content: flex-end;
 }
 
-/* Add form */
-.addForm {
+/* Composer (textarea + actions), used at the bottom of the thread for new
+   top-level comments and inline under a parent comment when replying. */
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.composerTextarea {
+  width: 100%;
+  min-height: 120px;
+  max-height: 400px;
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  background: var(--background);
+  color: var(--on-surface);
+  /* Modern browsers auto-grow the textarea up to max-height. */
+  field-sizing: content;
+  box-sizing: border-box;
+}
+
+.composerTextarea:focus {
+  border-color: var(--primary);
+}
+
+.composerActions {
   display: flex;
   gap: var(--spacing-sm);
-  margin-top: var(--spacing-sm);
+  align-items: center;
+}
+
+.composerHint {
+  font-size: var(--font-size-sm);
+  color: var(--on-surface-secondary);
+  margin-left: auto;
+}
+
+.bottomComposer {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--divider);
+}
+
+.inlineComposer {
+  border-left: 2px solid var(--divider);
+  padding-left: var(--spacing-sm);
+  margin-top: var(--spacing-xs, 4px);
+  margin-bottom: var(--spacing-sm);
 }
 
 .addInput {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { CommentEntity } from '../types';
@@ -25,12 +25,83 @@ function buildThreadMap(comments: CommentEntity[]): Map<string | null, CommentEn
   return map;
 }
 
+function Composer({
+  value,
+  onChange,
+  onSubmit,
+  onCancel,
+  placeholder,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  onCancel?: () => void;
+  placeholder: string;
+  autoFocus?: boolean;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (autoFocus && ref.current) {
+      ref.current.focus();
+      // Place caret at end
+      const len = ref.current.value.length;
+      ref.current.setSelectionRange(len, len);
+    }
+  }, [autoFocus]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      if (value.trim()) onSubmit();
+    } else if (e.key === 'Escape' && onCancel) {
+      e.preventDefault();
+      onCancel();
+    }
+  };
+
+  return (
+    <div className={styles.composer}>
+      <textarea
+        ref={ref}
+        className={styles.composerTextarea}
+        rows={5}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+      />
+      <div className={styles.composerActions}>
+        {onCancel && (
+          <button className={styles.replyButton} onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+        <button
+          className={styles.sendButton}
+          onClick={onSubmit}
+          disabled={!value.trim()}
+        >
+          Send
+        </button>
+        <span className={styles.composerHint}>⌘+Enter to send</span>
+      </div>
+    </div>
+  );
+}
+
 function CommentNode({
   comment,
   threadMap,
   depth,
   taskId,
-  onReply,
+  replyingTo,
+  replyText,
+  onStartReply,
+  onCancelReply,
+  onChangeReplyText,
+  onSubmitReply,
   onDelete,
   onApprove,
   onDeny,
@@ -39,7 +110,12 @@ function CommentNode({
   threadMap: Map<string | null, CommentEntity[]>;
   depth: number;
   taskId: string;
-  onReply: (parentId: string) => void;
+  replyingTo: string | null;
+  replyText: string;
+  onStartReply: (parentId: string) => void;
+  onCancelReply: () => void;
+  onChangeReplyText: (v: string) => void;
+  onSubmitReply: () => void;
   onDelete: (commentId: string) => void;
   onApprove: (commentId: string) => void;
   onDeny: (commentId: string) => void;
@@ -48,6 +124,8 @@ function CommentNode({
   const isAgent = comment.createdBy !== 'user';
   const isProposal = comment.commentType === 'PROPOSAL';
   const isPending = isProposal && comment.proposalStatus === 'PENDING';
+  const isReplyingHere = replyingTo === comment.id;
+  void taskId;
 
   return (
     <div
@@ -105,9 +183,9 @@ function CommentNode({
           <div className={styles.commentActions}>
             <button
               className={styles.replyButton}
-              onClick={() => onReply(comment.id)}
+              onClick={() => (isReplyingHere ? onCancelReply() : onStartReply(comment.id))}
             >
-              Reply
+              {isReplyingHere ? 'Cancel reply' : 'Reply'}
             </button>
             {isPending && (
               <>
@@ -144,12 +222,35 @@ function CommentNode({
           threadMap={threadMap}
           depth={depth + 1}
           taskId={taskId}
-          onReply={onReply}
+          replyingTo={replyingTo}
+          replyText={replyText}
+          onStartReply={onStartReply}
+          onCancelReply={onCancelReply}
+          onChangeReplyText={onChangeReplyText}
+          onSubmitReply={onSubmitReply}
           onDelete={onDelete}
           onApprove={onApprove}
           onDeny={onDeny}
         />
       ))}
+
+      {/* Inline reply composer: rendered after children, indented one level deeper
+          to match where the new reply will land in the tree. */}
+      {isReplyingHere && (
+        <div
+          className={styles.inlineComposer}
+          style={{ marginLeft: 20 }}
+        >
+          <Composer
+            value={replyText}
+            onChange={onChangeReplyText}
+            onSubmit={onSubmitReply}
+            onCancel={onCancelReply}
+            placeholder="Write a reply…"
+            autoFocus
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -163,8 +264,9 @@ export default function CommentSection({ taskId }: Props) {
     approveProposal,
     denyProposal,
   } = useTasks();
-  const [text, setText] = useState('');
+  const [topText, setTopText] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
   const [denyCommentId, setDenyCommentId] = useState<string | null>(null);
   const [denyFeedback, setDenyFeedback] = useState('');
   const comments = getCommentsForTask(taskId);
@@ -179,18 +281,32 @@ export default function CommentSection({ taskId }: Props) {
   const threadMap = buildThreadMap(comments);
   const rootComments = threadMap.get(null) ?? [];
 
-  const replyingToComment = replyingTo
-    ? comments.find((c) => c.id === replyingTo)
-    : null;
+  const handleStartReply = useCallback((parentId: string) => {
+    // Silent discard of any in-progress reply on switch.
+    setReplyingTo(parentId);
+    setReplyText('');
+  }, []);
 
-  const handleAdd = async () => {
-    if (!text.trim()) return;
-    await addComment(taskId, text.trim(), {
-      parentCommentId: replyingTo ?? undefined,
-    });
-    setText('');
+  const handleCancelReply = useCallback(() => {
     setReplyingTo(null);
-  };
+    setReplyText('');
+  }, []);
+
+  const handleSubmitReply = useCallback(async () => {
+    if (!replyingTo) return;
+    const text = replyText.trim();
+    if (!text) return;
+    await addComment(taskId, text, { parentCommentId: replyingTo });
+    setReplyText('');
+    setReplyingTo(null);
+  }, [addComment, replyText, replyingTo, taskId]);
+
+  const handleAddTopLevel = useCallback(async () => {
+    const text = topText.trim();
+    if (!text) return;
+    await addComment(taskId, text);
+    setTopText('');
+  }, [addComment, taskId, topText]);
 
   const handleDelete = async (commentId: string) => {
     if (window.confirm('Delete this comment?')) {
@@ -222,50 +338,9 @@ export default function CommentSection({ taskId }: Props) {
     setDenyFeedback('');
   }, []);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleAdd();
-    }
-  };
-
   return (
     <div className={styles.section}>
       <h3 className={styles.header}>Comments ({comments.length})</h3>
-
-      {/* Reply indicator */}
-      {replyingToComment && (
-        <div className={styles.replyIndicator}>
-          <span>
-            Replying to: &ldquo;{replyingToComment.text.slice(0, 60)}
-            {replyingToComment.text.length > 60 ? '...' : ''}&rdquo;
-          </span>
-          <button
-            className={styles.cancelReply}
-            onClick={() => setReplyingTo(null)}
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      <div className={styles.addForm}>
-        <input
-          className={styles.addInput}
-          type="text"
-          placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <button
-          className={styles.sendButton}
-          onClick={handleAdd}
-          disabled={!text.trim()}
-        >
-          Send
-        </button>
-      </div>
 
       {/* Deny feedback modal */}
       {denyCommentId && (
@@ -309,12 +384,27 @@ export default function CommentSection({ taskId }: Props) {
             threadMap={threadMap}
             depth={0}
             taskId={taskId}
-            onReply={setReplyingTo}
+            replyingTo={replyingTo}
+            replyText={replyText}
+            onStartReply={handleStartReply}
+            onCancelReply={handleCancelReply}
+            onChangeReplyText={setReplyText}
+            onSubmitReply={handleSubmitReply}
             onDelete={handleDelete}
             onApprove={handleApprove}
             onDeny={handleDenyStart}
           />
         ))}
+      </div>
+
+      {/* Top-level composer pinned at bottom (chat convention). */}
+      <div className={styles.bottomComposer}>
+        <Composer
+          value={topText}
+          onChange={setTopText}
+          onSubmit={handleAddTopLevel}
+          placeholder="Add a comment…"
+        />
       </div>
     </div>
   );

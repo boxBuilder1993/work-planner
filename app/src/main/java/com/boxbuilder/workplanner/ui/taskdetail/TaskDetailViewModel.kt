@@ -296,11 +296,11 @@ class TaskDetailViewModel @Inject constructor(
         return descendants
     }
 
-    fun addComment(text: String) {
+    fun addComment(text: String, parentCommentId: String? = null) {
         val id = taskId ?: return
         if (text.isBlank()) return
         viewModelScope.launch {
-            repository.addComment(id, text)
+            repository.addComment(id, text, parentCommentId)
         }
     }
 

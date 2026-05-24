@@ -222,8 +222,15 @@ class TaskRepository(private val api: WorkPlannerApi) {
 
     // ── Comment mutations ───────────────────────────────────
 
-    suspend fun addComment(taskId: String, text: String): Comment {
-        val dto = api.createComment(taskId, CreateCommentRequest(text = text))
+    suspend fun addComment(
+        taskId: String,
+        text: String,
+        parentCommentId: String? = null
+    ): Comment {
+        val dto = api.createComment(
+            taskId,
+            CreateCommentRequest(text = text, parentCommentId = parentCommentId)
+        )
         val comment = dto.toDomain()
         val updated = _comments.value.toMutableMap()
         updated[comment.id] = comment

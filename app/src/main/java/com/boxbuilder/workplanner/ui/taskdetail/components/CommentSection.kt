@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,20 +23,23 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,66 +47,94 @@ import com.boxbuilder.workplanner.data.model.Comment
 import com.boxbuilder.workplanner.data.model.ProposalStatus
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
+private const val INDENT_PER_LEVEL_DP = 16
+
+/** Group comments by parentCommentId — null key holds roots. */
+private fun buildThreadMap(comments: List<Comment>): Map<String?, List<Comment>> =
+    comments.groupBy { it.parentCommentId }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CommentSection(
     comments: List<Comment>,
-    onAddComment: (String) -> Unit,
+    onAddComment: (String, String?) -> Unit,
     onDeleteComment: (Comment) -> Unit,
     onApproveProposal: (String) -> Unit = {},
     onDenyProposal: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    var commentText by remember { mutableStateOf("") }
+    var topText by remember { mutableStateOf("") }
+    var replyingTo by remember { mutableStateOf<String?>(null) }
+    var replyText by remember { mutableStateOf("") }
     var commentToDelete by remember { mutableStateOf<Comment?>(null) }
     var proposalToDeny by remember { mutableStateOf<Comment?>(null) }
 
+    val threadMap = buildThreadMap(comments)
+    val roots = threadMap[null].orEmpty()
+
     Column(modifier = modifier) {
         Text(
-            text = "Comments",
+            text = "Comments (${comments.size})",
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedTextField(
-                value = commentText,
-                onValueChange = { commentText = it },
-                placeholder = { Text("Add a comment...") },
-                modifier = Modifier.weight(1f),
-                singleLine = true
+        if (roots.isEmpty()) {
+            Text(
+                text = "No comments yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
             )
-            IconButton(
-                onClick = {
-                    if (commentText.isNotBlank()) {
-                        onAddComment(commentText)
-                        commentText = ""
-                    }
-                }
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+        } else {
+            roots.forEach { root ->
+                CommentTreeNode(
+                    comment = root,
+                    threadMap = threadMap,
+                    depth = 0,
+                    replyingTo = replyingTo,
+                    replyText = replyText,
+                    onChangeReplyText = { replyText = it },
+                    onStartReply = { id ->
+                        // Silent discard of any in-progress reply on switch.
+                        replyingTo = id
+                        replyText = ""
+                    },
+                    onCancelReply = {
+                        replyingTo = null
+                        replyText = ""
+                    },
+                    onSubmitReply = {
+                        val text = replyText.trim()
+                        val parent = replyingTo
+                        if (text.isNotEmpty() && parent != null) {
+                            onAddComment(text, parent)
+                            replyText = ""
+                            replyingTo = null
+                        }
+                    },
+                    onLongPressDelete = { commentToDelete = it },
+                    onApprove = { onApproveProposal(it.id) },
+                    onDeny = { proposalToDeny = it }
+                )
             }
         }
 
-        comments.forEach { comment ->
-            if (comment.isProposal) {
-                ProposalCard(
-                    comment = comment,
-                    onLongClick = { commentToDelete = comment },
-                    onApprove = { onApproveProposal(comment.id) },
-                    onDeny = { proposalToDeny = comment }
-                )
-            } else {
-                CommentCard(
-                    comment = comment,
-                    onLongClick = { commentToDelete = comment }
-                )
-            }
-        }
+        // Bottom composer (chat convention) — multi-line, always available
+        // for new top-level comments.
+        HorizontalDivider(modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+        Composer(
+            value = topText,
+            onValueChange = { topText = it },
+            onSend = {
+                val text = topText.trim()
+                if (text.isNotEmpty()) {
+                    onAddComment(text, null)
+                    topText = ""
+                }
+            },
+            placeholder = "Add a comment…"
+        )
     }
 
     // Delete confirmation dialog
@@ -137,6 +169,158 @@ fun CommentSection(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+private fun CommentTreeNode(
+    comment: Comment,
+    threadMap: Map<String?, List<Comment>>,
+    depth: Int,
+    replyingTo: String?,
+    replyText: String,
+    onChangeReplyText: (String) -> Unit,
+    onStartReply: (String) -> Unit,
+    onCancelReply: () -> Unit,
+    onSubmitReply: () -> Unit,
+    onLongPressDelete: (Comment) -> Unit,
+    onApprove: (Comment) -> Unit,
+    onDeny: (Comment) -> Unit
+) {
+    val children = threadMap[comment.id].orEmpty()
+    val isReplyingHere = replyingTo == comment.id
+    val indent = (depth * INDENT_PER_LEVEL_DP).dp
+
+    Column(modifier = Modifier.padding(start = indent)) {
+        if (comment.isProposal) {
+            ProposalCard(
+                comment = comment,
+                onLongClick = { onLongPressDelete(comment) },
+                onApprove = { onApprove(comment) },
+                onDeny = { onDeny(comment) }
+            )
+        } else {
+            CommentCard(
+                comment = comment,
+                onLongClick = { onLongPressDelete(comment) }
+            )
+        }
+
+        // Reply action row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(
+                onClick = {
+                    if (isReplyingHere) onCancelReply() else onStartReply(comment.id)
+                }
+            ) {
+                Text(if (isReplyingHere) "Cancel reply" else "Reply")
+            }
+        }
+    }
+
+    // Recurse into children (indented one level deeper).
+    children.forEach { child ->
+        CommentTreeNode(
+            comment = child,
+            threadMap = threadMap,
+            depth = depth + 1,
+            replyingTo = replyingTo,
+            replyText = replyText,
+            onChangeReplyText = onChangeReplyText,
+            onStartReply = onStartReply,
+            onCancelReply = onCancelReply,
+            onSubmitReply = onSubmitReply,
+            onLongPressDelete = onLongPressDelete,
+            onApprove = onApprove,
+            onDeny = onDeny
+        )
+    }
+
+    // Inline reply composer: rendered after the subtree, indented one level
+    // deeper than the parent — so it visually sits where the new child will
+    // land.
+    if (isReplyingHere) {
+        Box(
+            modifier = Modifier.padding(
+                start = ((depth + 1) * INDENT_PER_LEVEL_DP).dp,
+                top = 4.dp,
+                bottom = 8.dp
+            )
+        ) {
+            Composer(
+                value = replyText,
+                onValueChange = onChangeReplyText,
+                onSend = onSubmitReply,
+                onCancel = onCancelReply,
+                placeholder = "Write a reply…",
+                autoFocus = true
+            )
+        }
+    }
+}
+
+@Composable
+private fun Composer(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    onCancel: (() -> Unit)? = null,
+    autoFocus: Boolean = false
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(autoFocus) {
+        if (autoFocus) {
+            try {
+                focusRequester.requestFocus()
+            } catch (_: Exception) { /* not yet attached — first compose */ }
+        }
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = { Text(placeholder) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier),
+            minLines = 5,
+            maxLines = 12,
+            singleLine = false
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (onCancel != null) {
+                TextButton(onClick = onCancel) { Text("Cancel") }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = onSend,
+                enabled = value.isNotBlank()
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Send,
+                    contentDescription = "Send",
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Send")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 private fun CommentCard(
     comment: Comment,
     onLongClick: () -> Unit
@@ -144,7 +328,7 @@ private fun CommentCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp)
+            .padding(bottom = 4.dp)
             .combinedClickable(
                 onClick = {},
                 onLongClick = onLongClick
@@ -216,7 +400,7 @@ private fun ProposalCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp)
+            .padding(bottom = 4.dp)
             .combinedClickable(
                 onClick = {},
                 onLongClick = onLongClick

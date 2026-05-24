@@ -72,7 +72,10 @@ data class CommentDto(
     val updatedAt: Long
 )
 
-data class CreateCommentRequest(val text: String)
+data class CreateCommentRequest(
+    val text: String,
+    val parentCommentId: String? = null
+)
 
 data class ProposalFeedbackRequest(val feedback: String = "")
 
