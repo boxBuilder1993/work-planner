@@ -104,10 +104,10 @@ class TaskDetailViewModel @Inject constructor(
                 _localState.value = _localState.value.copy(breadcrumbs = crumbs)
             }
 
-            // Auto-refresh task, children, and comments every 10s
+            // Auto-refresh task, children, and comments every 3s
             viewModelScope.launch {
                 while (true) {
-                    kotlinx.coroutines.delay(10_000)
+                    kotlinx.coroutines.delay(3_000)
                     try {
                         repository.refreshTask(taskId)
                         repository.refreshChildren(taskId)

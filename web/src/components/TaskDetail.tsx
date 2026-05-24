@@ -150,7 +150,7 @@ export default function TaskDetail() {
     };
     fetchData();
     fetchRepeatingTask(taskId);
-    const interval = setInterval(fetchData, 10_000);
+    const interval = setInterval(fetchData, 3_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [taskId, refreshTask, getBreadcrumbs, refreshChildren, fetchRepeatingTask]);
 
