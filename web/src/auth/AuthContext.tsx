@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import { requestLocalSignIn } from './LocalAuth';
+import { exchangeGoogleToken } from './GoogleAuth';
 
 interface AuthState {
   token: string | null;
@@ -18,6 +19,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   signIn: (email: string, name: string) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
   signOut: () => void;
   getToken: () => string;
 }
@@ -98,6 +100,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signInWithGoogle = useCallback(async (idToken: string) => {
+    setState((s) => ({ ...s, isLoading: true, error: null }));
+    try {
+      const { token, user } = await exchangeGoogleToken(idToken);
+      saveSession(token, { name: user.name, email: user.email });
+      setState({
+        token,
+        userName: user.name,
+        userEmail: user.email,
+        isSignedIn: true,
+        isLoading: false,
+        error: null,
+      });
+    } catch (err) {
+      setState((s) => ({
+        ...s,
+        isLoading: false,
+        error: err instanceof Error ? err.message : 'Google sign-in failed',
+      }));
+    }
+  }, []);
+
   const signOut = useCallback(() => {
     clearSession();
     setState({
@@ -116,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [state.token]);
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signOut, getToken }}>
+    <AuthContext.Provider value={{ ...state, signIn, signInWithGoogle, signOut, getToken }}>
       {children}
     </AuthContext.Provider>
   );

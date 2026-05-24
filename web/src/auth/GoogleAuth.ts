@@ -1,69 +1,49 @@
 declare global {
   interface Window {
-    google: {
+    google?: {
       accounts: {
         id: {
           initialize(config: {
             client_id: string;
-            callback: (response: { credential?: string; error?: string }) => void;
+            callback: (response: { credential?: string }) => void;
             auto_select?: boolean;
+            ux_mode?: 'popup' | 'redirect';
           }): void;
-          prompt(callback?: (notification: { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean }) => void): void;
-          renderButton(parent: HTMLElement, options: { theme?: string; size?: string; text?: string }): void;
-          revoke(hint: string, callback?: () => void): void;
+          renderButton(
+            parent: HTMLElement,
+            options: {
+              theme?: 'outline' | 'filled_blue' | 'filled_black';
+              size?: 'large' | 'medium' | 'small';
+              text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+              width?: number;
+            },
+          ): void;
+          prompt(): void;
         };
       };
     };
   }
 }
 
-const CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const API_BASE: string = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+export const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 /**
- * Initialize Google Identity Services and get an ID token via One Tap or button.
- * Returns a JWT from our backend (not the Google token).
+ * Exchange a Google ID token for a backend JWT.
+ * Backend's `/auth/google` validates the token against GOOGLE_CLIENT_ID.
  */
-export function requestGoogleSignIn(): Promise<{ token: string; user: { id: string; email: string; name: string } }> {
-  return new Promise((resolve, reject) => {
-    window.google.accounts.id.initialize({
-      client_id: CLIENT_ID,
-      callback: async (response) => {
-        if (!response.credential) {
-          reject(new Error('No credential returned from Google'));
-          return;
-        }
-        try {
-          // Exchange Google ID token for our backend JWT
-          const res = await fetch(`${API_BASE}/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken: response.credential }),
-          });
-          if (!res.ok) {
-            const body = await res.text();
-            reject(new Error(`Auth failed: ${body}`));
-            return;
-          }
-          const data = await res.json();
-          resolve({ token: data.token, user: data.user });
-        } catch (err) {
-          reject(err);
-        }
-      },
-    });
-    window.google.accounts.id.prompt();
+export async function exchangeGoogleToken(
+  idToken: string,
+): Promise<{ token: string; user: { id: string; email: string; name: string } }> {
+  const res = await fetch(`${API_BASE}/auth/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken }),
   });
-}
-
-export function renderGoogleButton(element: HTMLElement): void {
-  window.google.accounts.id.initialize({
-    client_id: CLIENT_ID,
-    callback: () => {}, // handled by requestGoogleSignIn
-  });
-  window.google.accounts.id.renderButton(element, {
-    theme: 'outline',
-    size: 'large',
-    text: 'signin_with',
-  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Google sign-in failed: ${body}`);
+  }
+  const data = await res.json();
+  return { token: data.token, user: data.user };
 }

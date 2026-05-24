@@ -137,3 +137,30 @@
 .secondaryButton:hover {
   background: var(--background);
 }
+
+.googleSection {
+  display: flex;
+  justify-content: center;
+  margin: var(--spacing-md) 0;
+}
+
+.googleButton {
+  display: flex;
+  justify-content: center;
+}
+
+.linkButton {
+  background: transparent;
+  border: none;
+  color: var(--on-surface-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: var(--spacing-sm) 0;
+  text-decoration: underline;
+  width: 100%;
+  text-align: center;
+}
+
+.linkButton:hover {
+  color: var(--primary);
+}
