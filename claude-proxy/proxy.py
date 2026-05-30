@@ -39,6 +39,12 @@ API_KEY = os.environ.get("CLAUDE_PROXY_KEY", "")
 WORKSPACE_BASE = Path(
     os.environ.get("WORKSPACE_BASE", str(Path.home() / ".workplanner" / "workspaces"))
 )
+# Backend URL + auth key used by MCP servers spawned on this host. The poller
+# also sends these in the request body, but its values reflect *its* network
+# view (Railway's `backend.railway.internal` etc.) which doesn't resolve from
+# the Mac. Proxy-side env wins so the MCP always talks to a reachable URL.
+WORKPLANNER_API_URL = os.environ.get("WORKPLANNER_API_URL", "")
+INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
 JOB_TTL = 300
 RUN_TIMEOUT_SECONDS = int(os.environ.get("PROXY_RUN_TIMEOUT_SECONDS", "600"))
 RUNTIME_DEGRADED_TTL = int(os.environ.get("PROXY_RUNTIME_DEGRADED_TTL", "300"))
@@ -70,8 +76,6 @@ class RunRequest(BaseModel):
     algo_tools: list[str] = []
     task_id: str = ""
     ai_status: str = ""
-    workplanner_api_url: str = ""
-    internal_api_key: str = ""
 
 
 class SubmitResponse(BaseModel):
@@ -182,8 +186,8 @@ def _resolve_workspace_path(req: RunRequest) -> Path | None:
 
 def _workplanner_env(req: RunRequest) -> dict[str, str]:
     env = {
-        "WORKPLANNER_API_URL": req.workplanner_api_url,
-        "INTERNAL_API_KEY": req.internal_api_key,
+        "WORKPLANNER_API_URL": WORKPLANNER_API_URL,
+        "INTERNAL_API_KEY": INTERNAL_API_KEY,
     }
     workspace = _resolve_workspace_path(req)
     if workspace is not None:
@@ -196,8 +200,8 @@ def _workplanner_env(req: RunRequest) -> dict[str, str]:
 
 def _algo_env(req: RunRequest) -> dict[str, str]:
     return {
-        "WORKPLANNER_API_URL": req.workplanner_api_url,
-        "INTERNAL_API_KEY": req.internal_api_key,
+        "WORKPLANNER_API_URL": WORKPLANNER_API_URL,
+        "INTERNAL_API_KEY": INTERNAL_API_KEY,
         "ALGO_TASK_ID": req.task_id,
         "ALGO_AI_STATUS": req.ai_status,
         "ALGO_TOOLS": ",".join(req.algo_tools),
@@ -298,8 +302,8 @@ async def _prepare_codex_home(req: RunRequest) -> Path:
 
     workplanner_cmd = [
         "codex", "mcp", "add", "workplanner",
-        "--env", f"WORKPLANNER_API_URL={req.workplanner_api_url}",
-        "--env", f"INTERNAL_API_KEY={req.internal_api_key}",
+        "--env", f"WORKPLANNER_API_URL={WORKPLANNER_API_URL}",
+        "--env", f"INTERNAL_API_KEY={INTERNAL_API_KEY}",
     ]
     for key, value in _chromadb_env().items():
         workplanner_cmd.extend(["--env", f"{key}={value}"])
@@ -313,8 +317,8 @@ async def _prepare_codex_home(req: RunRequest) -> Path:
     if req.algo_tools:
         algo_cmd = [
             "codex", "mcp", "add", "algo",
-            "--env", f"WORKPLANNER_API_URL={req.workplanner_api_url}",
-            "--env", f"INTERNAL_API_KEY={req.internal_api_key}",
+            "--env", f"WORKPLANNER_API_URL={WORKPLANNER_API_URL}",
+            "--env", f"INTERNAL_API_KEY={INTERNAL_API_KEY}",
             "--env", f"ALGO_TASK_ID={req.task_id}",
             "--env", f"ALGO_AI_STATUS={req.ai_status}",
             "--env", f"ALGO_TOOLS={','.join(req.algo_tools)}",
@@ -719,6 +723,14 @@ async def health():
         },
         "runtimes": runtimes,
     }
+
+
+if not WORKPLANNER_API_URL or not INTERNAL_API_KEY:
+    logger.warning(
+        "WORKPLANNER_API_URL or INTERNAL_API_KEY not set on the proxy — "
+        "MCP tool calls (create_task, add_comment, etc.) will fail. "
+        "Export both before starting the proxy."
+    )
 
 
 if __name__ == "__main__":

@@ -102,35 +102,68 @@ class ProxyRoutingTests(unittest.TestCase):
 
 
 class RunRequestTests(unittest.TestCase):
-    def test_run_request_has_no_workspace_path_field(self):
-        # Pydantic ignores extras, so old pollers still sending the field
-        # don't error — but the field is not part of the model.
-        req = proxy.RunRequest(prompt="x")
+    def test_run_request_strips_proxy_owned_fields(self):
+        # workspace_path / workplanner_api_url / internal_api_key are all
+        # proxy-owned now — not on the model. Pydantic ignores extras so old
+        # pollers still sending them don't error.
+        req = proxy.RunRequest(
+            prompt="x",
+            workspace_path="/tmp/x",  # legacy
+            workplanner_api_url="http://api",  # legacy
+            internal_api_key="k",  # legacy
+        )
         self.assertFalse(hasattr(req, "workspace_path"))
+        self.assertFalse(hasattr(req, "workplanner_api_url"))
+        self.assertFalse(hasattr(req, "internal_api_key"))
 
 
 class WorkplannerEnvTests(unittest.TestCase):
     def test_omits_workspace_path_when_no_task_id(self):
-        req = proxy.RunRequest(prompt="x", workplanner_api_url="http://api", internal_api_key="k")
-        env = proxy._workplanner_env(req)
-        self.assertNotIn("WORKPLANNER_WORKSPACE_PATH", env)
+        orig_url, orig_key = proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY
+        proxy.WORKPLANNER_API_URL = "https://backend.example/"
+        proxy.INTERNAL_API_KEY = "secret"
+        try:
+            req = proxy.RunRequest(prompt="x")
+            env = proxy._workplanner_env(req)
+            self.assertNotIn("WORKPLANNER_WORKSPACE_PATH", env)
+            self.assertEqual(env["WORKPLANNER_API_URL"], "https://backend.example/")
+            self.assertEqual(env["INTERNAL_API_KEY"], "secret")
+        finally:
+            proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY = orig_url, orig_key
 
     def test_includes_workspace_path_derived_from_task_id(self):
         from pathlib import Path
         orig_base = proxy.WORKSPACE_BASE
+        orig_url = proxy.WORKPLANNER_API_URL
         proxy.WORKSPACE_BASE = Path("/tmp/wp-test-base")
+        proxy.WORKPLANNER_API_URL = "https://backend.example/"
+        try:
+            req = proxy.RunRequest(prompt="x", task_id="T-42")
+            env = proxy._workplanner_env(req)
+            self.assertEqual(env["WORKPLANNER_WORKSPACE_PATH"], "/tmp/wp-test-base/T-42")
+            self.assertEqual(env["WORKPLANNER_API_URL"], "https://backend.example/")
+        finally:
+            proxy.WORKSPACE_BASE = orig_base
+            proxy.WORKPLANNER_API_URL = orig_url
+
+    def test_proxy_env_overrides_what_poller_sends(self):
+        """Even when a (legacy) poller sends a different URL, the proxy's own
+        env wins. This is the whole point of the refactor — Mac proxy doesn't
+        let Railway's internal DNS leak into MCP subprocesses."""
+        orig_url, orig_key = proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY
+        proxy.WORKPLANNER_API_URL = "https://public.example/"
+        proxy.INTERNAL_API_KEY = "mac-side-key"
         try:
             req = proxy.RunRequest(
                 prompt="x",
-                workplanner_api_url="http://api",
-                internal_api_key="k",
-                task_id="T-42",
+                workplanner_api_url="http://backend.railway.internal:8080",  # legacy
+                internal_api_key="poller-key",  # legacy
             )
             env = proxy._workplanner_env(req)
-            self.assertEqual(env["WORKPLANNER_WORKSPACE_PATH"], "/tmp/wp-test-base/T-42")
-            self.assertEqual(env["WORKPLANNER_API_URL"], "http://api")
+            self.assertEqual(env["WORKPLANNER_API_URL"], "https://public.example/")
+            self.assertEqual(env["INTERNAL_API_KEY"], "mac-side-key")
         finally:
-            proxy.WORKSPACE_BASE = orig_base
+            proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY = orig_url, orig_key
 
 
 class StatusResponseTests(unittest.TestCase):
