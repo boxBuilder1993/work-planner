@@ -188,6 +188,14 @@ async def list_tools() -> list[Tool]:
                  "status": {"type": "string", "description": "pending | dispatched | completed | failed | cancelled"},
                  "persona": {"type": "string", "description": "engineer | planner | manager | reviewer | default"},
              }}),
+        Tool(name="delete_task",
+             description="Permanently delete a task and all its children. "
+                         "Irreversible — use only for cleanup of duplicate or probe tasks. "
+                         "Requires confirm=True to prevent accidental deletion.",
+             inputSchema={"type": "object", "properties": {
+                 "task_id": {"type": "string", "description": "ID of the task to delete."},
+                 "confirm": {"type": "boolean", "description": "Must be true. Guards against accidental calls."},
+             }, "required": ["task_id", "confirm"]}),
     ]
 
 
@@ -319,6 +327,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 persona=arguments.get("persona"),
             )
             return _text(json.dumps(results, indent=2))
+
+        if name == "delete_task":
+            if not arguments.get("confirm"):
+                return _text(
+                    "Error: delete_task requires confirm=True. "
+                    "This is a permanent, irreversible operation. "
+                    "Pass confirm=True only when you are certain the task should be deleted."
+                )
+            task_id = arguments["task_id"]
+            client.delete_task(task_id)
+            return _text(json.dumps({"ok": True, "id": task_id}))
 
         return _text(f"Unknown tool: {name}")
     except Exception as e:
