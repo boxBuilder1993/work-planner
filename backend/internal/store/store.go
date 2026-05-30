@@ -303,9 +303,10 @@ func (s *Store) UpdateComment(ctx context.Context, commentID string, req *model.
 
 // ListCommentsNeedingAIReply returns comments that:
 //   - contain an @ai mention (loose ILIKE match; poller does final regex check)
-//   - were NOT authored by an AI persona (`created_by` doesn't start with
-//     `ai-`). Without this, the AI's own replies containing "@ai-engineer"
-//     etc. would loop back into the dispatcher.
+//   - were NOT authored by an AI persona EXCEPT `ai-manager`. The manager
+//     is the only persona allowed to dispatch other personas (orchestrator
+//     role); all other AI replies are dispatch dead-ends. The poller adds a
+//     second guard against manager→manager self-loops.
 //   - have `ai-comment-status` of either NULL (never tried) or `failed`
 //     (last cycle exhausted retries). The poller keeps retrying failed
 //     mentions every cycle — manual intervention (edit the comment, flip
@@ -318,7 +319,7 @@ func (s *Store) ListCommentsNeedingAIReply(ctx context.Context) ([]model.Comment
 		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.props, c.created_at, c.updated_at
 		FROM comments c
 		WHERE c.text ILIKE '%@ai%'
-		  AND c.created_by NOT LIKE 'ai-%'
+		  AND (c.created_by NOT LIKE 'ai-%' OR c.created_by = 'ai-manager')
 		  AND (
 		    (c.props->>'ai-comment-status') IS NULL
 		    OR (c.props->>'ai-comment-status') = 'failed'

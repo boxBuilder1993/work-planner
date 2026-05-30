@@ -2,9 +2,13 @@
 
 Pure function — no I/O, no side effects. Takes the static persona (already
 compiled with shared fragments inlined) plus the dynamic per-invocation
-context (task, ancestors, thread, ai_context, mention, workspace_path) and
-returns a `PromptPayload` ready for the proxy to translate into a
-`claude -p` invocation.
+context (task, ancestors, thread, ai_context, mention) and returns a
+`PromptPayload` ready for the proxy to translate into a `claude -p`
+invocation.
+
+The workspace directory is owned by the proxy (it derives the path from
+the task id + its own `WORKSPACE_BASE` env), so the prompt only tells the
+AI that it has a dedicated cwd, not the absolute path.
 
 See: docs/CHAT_DESIGN.md (Per-invocation context section).
 """
@@ -34,7 +38,6 @@ class PromptPayload:
     user: str                    # → final positional prompt argument
     model: str                   # → --model
     allowed_tools: list[str] = field(default_factory=list)   # → --allowed-tools
-    cwd: str = ""                # → subprocess cwd (workspace path)
 
 
 def build_prompt(
@@ -45,7 +48,6 @@ def build_prompt(
     mention: CommentEntity,
     persona: CompiledPersona,
     ai_context: dict[str, Any] | None,
-    workspace_path: str,
     thread_limit: int = DEFAULT_THREAD_LIMIT,
 ) -> PromptPayload:
     """Assemble a complete `PromptPayload` from persona + dynamic context.
@@ -57,7 +59,6 @@ def build_prompt(
         mention: the @ai-* comment that triggered this dispatch
         persona: the routed `CompiledPersona`
         ai_context: current `task.props.ai_context` (may be None or empty)
-        workspace_path: absolute path on the Mac for AI work
         thread_limit: keep at most this many thread comments (oldest first dropped)
 
     The system prompt is `persona.body` verbatim (already has shared fragments
@@ -70,7 +71,6 @@ def build_prompt(
         thread=thread[-thread_limit:] if thread_limit else thread,
         mention=mention,
         ai_context=ai_context or {},
-        workspace_path=workspace_path,
     )
 
     user_msg = (
@@ -87,7 +87,6 @@ def build_prompt(
         user=user_msg,
         model=persona.model,
         allowed_tools=list(persona.tools),
-        cwd=workspace_path,
     )
 
 
@@ -101,13 +100,12 @@ def _render_context_xml(
     thread: list[CommentEntity],
     mention: CommentEntity,
     ai_context: dict[str, Any],
-    workspace_path: str,
 ) -> str:
     parts = ["<context>"]
     parts.append(_render_task(task))
     if ancestors:
         parts.append(_render_ancestors(ancestors))
-    parts.append(_render_workspace(workspace_path))
+    parts.append(_render_workspace())
     if ai_context:
         parts.append(_render_ai_context(ai_context))
     parts.append(_render_thread(thread))
@@ -136,16 +134,12 @@ def _render_ancestors(ancestors: list[TaskEntity]) -> str:
     return "\n".join(lines)
 
 
-def _render_workspace(workspace_path: str) -> str:
-    if not workspace_path:
-        return (
-            "  <workspace>\n"
-            "    <status>not_yet_created</status>\n"
-            "  </workspace>"
-        )
+def _render_workspace() -> str:
     return (
         "  <workspace>\n"
-        f"    <path>{escape(workspace_path)}</path>\n"
+        "    <note>You are running inside a per-task workspace directory. "
+        "Your cwd is dedicated to this task; use Read/Write/Bash relative to "
+        "it. Run `pwd` if you need the absolute path.</note>\n"
         "  </workspace>"
     )
 

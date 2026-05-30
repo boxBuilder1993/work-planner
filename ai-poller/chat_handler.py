@@ -9,14 +9,14 @@ Flow per poll cycle:
   3. For each mention:
      a. Resolve task, ancestor chain, thread, and `ai_context`.
      b. Parse the @ai-<persona> suffix, route to a persona file.
-     c. Compute workspace_path (persisted on task.props.workspace_path).
-     d. Build the prompt payload (system + user + tool/model/cwd).
-     e. PATCH the mention with ai-comment-status="dispatched" (lock).
-     f. POST /run to claude-proxy; poll /status until done or timeout.
-     g. Validate the inner JSON; on success: post reply comment, merge
+     c. Build the prompt payload (system + user + tool/model). The
+        workspace path is owned by the proxy — it derives it from task_id.
+     d. PATCH the mention with ai-comment-status="dispatched" (lock).
+     e. POST /run to claude-proxy; poll /status until done or timeout.
+     f. Validate the inner JSON; on success: post reply comment, merge
         context_update into task.props.ai_context, flip status to "replied",
         and stamp telemetry from proxy metadata.
-     h. On failure: retry up to MAX_RETRIES, then mark "failed" with error.
+     g. On failure: retry up to MAX_RETRIES, then mark "failed" with error.
 
 See: docs/CHAT_DESIGN.md.
 """
@@ -47,7 +47,6 @@ from persona_registry import (
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_WORKSPACE_BASE = os.path.expanduser("~/.workplanner/workspaces")
 PROXY_POLL_INTERVAL_S = 5
 PROXY_POLL_MAX_S = 600  # 10 minutes total per dispatch
 MAX_RETRIES = 3
@@ -81,9 +80,6 @@ class ChatHandler:
         self._config = config
         self._proxy_url = os.environ.get("CLAUDE_PROXY_URL", "http://localhost:8400")
         self._proxy_key = os.environ.get("CLAUDE_PROXY_KEY", "")
-        self._workspace_base = os.environ.get(
-            "WORKPLANNER_WORKSPACE_BASE", DEFAULT_WORKSPACE_BASE
-        )
 
     # ─── Public API ───────────────────────────────────────────────────────
 
@@ -160,17 +156,24 @@ class ChatHandler:
 
         persona = self._route_persona(mention.text)
 
-        # 3. Compute / persist workspace path
-        workspace_path = task.props.get("workspace_path") or os.path.join(
-            self._workspace_base, task.id
-        )
-        if not task.props.get("workspace_path"):
+        # 2b. Manager is the only AI allowed to dispatch (orchestrator role).
+        # The backend SQL already filters other AI authors out; here we guard
+        # against manager mentioning manager (would self-loop forever).
+        if mention.created_by == "ai-manager" and persona.name == "manager":
+            logger.info(
+                "chat: skipping ai-manager self-mention %s (persona=manager)",
+                mention.id,
+            )
             try:
-                self._api.update_task(task.id, props={"workspace_path": workspace_path})
+                self._api.update_comment_props(
+                    mention.id, {"ai-comment-status": "skipped"}
+                )
             except Exception:
-                logger.exception("chat: failed to persist workspace_path for task %s", task.id)
+                logger.exception("chat: failed to mark self-mention %s skipped", mention.id)
+            return
 
-        # 4. Build prompt
+        # 3. Build prompt. Workspace path is computed by the proxy from
+        #    task.id + its own WORKSPACE_BASE, so we don't pass it here.
         ai_context = task.props.get("ai_context") or {}
         payload = build_prompt(
             task=task,
@@ -179,7 +182,6 @@ class ChatHandler:
             mention=mention,
             persona=persona,
             ai_context=ai_context,
-            workspace_path=workspace_path,
         )
 
         # 5. Acquire lock + stamp persona/version (so the dispatch is auditable
@@ -301,7 +303,6 @@ class ChatHandler:
             "task_id": task_id,
             "workplanner_api_url": self._config.api_url,
             "internal_api_key": self._config.internal_api_key,
-            "workspace_path": payload.cwd,
         }
         headers = {"Content-Type": "application/json"}
         if self._proxy_key:

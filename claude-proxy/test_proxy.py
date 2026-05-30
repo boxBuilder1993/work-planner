@@ -94,35 +94,43 @@ class ProxyRoutingTests(unittest.TestCase):
         self.assertEqual([candidate_req.model for _, candidate_req in candidates], ["gpt-5-codex", "claude-sonnet-4-6"])
 
 
-# ─── Chat dispatch additions (workspace_path + metadata) ──────────────────
+# ─── Chat dispatch additions (workspace derivation + metadata) ────────────
+#
+# Workspace dir is `WORKSPACE_BASE / task_id`, computed by the proxy. The
+# field is intentionally not on RunRequest — pollers don't get a say in
+# filesystem layout. Legacy callers with no task_id fall back to REPO_ROOT.
 
 
 class RunRequestTests(unittest.TestCase):
-    def test_workspace_path_defaults_to_empty(self):
+    def test_run_request_has_no_workspace_path_field(self):
+        # Pydantic ignores extras, so old pollers still sending the field
+        # don't error — but the field is not part of the model.
         req = proxy.RunRequest(prompt="x")
-        self.assertEqual(req.workspace_path, "")
-
-    def test_workspace_path_accepted(self):
-        req = proxy.RunRequest(prompt="x", workspace_path="/Users/me/.workplanner/workspaces/T-1")
-        self.assertEqual(req.workspace_path, "/Users/me/.workplanner/workspaces/T-1")
+        self.assertFalse(hasattr(req, "workspace_path"))
 
 
 class WorkplannerEnvTests(unittest.TestCase):
-    def test_omits_workspace_path_when_empty(self):
+    def test_omits_workspace_path_when_no_task_id(self):
         req = proxy.RunRequest(prompt="x", workplanner_api_url="http://api", internal_api_key="k")
         env = proxy._workplanner_env(req)
         self.assertNotIn("WORKPLANNER_WORKSPACE_PATH", env)
 
-    def test_includes_workspace_path_when_set(self):
-        req = proxy.RunRequest(
-            prompt="x",
-            workplanner_api_url="http://api",
-            internal_api_key="k",
-            workspace_path="/tmp/ws-42",
-        )
-        env = proxy._workplanner_env(req)
-        self.assertEqual(env["WORKPLANNER_WORKSPACE_PATH"], "/tmp/ws-42")
-        self.assertEqual(env["WORKPLANNER_API_URL"], "http://api")
+    def test_includes_workspace_path_derived_from_task_id(self):
+        from pathlib import Path
+        orig_base = proxy.WORKSPACE_BASE
+        proxy.WORKSPACE_BASE = Path("/tmp/wp-test-base")
+        try:
+            req = proxy.RunRequest(
+                prompt="x",
+                workplanner_api_url="http://api",
+                internal_api_key="k",
+                task_id="T-42",
+            )
+            env = proxy._workplanner_env(req)
+            self.assertEqual(env["WORKPLANNER_WORKSPACE_PATH"], "/tmp/wp-test-base/T-42")
+            self.assertEqual(env["WORKPLANNER_API_URL"], "http://api")
+        finally:
+            proxy.WORKSPACE_BASE = orig_base
 
 
 class StatusResponseTests(unittest.TestCase):
@@ -196,23 +204,29 @@ class ClaudeRuntimeChatDispatchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_chat_dispatch_sets_workspace_cwd_and_add_dir(self):
         import tempfile
+        from pathlib import Path
         with tempfile.TemporaryDirectory() as tmp:
-            ws = os.path.join(tmp, "ws-42")  # does not exist yet
-            req = proxy.RunRequest(
-                prompt="hello",
-                model="claude-haiku-4-5",
-                workspace_path=ws,
-            )
-            outcome = await proxy.ClaudeRuntime().run(req)
-            self.assertIsInstance(outcome, proxy.RuntimeSuccess)
-            # Workspace dir was created
-            self.assertTrue(os.path.isdir(ws))
-            # cwd set to workspace path
-            self.assertEqual(str(self._recorded_cwd), ws)
-            # --add-dir flag present with workspace path
-            self.assertIn("--add-dir", self._recorded_cmd)
-            idx = self._recorded_cmd.index("--add-dir")
-            self.assertEqual(self._recorded_cmd[idx + 1], ws)
+            orig_base = proxy.WORKSPACE_BASE
+            proxy.WORKSPACE_BASE = Path(tmp)
+            try:
+                req = proxy.RunRequest(
+                    prompt="hello",
+                    model="claude-haiku-4-5",
+                    task_id="T-42",
+                )
+                outcome = await proxy.ClaudeRuntime().run(req)
+                self.assertIsInstance(outcome, proxy.RuntimeSuccess)
+                expected_ws = os.path.join(tmp, "T-42")
+                # Workspace dir was created
+                self.assertTrue(os.path.isdir(expected_ws))
+                # cwd set to derived workspace path
+                self.assertEqual(str(self._recorded_cwd), expected_ws)
+                # --add-dir flag present with workspace path
+                self.assertIn("--add-dir", self._recorded_cmd)
+                idx = self._recorded_cmd.index("--add-dir")
+                self.assertEqual(self._recorded_cmd[idx + 1], expected_ws)
+            finally:
+                proxy.WORKSPACE_BASE = orig_base
 
     async def test_metadata_populated_from_claude_json(self):
         req = proxy.RunRequest(prompt="hello", model="claude-haiku-4-5")

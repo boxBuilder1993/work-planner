@@ -32,6 +32,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 PROXY_DIR = Path(__file__).parent.resolve()
 REPO_ROOT = PROXY_DIR.parent
 API_KEY = os.environ.get("CLAUDE_PROXY_KEY", "")
+# Per-task workspace base. Each chat dispatch gets `WORKSPACE_BASE / task_id`
+# as its cwd. The poller never sees this path — filesystem layout is a proxy
+# concern. Override via env if you want workspaces somewhere other than the
+# user's home.
+WORKSPACE_BASE = Path(
+    os.environ.get("WORKSPACE_BASE", str(Path.home() / ".workplanner" / "workspaces"))
+)
 JOB_TTL = 300
 RUN_TIMEOUT_SECONDS = int(os.environ.get("PROXY_RUN_TIMEOUT_SECONDS", "600"))
 RUNTIME_DEGRADED_TTL = int(os.environ.get("PROXY_RUNTIME_DEGRADED_TTL", "300"))
@@ -65,12 +72,6 @@ class RunRequest(BaseModel):
     ai_status: str = ""
     workplanner_api_url: str = ""
     internal_api_key: str = ""
-    # Chat-dispatch workspace path. When set, the runtime mkdirs the dir,
-    # spawns claude -p with cwd=workspace_path and --add-dir, and exports
-    # WORKPLANNER_WORKSPACE_PATH into the MCP server's env for run_command
-    # enforcement. Empty string preserves legacy behavior (cwd=REPO_ROOT,
-    # no --add-dir, no env injection).
-    workspace_path: str = ""
 
 
 class SubmitResponse(BaseModel):
@@ -171,15 +172,24 @@ def _chromadb_env() -> dict[str, str]:
     return env
 
 
+def _resolve_workspace_path(req: RunRequest) -> Path | None:
+    """Return the per-task workspace dir, or None for legacy (no task_id)
+    requests that should run in REPO_ROOT."""
+    if not req.task_id:
+        return None
+    return WORKSPACE_BASE / req.task_id
+
+
 def _workplanner_env(req: RunRequest) -> dict[str, str]:
     env = {
         "WORKPLANNER_API_URL": req.workplanner_api_url,
         "INTERNAL_API_KEY": req.internal_api_key,
     }
-    if req.workspace_path:
+    workspace = _resolve_workspace_path(req)
+    if workspace is not None:
         # Consumed by workplanner_server.py's run_command tool to confine
         # shell commands to the per-task workspace directory.
-        env["WORKPLANNER_WORKSPACE_PATH"] = req.workspace_path
+        env["WORKPLANNER_WORKSPACE_PATH"] = str(workspace)
     env.update(_chromadb_env())
     return env
 
@@ -365,11 +375,12 @@ class ClaudeRuntime:
                 cmd.extend(req.allowed_tools)
 
             # Chat-dispatch: confine claude -p to a per-task workspace dir.
-            # Legacy path (workspace_path == "") falls back to REPO_ROOT.
-            if req.workspace_path:
-                Path(req.workspace_path).mkdir(parents=True, exist_ok=True)
-                cmd.extend(["--add-dir", req.workspace_path])
-                run_cwd: Path = Path(req.workspace_path)
+            # Legacy callers that don't send task_id fall back to REPO_ROOT.
+            workspace = _resolve_workspace_path(req)
+            if workspace is not None:
+                workspace.mkdir(parents=True, exist_ok=True)
+                cmd.extend(["--add-dir", str(workspace)])
+                run_cwd: Path = workspace
             else:
                 run_cwd = REPO_ROOT
 

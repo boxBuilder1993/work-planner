@@ -68,7 +68,6 @@ class TestPromptPayloadShape(unittest.TestCase):
             mention=self.mention,
             persona=self.persona,
             ai_context=None,
-            workspace_path="/tmp/ws",
         )
         defaults.update(kwargs)
         return build_prompt(**defaults)
@@ -89,10 +88,6 @@ class TestPromptPayloadShape(unittest.TestCase):
         p.allowed_tools.append("extra")
         self.assertEqual(self.persona.tools, ["run_command"])
 
-    def test_cwd_is_workspace_path(self) -> None:
-        p = self._build(workspace_path="/Users/me/.workplanner/workspaces/abc")
-        self.assertEqual(p.cwd, "/Users/me/.workplanner/workspaces/abc")
-
     def test_user_message_contains_mention_text(self) -> None:
         p = self._build()
         self.assertIn("@ai please help", p.user)
@@ -112,7 +107,6 @@ class TestTaskRendering(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertIn("<task>", p.user)
         self.assertIn("T-42", p.user)
@@ -127,7 +121,6 @@ class TestTaskRendering(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertNotIn("<script>", p.user)
         self.assertIn("&lt;script&gt;", p.user)
@@ -143,7 +136,6 @@ class TestAncestorChain(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertNotIn("<ancestor_chain>", p.user)
 
@@ -157,7 +149,6 @@ class TestAncestorChain(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertIn("<ancestor_chain>", p.user)
         self.assertIn("Root project", p.user)
@@ -167,7 +158,9 @@ class TestAncestorChain(unittest.TestCase):
 
 
 class TestWorkspace(unittest.TestCase):
-    def test_path_rendered(self) -> None:
+    def test_workspace_block_path_free(self) -> None:
+        """Workspace section should describe the convention without leaking
+        an absolute path — the proxy owns the actual cwd."""
         p = build_prompt(
             task=_task(),
             ancestors=[],
@@ -175,22 +168,13 @@ class TestWorkspace(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/Users/me/.workplanner/workspaces/T-1",
         )
-        self.assertIn("/Users/me/.workplanner/workspaces/T-1", p.user)
         self.assertIn("<workspace>", p.user)
-
-    def test_empty_path_shows_status(self) -> None:
-        p = build_prompt(
-            task=_task(),
-            ancestors=[],
-            thread=[],
-            mention=_comment(),
-            persona=_persona(),
-            ai_context=None,
-            workspace_path="",
-        )
-        self.assertIn("not_yet_created", p.user)
+        self.assertIn("per-task workspace", p.user)
+        # No leaked absolute path
+        self.assertNotIn("/Users/", p.user)
+        self.assertNotIn("/root/", p.user)
+        self.assertNotIn("/tmp/", p.user)
 
 
 class TestAIContext(unittest.TestCase):
@@ -202,7 +186,6 @@ class TestAIContext(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         p_empty = build_prompt(
             task=_task(),
@@ -211,7 +194,6 @@ class TestAIContext(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context={},
-            workspace_path="/tmp",
         )
         self.assertNotIn("<ai_context>", p_none.user)
         self.assertNotIn("<ai_context>", p_empty.user)
@@ -229,7 +211,6 @@ class TestAIContext(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=ctx,
-            workspace_path="/tmp",
         )
         self.assertIn("<ai_context>", p.user)
         self.assertIn("goal: Centralize JWT validation", p.user)
@@ -249,7 +230,6 @@ class TestThread(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertIn("first comment on this task", p.user)
 
@@ -263,7 +243,6 @@ class TestThread(unittest.TestCase):
             mention=_comment(id="m-1", text="@ai now"),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertLess(p.user.index("First message"), p.user.index("Second message"))
 
@@ -279,7 +258,6 @@ class TestThread(unittest.TestCase):
             mention=_comment(id="m-1", text="@ai"),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
             thread_limit=5,
         )
         # last 5 should be present
@@ -300,7 +278,6 @@ class TestThread(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertIn('id="c-99"', p.user)
         self.assertIn('created_by="ai-engineer"', p.user)
@@ -316,7 +293,6 @@ class TestThread(unittest.TestCase):
             mention=_comment(),
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertNotIn("<bad>", p.user)
         self.assertIn("&lt;bad&gt;", p.user)
@@ -333,7 +309,6 @@ class TestMentionBlock(unittest.TestCase):
             mention=m,
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertIn('<mention triggering="true">', p.user)
         self.assertIn("@ai-engineer please review", p.user)
@@ -349,7 +324,6 @@ class TestMentionBlock(unittest.TestCase):
             mention=m,
             persona=_persona(),
             ai_context=None,
-            workspace_path="/tmp",
         )
         self.assertIn('id="m-1"', p.user)
         self.assertIn('created_by="user"', p.user)
