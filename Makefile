@@ -1,4 +1,4 @@
-.PHONY: ai-ollama ai-claude dev-backend dev dev-stack dev-stack-down dev-stack-logs dev-proxy help test test-backend test-poller test-proxy test-web test-mobile test-app
+.PHONY: ai-ollama ai-claude dev-backend dev dev-stack dev-stack-down dev-stack-logs dev-proxy help test test-backend test-poller test-proxy test-web test-mobile test-app test-cli install-cli
 
 help:
 	@echo "Local dev (Docker Compose + claude-proxy on Mac):"
@@ -94,7 +94,7 @@ dev-stack-logs:
 # Run every component's tests. Fail-fast (Make default). For per-component
 # isolation use the individual targets, or rely on the GH Actions matrix
 # which runs them as parallel jobs.
-test: test-backend test-poller test-proxy test-web test-mobile test-app
+test: test-backend test-poller test-proxy test-web test-mobile test-app test-cli
 
 # Go backend: static analysis + compile + unit tests. Currently no test files
 # exist; the command is wired so future tests run automatically.
@@ -129,3 +129,18 @@ test-mobile:
 # .github/workflows/build.yml — don't duplicate that here.
 test-app:
 	./gradlew test --no-daemon
+
+# CLI (Python, pipx-installable). Smoke-tests the entry point.
+test-cli:
+	cd cli && \
+		( [ -d .venv ] || python3 -m venv .venv ) && \
+		. .venv/bin/activate && \
+		pip install --quiet --disable-pip-version-check -e . && \
+		wp --help > /dev/null && \
+		echo "✓ wp --help works"
+
+# Install the CLI globally via pipx. Re-run to upgrade.
+install-cli:
+	@command -v pipx >/dev/null 2>&1 || (echo "pipx not found. brew install pipx"; exit 1)
+	pipx install --force ./cli
+	@echo "Installed. Try: wp --help"
