@@ -18,7 +18,8 @@ tools:
   - Glob
   - Grep
 reply_length_cap: 4000
-version: 1
+version: 2
+max_turns: 100
 includes:
   - _shared/environment.md
   - _shared/mention_context.md

@@ -298,6 +298,7 @@ class ChatHandler:
             "model": payload.model,
             "preferred_runtime": "claude",
             "fallback_runtimes": [],
+            "max_turns": payload.max_turns,
             "allowed_tools": list(payload.allowed_tools),
             "disallowed_tools": [],
             "task_id": task_id,

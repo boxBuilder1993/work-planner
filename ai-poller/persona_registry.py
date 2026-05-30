@@ -48,6 +48,10 @@ class CompiledPersona:
     tools: list[str] = field(default_factory=list)
     reply_length_cap: int = 4000
     version: int = 1
+    # Max agent turns per dispatch. Personas doing code work (engineer) need
+    # more turns than personas doing pure review/planning. Forwarded to
+    # claude -p --max-turns by the proxy.
+    max_turns: int = 20
     body: str = ""
     raw_body: str = ""
 
@@ -122,6 +126,7 @@ def load_persona(
         tools=list(fm.get("tools", [])),
         reply_length_cap=fm.get("reply_length_cap", 4000),
         version=fm.get("version", 1),
+        max_turns=fm.get("max_turns", 20),
         body=compiled,
         raw_body=body,
     )
