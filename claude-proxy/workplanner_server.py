@@ -27,6 +27,11 @@ _chroma_collection = None
 # a chat persona; absent when the legacy algorithm path invokes the MCP.
 WORKSPACE_PATH = os.environ.get("WORKPLANNER_WORKSPACE_PATH", "")
 
+# Identifies the WorkItem this MCP subprocess is serving. Set by claude-proxy
+# when dispatching from the work_item_handler. Lets `get_my_work_item()`
+# return the AI's own assignment without needing the AI to know its own id.
+MY_WORK_ITEM_ID = os.environ.get("WORK_ITEM_ID", "")
+
 
 def _api() -> ApiClient:
     global api
@@ -161,6 +166,28 @@ async def list_tools() -> list[Tool]:
                  "work_type": {"type": "string", "description": "Category: requirements_spec, adr, plan, implementation_note, review_feedback, delivery_report, clarification, debug_note"},
                  "tags": {"type": "array", "items": {"type": "string"}, "description": "Free-form tags for context (e.g. project name, tech, feature)"},
              }, "required": ["content", "work_type"]}),
+        Tool(name="get_my_work_item",
+             description="Return the WorkItem this dispatch is currently executing. "
+                         "Includes the assignment (prompt_context), retry count, attempt history, "
+                         "and any prior output. Useful when you want to re-read your own "
+                         "instructions without scrolling the prompt.",
+             inputSchema={"type": "object", "properties": {}}),
+        Tool(name="get_work_item",
+             description="Fetch a specific WorkItem by id. Use this to inspect a sibling's "
+                         "WorkItem (its assignment + output) without rebuilding context from "
+                         "comments.",
+             inputSchema={"type": "object", "properties": {
+                 "work_item_id": {"type": "string"},
+             }, "required": ["work_item_id"]}),
+        Tool(name="list_work_items",
+             description="List WorkItems, optionally filtered by task, status, or persona. "
+                         "Defaults to all WorkItems on the current task when no filter is given. "
+                         "Use this to see what siblings have done before you start.",
+             inputSchema={"type": "object", "properties": {
+                 "task_id": {"type": "string", "description": "Filter by task. Omit to use the current dispatch's task."},
+                 "status": {"type": "string", "description": "pending | dispatched | completed | failed | cancelled"},
+                 "persona": {"type": "string", "description": "engineer | planner | manager | reviewer | default"},
+             }}),
     ]
 
 
@@ -263,6 +290,35 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 metadatas=[metadata],
             )
             return _text(f"Knowledge stored (id: {doc_id})")
+
+        if name == "get_my_work_item":
+            if not MY_WORK_ITEM_ID:
+                return _text(
+                    "Error: WORK_ITEM_ID env not set on this dispatch — "
+                    "this MCP subprocess wasn't spawned by the WorkItem pipeline. "
+                    "Use get_work_item(work_item_id=...) instead."
+                )
+            return _text(json.dumps(client.get_work_item(MY_WORK_ITEM_ID), indent=2))
+
+        if name == "get_work_item":
+            return _text(json.dumps(client.get_work_item(arguments["work_item_id"]), indent=2))
+
+        if name == "list_work_items":
+            # Default to the current dispatch's task scope if no task_id is
+            # given — most natural use is "what have my siblings done?".
+            task_id = arguments.get("task_id")
+            if not task_id and MY_WORK_ITEM_ID:
+                try:
+                    me = client.get_work_item(MY_WORK_ITEM_ID)
+                    task_id = me.get("taskId")
+                except Exception:
+                    pass
+            results = client.list_work_items(
+                task_id=task_id,
+                status=arguments.get("status"),
+                persona=arguments.get("persona"),
+            )
+            return _text(json.dumps(results, indent=2))
 
         return _text(f"Unknown tool: {name}")
     except Exception as e:

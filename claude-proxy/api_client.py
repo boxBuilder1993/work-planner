@@ -87,3 +87,22 @@ class ApiClient:
 
     def deny_proposal(self, comment_id: str, feedback: str = "") -> dict:
         return self._post(f"/api/internal/comments/{comment_id}/deny", {"feedback": feedback})
+
+    # WorkItems — used by the MCP get_work_item / list_work_items tools.
+    def get_work_item(self, work_item_id: str) -> dict:
+        return self._get(f"/api/internal/work-items/{work_item_id}")
+
+    def list_work_items(
+        self,
+        task_id: str | None = None,
+        status: str | None = None,
+        persona: str | None = None,
+    ) -> list[dict]:
+        params: dict[str, str] = {}
+        if task_id:
+            params["task_id"] = task_id
+        if status:
+            params["status"] = status
+        if persona:
+            params["persona"] = persona
+        return self._get("/api/internal/work-items", params or None)

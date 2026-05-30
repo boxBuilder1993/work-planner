@@ -76,6 +76,10 @@ class RunRequest(BaseModel):
     algo_tools: list[str] = []
     task_id: str = ""
     ai_status: str = ""
+    # Set by the work_item_handler so the MCP server can expose
+    # get_my_work_item() without the AI knowing its own id. Empty for legacy
+    # dispatches that don't flow through WorkItems.
+    work_item_id: str = ""
 
 
 class SubmitResponse(BaseModel):
@@ -194,6 +198,10 @@ def _workplanner_env(req: RunRequest) -> dict[str, str]:
         # Consumed by workplanner_server.py's run_command tool to confine
         # shell commands to the per-task workspace directory.
         env["WORKPLANNER_WORKSPACE_PATH"] = str(workspace)
+    if req.work_item_id:
+        # Consumed by workplanner_server.py's get_my_work_item / default
+        # task scope on list_work_items.
+        env["WORK_ITEM_ID"] = req.work_item_id
     env.update(_chromadb_env())
     return env
 
