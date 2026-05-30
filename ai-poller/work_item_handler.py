@@ -45,7 +45,12 @@ logger = logging.getLogger(__name__)
 
 
 PROXY_POLL_INTERVAL_S = 5
-PROXY_POLL_MAX_S = 600  # 10 minutes per dispatch
+# How long the poller waits for the proxy to return a result. Must be >=
+# the proxy's own runtime wall-clock cap (PROXY_RUN_TIMEOUT_SECONDS) or
+# the poller times out on dispatches the proxy is still legitimately
+# running, burning retries on healthy runs. Default 30 min matches the
+# proxy's default + a small buffer.
+PROXY_POLL_MAX_S = int(os.environ.get("WORK_ITEM_PROXY_POLL_MAX_S", "1800"))
 PER_TASK_CONCURRENCY = 2  # at most this many dispatched WorkItems per task
 
 
