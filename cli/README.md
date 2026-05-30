@@ -52,6 +52,10 @@ WP_INTERNAL_KEY=$(grep INTERNAL_API_KEY .env | cut -d= -f2) \
 | `wp approve <comment-uuid>`          | Approve a PROPOSAL comment.                                     |
 | `wp deny <comment-uuid> [-m reason]` | Deny a PROPOSAL comment.                                        |
 | `wp ai <persona> <task> "text"`      | Post `@ai-<persona> text` — triggers the chat-poller.           |
+| `wp work-items list [--task …] […]`  | List WorkItems (the unit of AI execution). Filter by task/status/persona. |
+| `wp work-items show <uuid>`          | Full WorkItem detail: assignment, output, attempts.             |
+| `wp work-items cancel <uuid>`        | Cancel a pending or failed WorkItem.                            |
+| `wp work-items retry <uuid>`         | Reset retry_count on a failed WorkItem.                         |
 | `wp config init / show`              | Manage the config file.                                         |
 
 ### ID resolution

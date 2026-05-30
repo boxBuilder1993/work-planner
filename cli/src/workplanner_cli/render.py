@@ -152,6 +152,87 @@ def _print_comment(c: dict, by_parent: dict, depth: int) -> None:
         _print_comment(child, by_parent, depth + 1)
 
 
+WORK_ITEM_STATUS_COLORS = {
+    "pending": "yellow",
+    "dispatched": "cyan",
+    "completed": "green",
+    "failed": "red",
+    "cancelled": "dim",
+}
+
+
+def work_item_table(items: list[dict], title: str | None = None) -> None:
+    table = Table(title=title, show_lines=False, header_style="bold")
+    table.add_column("ID", style="dim", no_wrap=True)
+    table.add_column("Task", style="dim", no_wrap=True)
+    table.add_column("Persona", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Retries", justify="right", no_wrap=True)
+    table.add_column("Created", no_wrap=True)
+    for w in items:
+        status = w.get("status", "")
+        color = WORK_ITEM_STATUS_COLORS.get(status, "white")
+        table.add_row(
+            _short_id(w["id"]),
+            _short_id(w.get("taskId", "") or ""),
+            w.get("targetPersona", "") or "-",
+            f"[{color}]{status}[/{color}]",
+            f"{w.get('retryCount', 0)}/{w.get('maxRetries', 5)}",
+            _fmt_ts(w.get("createdAt")),
+        )
+    console.print(table)
+
+
+def work_item_detail(w: dict) -> None:
+    status = w.get("status", "")
+    color = WORK_ITEM_STATUS_COLORS.get(status, "white")
+    console.rule(
+        f"[bold]WorkItem {_short_id(w['id'])}[/bold]  [{color}]{status}[/{color}]"
+    )
+    fields = [
+        ("ID", w["id"]),
+        ("Task", w.get("taskId", "")),
+        ("Trigger", w.get("triggeringCommentId") or "-"),
+        ("Persona", w.get("targetPersona", "")),
+        ("Retries", f"{w.get('retryCount', 0)}/{w.get('maxRetries', 5)}"),
+        ("Created", _fmt_ts(w.get("createdAt"))),
+        ("Dispatched", _fmt_ts(w.get("dispatchedAt"))),
+        ("Completed", _fmt_ts(w.get("completedAt"))),
+    ]
+    for label, value in fields:
+        console.print(f"  [bold]{label:11}[/bold] {value}")
+    if w.get("lastError"):
+        console.print()
+        console.print("[bold red]Last error[/bold red]")
+        console.print(f"  {w['lastError'][:500]}")
+    attempts = w.get("attempts") or []
+    if attempts:
+        console.print()
+        console.print(f"[bold]Attempts ({len(attempts)})[/bold]")
+        for i, a in enumerate(attempts, 1):
+            console.print(
+                f"  {i}. {_fmt_ts(a.get('at'))}  "
+                f"cost={a.get('costUsd', '-')}  "
+                f"duration={a.get('durationMs', '-')}ms  "
+                f"error={(a.get('error') or '')[:100]}"
+            )
+    output = w.get("output") or {}
+    if output:
+        console.print()
+        console.print("[bold]Output[/bold]")
+        reply = (output.get("reply_text") or "").strip()
+        if reply:
+            console.print("  [dim]reply_text[/dim]")
+            for line in reply.splitlines()[:20]:
+                console.print(f"    {line}")
+        artifacts = output.get("artifacts") or {}
+        if artifacts:
+            console.print("  [dim]artifacts[/dim]")
+            import json as _json
+            for line in _json.dumps(artifacts, indent=2).splitlines()[:30]:
+                console.print(f"    {line}")
+
+
 def info(msg: str) -> None:
     console.print(f"[green]✓[/green] {msg}")
 

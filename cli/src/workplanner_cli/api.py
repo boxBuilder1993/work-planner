@@ -143,3 +143,26 @@ class Client:
             f"/api/internal/comments/{comment_id}/deny",
             {"feedback": feedback},
         )
+
+    # ── WorkItems ────────────────────────────────────────
+
+    def list_work_items(
+        self,
+        task_id: str | None = None,
+        status: str | None = None,
+        persona: str | None = None,
+    ) -> list[dict]:
+        params: dict[str, Any] = {}
+        if task_id:
+            params["task_id"] = task_id
+        if status:
+            params["status"] = status
+        if persona:
+            params["persona"] = persona
+        return self._get("/api/internal/work-items", params=params or None)
+
+    def get_work_item(self, work_item_id: str) -> dict:
+        return self._get(f"/api/internal/work-items/{work_item_id}")
+
+    def update_work_item(self, work_item_id: str, fields: dict) -> dict:
+        return self._patch(f"/api/internal/work-items/{work_item_id}", fields)

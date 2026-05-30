@@ -429,6 +429,85 @@ def cmd_ai(ctx: click.Context, persona: str, task_ref: str, text: str | None) ->
     render.info(f"Posted {c['id']} with mention {mention} — poller will pick it up.")
 
 
+# ─── work-items ──────────────────────────────────────────────────────
+
+
+@main.group(name="work-items")
+def work_items_cmd() -> None:
+    """Inspect and manage WorkItems (the unit of AI execution).
+
+    Every @ai-* mention becomes a WorkItem in the queue; the dispatcher
+    picks it up, runs the AI, and writes the output back. See
+    docs/WORK_ITEMS_DESIGN.md.
+    """
+
+
+@work_items_cmd.command("list")
+@click.option("--task", "task_ref", help="Filter to one task (id or prefix).")
+@click.option("--status", help="pending | dispatched | completed | failed | cancelled")
+@click.option("--persona", help="engineer | planner | manager | reviewer | default")
+@click.pass_context
+def cmd_wi_list(
+    ctx: click.Context,
+    task_ref: str | None,
+    status: str | None,
+    persona: str | None,
+) -> None:
+    """List WorkItems, optionally filtered by task / status / persona."""
+    client = _get_client(ctx)
+    task_id = _resolve_task_id(client, task_ref) if task_ref else None
+    items = client.list_work_items(task_id=task_id, status=status, persona=persona)
+    title_bits: list[str] = []
+    if task_id:
+        title_bits.append(f"task={task_id[:8]}")
+    if status:
+        title_bits.append(f"status={status}")
+    if persona:
+        title_bits.append(f"persona={persona}")
+    render.work_item_table(items, title=" ".join(title_bits) or "WorkItems")
+
+
+@work_items_cmd.command("show")
+@click.argument("work_item_id")
+@click.pass_context
+def cmd_wi_show(ctx: click.Context, work_item_id: str) -> None:
+    """Show full WorkItem detail (assignment, output, attempts)."""
+    if not UUID_RE.match(work_item_id):
+        raise click.UsageError("WorkItem ID must be a full UUID.")
+    client = _get_client(ctx)
+    w = client.get_work_item(work_item_id)
+    render.work_item_detail(w)
+
+
+@work_items_cmd.command("cancel")
+@click.argument("work_item_id")
+@click.pass_context
+def cmd_wi_cancel(ctx: click.Context, work_item_id: str) -> None:
+    """Cancel a pending or failed WorkItem (terminal state)."""
+    if not UUID_RE.match(work_item_id):
+        raise click.UsageError("WorkItem ID must be a full UUID.")
+    client = _get_client(ctx)
+    w = client.update_work_item(work_item_id, {"status": "cancelled"})
+    render.info(f"Cancelled WorkItem {w['id']}.")
+
+
+@work_items_cmd.command("retry")
+@click.argument("work_item_id")
+@click.pass_context
+def cmd_wi_retry(ctx: click.Context, work_item_id: str) -> None:
+    """Reset retry_count to 0 on a failed WorkItem so the poller picks
+    it up again. Only meaningful when status='failed' AND retry_count had
+    hit max_retries."""
+    if not UUID_RE.match(work_item_id):
+        raise click.UsageError("WorkItem ID must be a full UUID.")
+    client = _get_client(ctx)
+    w = client.update_work_item(work_item_id, {"retryCount": 0})
+    render.info(
+        f"Reset retry_count on {w['id']} (status={w['status']}, "
+        f"retries={w['retryCount']}/{w['maxRetries']})."
+    )
+
+
 # ─── Entry point ─────────────────────────────────────────────────────
 
 # The click group is `_cli_group`; `main` is the script entry point that
