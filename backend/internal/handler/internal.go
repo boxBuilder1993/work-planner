@@ -152,6 +152,32 @@ func (h *InternalHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, task)
 }
 
+// DELETE /api/internal/tasks/{id}
+func (h *InternalHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
+	taskID := extractPathParam(r.URL.Path, 3)
+	ctx, err := h.setUserIDFromTask(r.Context(), taskID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	userID, _ := ctx.Value(auth.UserIDKey).(string)
+	if userID == "" {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+
+	err = h.store.DeleteTask(ctx, userID, taskID)
+	if err == pgx.ErrNoRows {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete task")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": taskID})
+}
+
 // PATCH /api/internal/tasks/{id}
 func (h *InternalHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	taskID := extractPathParam(r.URL.Path, 3)
@@ -445,6 +471,10 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// PATCH /api/internal/tasks/:id
 	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/tasks/") && strings.Count(path, "/") == 4:
 		h.UpdateTask(w, r)
+
+	// DELETE /api/internal/tasks/:id
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/tasks/") && strings.Count(path, "/") == 4:
+		h.DeleteTask(w, r)
 
 	// POST /api/internal/comments/:id/approve
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/approve"):

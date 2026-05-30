@@ -129,6 +129,13 @@ async def list_tools() -> list[Tool]:
                  "aiEnabled": {"type": "boolean"},
                  "props": {"type": "object"},
              }, "required": ["title"]}),
+        Tool(name="delete_task",
+             description="Permanently delete a task by ID. "
+                         "Guarded: refuses to delete root-level project tasks (hardcoded denylist). "
+                         "Use with caution — deletion is irreversible.",
+             inputSchema={"type": "object", "properties": {
+                 "task_id": {"type": "string", "description": "UUID of the task to delete"},
+             }, "required": ["task_id"]}),
         Tool(name="add_comment", description="Add a comment to a task",
              inputSchema={"type": "object", "properties": {
                  "task_id": {"type": "string"},
@@ -196,6 +203,21 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         if name == "create_task":
             body = {k: v for k, v in arguments.items() if v is not None}
             return _text(json.dumps(client.create_task(body), indent=2))
+
+        if name == "delete_task":
+            task_id = arguments["task_id"]
+            # Denylist: root-level project tasks that must never be deleted by an agent.
+            # Add project root IDs here as the list grows.
+            PROTECTED_TASK_IDS = {
+                "b5403110-5f3f-4f68-ae35-016dd839884b",  # personal-life-app root
+            }
+            if task_id in PROTECTED_TASK_IDS:
+                return _text(json.dumps({
+                    "ok": False,
+                    "error": f"Task {task_id} is protected and cannot be deleted via this tool.",
+                }))
+            client.delete_task(task_id)
+            return _text(json.dumps({"ok": True, "id": task_id}))
 
         if name == "add_comment":
             body: dict[str, Any] = {
