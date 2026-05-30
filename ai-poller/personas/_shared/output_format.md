@@ -15,9 +15,18 @@ Schema:
     "open_questions":  ["specific questions for the user"],
     "current_step":    "what you're doing this turn",
     "next_step":       "what you plan to do after this"
+  },
+  "artifacts": {
+    "summary": "optional — structured record of what was produced",
+    "...":     "persona-specific fields; see engineer.md for the full schema"
   }
 }
 ```
+
+Only `reply_text` is required at the parser level. `context_update` and
+`artifacts` are optional containers — omit them or pass `{}` if you have
+nothing to say. Some personas (notably `engineer`) require `artifacts` per
+their own policy; read your persona-specific section.
 
 ## `reply_text`
 
@@ -28,12 +37,22 @@ Schema:
 
 ## `context_update`
 
-- **Required.** Use `{}` if you have nothing to update.
-- **Partial merge**: top-level keys you set overwrite existing keys in
-  `task.props.ai_context`; keys you omit are left alone. Arrays are replaced
-  wholesale — to add an item, return the full new array.
+- **Optional.** Omit or use `{}` if you have nothing to update.
+- **Replaces** the whole `task.props.ai_context` dict when present (the
+  backend's JSONB top-level merge replaces the `ai_context` key wholesale).
+  If you want to preserve an existing key, re-emit it.
 - **Do not set** `last_updated_by` or `last_updated_at`; the dispatcher
   stamps those after the merge.
+
+## `artifacts`
+
+- **Optional at the parser level**, but **required by some personas** (e.g.
+  `engineer` — see its persona file for the schema).
+- Lives on the WorkItem's `output` JSON (see docs/WORK_ITEMS_DESIGN.md) and
+  is the canonical record of what your dispatch produced (commits, files,
+  test results, etc.). Unlike `context_update`, `artifacts` is never
+  overwritten by later dispatches — it's permanent.
+- Shape is persona-specific.
 
 ### Standardized keys
 
@@ -50,12 +69,13 @@ turns of any persona.
 
 ## Failure modes
 
-These cause your dispatch to be retried (up to 3 attempts) and ultimately
-fail. None of them post a reply to the user — so don't hit them:
+These cause your dispatch to be retried automatically (up to 5 attempts
+total per WorkItem). None of them post a reply to the user — so don't hit
+them:
 
-- Final output is not valid JSON → `malformed_output`
-- `reply_text` is missing, empty, or whitespace-only → `empty_reply`
-- `context_update` missing entirely (use `{}` if empty) → `missing_context_update`
+- Final output is not valid JSON → parser failure.
+- Final output is not a JSON object (e.g. it's an array) → parser failure.
+- `reply_text` is missing, empty, or whitespace-only → empty reply.
 
 A silent failure looks like silence to the user. Always reply.
 
@@ -104,5 +124,4 @@ A silent failure looks like silence to the user. Always reply.
 - ❌ Wrapping the JSON in ```` ```json ... ``` ```` fences.
 - ❌ Prose before or after the JSON ("Here is my response: { ... }").
 - ❌ Returning `reply_text: ""` or `null` — that's a retry.
-- ❌ Omitting `context_update` — even `{}` is fine; absent is a retry.
 - ❌ Setting `last_updated_by` / `last_updated_at` — the dispatcher does that.

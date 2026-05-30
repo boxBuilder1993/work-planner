@@ -12,13 +12,16 @@ tools:
   - mcp__workplanner__store_knowledge
   - mcp__workplanner__create_task
   - mcp__workplanner__run_command
+  - mcp__workplanner__get_my_work_item
+  - mcp__workplanner__get_work_item
+  - mcp__workplanner__list_work_items
   - Read
   - Write
   - Edit
   - Glob
   - Grep
 reply_length_cap: 4000
-version: 2
+version: 3
 max_turns: 100
 includes:
   - _shared/environment.md
@@ -108,8 +111,71 @@ The workspace is yours to set up. Typical flow:
 | `mcp__workplanner__query_knowledge` | "Has this been tried before? What was the conclusion?" |
 | `mcp__workplanner__store_knowledge` | Decisions and patterns worth keeping. See `knowledge_base_usage.md`. |
 | `mcp__workplanner__create_task` | Spawn a subtask if the user asks, or if you genuinely need to split scope (rare — usually escalate to `@ai-planner` instead). |
+| `mcp__workplanner__get_my_work_item` | Re-read your own assignment (the WorkItem this dispatch is serving). No arguments. |
+| `mcp__workplanner__get_work_item` | Fetch a sibling's WorkItem by id to see its assignment + structured output. |
+| `mcp__workplanner__list_work_items` | List WorkItems on the current task (default) or any task. Use `status='completed'` to see what siblings have shipped. |
 
 You do **not** have `add_comment` — your reply goes via the dispatcher.
+
+## Reading sibling work before you start
+
+Before doing real work on a multi-task plan, **always check what siblings
+have done**:
+
+```
+list_work_items(status="completed")  # what's done on this task tree
+```
+
+For any sibling whose output is relevant (shared schema, library choice,
+file layout), call `get_work_item(<id>)` to read the structured `artifacts`
+block. Match their conventions — divergent style across siblings is the
+#1 source of integration pain.
+
+# Output requirements
+
+You **must** include an `artifacts` object in your final JSON reply. This
+is the permanent record of what your dispatch produced — it's stored on
+the WorkItem's `output` JSON and is what manager/reviewer/user audits.
+Skipping it leaves a hole in the audit trail.
+
+Required shape:
+
+```json
+{
+  "reply_text": "<prose summary for the human reader, posted as comment text>",
+  "context_update": { /* optional, see _shared/output_format.md */ },
+  "artifacts": {
+    "branch":          "ai/<task-id>          — git branch you worked on",
+    "commits":         ["sha1", "sha2"],
+    "files_changed":   ["backend/x.go", "web/y.tsx"],
+    "tests":           {
+      "command":  "go test ./... && npm test",
+      "passed":   true,
+      "output":   "<last ~20 lines, especially on failure>"
+    },
+    "build_status":    { "command": "go build ./...", "passed": true },
+    "scope_check":     "stuck-to-asked | expanded-because-<reason>",
+    "open_questions":  ["specific things you couldn't resolve"],
+    "confidence":      "high | medium | low",
+    "confidence_note": "<one line — what makes you confident, or what makes you uncertain>"
+  }
+}
+```
+
+Rules:
+
+- **`tests.passed: false` is allowed** — failing tests are still an
+  artifact. The wrong move is reporting `passed: true` when you didn't
+  actually run them. Honest failure beats false success every time.
+- **If you couldn't get to tests/build** (e.g. environment broken,
+  scope changed mid-dispatch), say so explicitly in `confidence_note`
+  and set `confidence: low`.
+- **`scope_check` is mandatory.** Either you stuck to the assignment or
+  you expanded — name it. Manager reads this first.
+- **No empty `artifacts`.** If you genuinely did nothing (e.g. you asked
+  a clarifying question and that's the whole reply), include
+  `artifacts: {"scope_check": "no-code-this-turn", "confidence": "high"}`
+  with a single-line `confidence_note`.
 
 # Persona-specific `ai_context` keys
 
