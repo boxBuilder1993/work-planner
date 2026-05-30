@@ -16,6 +16,7 @@ from algo_simple_answer import SimpleAnswer
 from algorithm import AlgorithmRegistry, TaskContext
 from api_client import ApiClient
 from chat_handler import ChatHandler
+from work_item_handler import WorkItemHandler
 from config import Config
 from knowledge import KnowledgeBase, KnowledgeBaseFactory
 from models import TaskEntity
@@ -60,6 +61,9 @@ class PollCycleProcessor:
         self._registry = build_registry()
         # Built eagerly — cheap, idle when ENABLE_CHAT_HANDLER is false.
         self._chat_handler = ChatHandler(api=api, config=config)
+        # Two-poller pipeline: chat_handler enqueues WorkItems, this one
+        # dispatches them. Both run each cycle when ENABLE_CHAT_HANDLER=true.
+        self._work_item_handler = WorkItemHandler(api=api, config=config)
 
     async def run_cycle(self) -> int:
         """Run one poll cycle. Returns the number of actions taken.
@@ -74,8 +78,11 @@ class PollCycleProcessor:
         return await self._run_legacy_cycle()
 
     async def _run_chat_cycle(self) -> int:
-        """Chat-mention dispatch path. Delegates to ChatHandler.run_cycle()."""
-        return await self._chat_handler.run_cycle()
+        """Chat-mention path: scan mentions → create WorkItems, then dispatch
+        pending WorkItems through the proxy. Two stages per cycle."""
+        enqueued = await self._chat_handler.run_cycle()
+        dispatched = await self._work_item_handler.run_cycle()
+        return enqueued + dispatched
 
     async def _run_legacy_cycle(self) -> int:
         """Legacy algorithm dispatch path (SDLC / orchestrated / etc.).

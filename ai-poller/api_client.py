@@ -7,7 +7,7 @@ from typing import Any
 
 import requests
 
-from models import TaskEntity, CommentEntity
+from models import TaskEntity, CommentEntity, WorkItemEntity
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +205,118 @@ class ApiClient:
 
     def delete_comment(self, comment_id: str) -> None:
         self._delete(f"/api/comments/{comment_id}")
+
+    # ── WorkItems (internal only) ──────────────────────────────────────
+
+    def create_work_item(
+        self,
+        task_id: str,
+        target_persona: str,
+        triggering_comment_id: str | None = None,
+        prompt_context: dict[str, Any] | None = None,
+        max_retries: int | None = None,
+    ) -> WorkItemEntity:
+        """Create a WorkItem. Idempotent on (triggering_comment_id) — if one
+        already exists for that comment, returns the existing item (HTTP 200)
+        instead of creating a duplicate."""
+        if not self._is_internal:
+            raise RuntimeError("create_work_item requires INTERNAL_API_KEY")
+        body: dict[str, Any] = {
+            "taskId": task_id,
+            "targetPersona": target_persona,
+        }
+        if triggering_comment_id is not None:
+            body["triggeringCommentId"] = triggering_comment_id
+        if prompt_context is not None:
+            body["promptContext"] = prompt_context
+        if max_retries is not None:
+            body["maxRetries"] = max_retries
+        return WorkItemEntity(**self._post("/api/internal/work-items", body))
+
+    def get_work_item(self, work_item_id: str) -> WorkItemEntity:
+        if not self._is_internal:
+            raise RuntimeError("get_work_item requires INTERNAL_API_KEY")
+        return WorkItemEntity(**self._get(f"/api/internal/work-items/{work_item_id}"))
+
+    def list_work_items(
+        self,
+        task_id: str | None = None,
+        status: str | None = None,
+        persona: str | None = None,
+    ) -> list[WorkItemEntity]:
+        if not self._is_internal:
+            raise RuntimeError("list_work_items requires INTERNAL_API_KEY")
+        params: dict[str, str] = {}
+        if task_id is not None:
+            params["task_id"] = task_id
+        if status is not None:
+            params["status"] = status
+        if persona is not None:
+            params["persona"] = persona
+        return [WorkItemEntity(**w) for w in self._get("/api/internal/work-items", params)]
+
+    def list_work_items_for_pickup(self) -> list[WorkItemEntity]:
+        """Poller queue scan: pending OR (failed AND retry_count < max_retries)."""
+        if not self._is_internal:
+            raise RuntimeError("list_work_items_for_pickup requires INTERNAL_API_KEY")
+        return [WorkItemEntity(**w) for w in self._get("/api/internal/work-items/pickup")]
+
+    def update_work_item(
+        self,
+        work_item_id: str,
+        status: str | None = None,
+        retry_count: int | None = None,
+        props: dict[str, Any] | None = None,
+    ) -> WorkItemEntity:
+        """PATCH a WorkItem. State transitions validated server-side."""
+        if not self._is_internal:
+            raise RuntimeError("update_work_item requires INTERNAL_API_KEY")
+        body: dict[str, Any] = {}
+        if status is not None:
+            body["status"] = status
+        if retry_count is not None:
+            body["retryCount"] = retry_count
+        if props is not None:
+            body["props"] = props
+        return WorkItemEntity(**self._patch(f"/api/internal/work-items/{work_item_id}", body))
+
+    def submit_work_item_output(self, work_item_id: str, output: dict[str, Any]) -> WorkItemEntity:
+        """Record AI output and flip status to completed. Only valid from dispatched."""
+        if not self._is_internal:
+            raise RuntimeError("submit_work_item_output requires INTERNAL_API_KEY")
+        return WorkItemEntity(**self._post(
+            f"/api/internal/work-items/{work_item_id}/submit-output",
+            {"output": output},
+        ))
+
+    def record_work_item_attempt(
+        self,
+        work_item_id: str,
+        error: str,
+        duration_ms: int | None = None,
+        cost_usd: float | None = None,
+        runtime: str = "",
+        model: str = "",
+        stop_reason: str = "",
+    ) -> WorkItemEntity:
+        """Record a failed attempt and flip status to failed (with retry_count++)."""
+        if not self._is_internal:
+            raise RuntimeError("record_work_item_attempt requires INTERNAL_API_KEY")
+        body: dict[str, Any] = {"error": error}
+        if duration_ms is not None:
+            body["durationMs"] = duration_ms
+        if cost_usd is not None:
+            body["costUsd"] = cost_usd
+        if runtime:
+            body["runtime"] = runtime
+        if model:
+            body["model"] = model
+        if stop_reason:
+            body["stopReason"] = stop_reason
+        return WorkItemEntity(**self._post(
+            f"/api/internal/work-items/{work_item_id}/record-attempt",
+            body,
+        ))
 
     # ── Helpers ────────────────────────────────────────────────────────
 
