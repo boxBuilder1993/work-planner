@@ -152,6 +152,32 @@ func (h *InternalHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, task)
 }
 
+// DELETE /api/internal/tasks/{id}
+func (h *InternalHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
+	taskID := extractPathParam(r.URL.Path, 3)
+	ctx, err := h.setUserIDFromTask(r.Context(), taskID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	userID, _ := ctx.Value(auth.UserIDKey).(string)
+	if userID == "" {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+
+	err = h.store.DeleteTask(ctx, userID, taskID)
+	if err == pgx.ErrNoRows {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete task")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": taskID})
+}
+
 // PATCH /api/internal/tasks/{id}
 func (h *InternalHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	taskID := extractPathParam(r.URL.Path, 3)
@@ -403,6 +429,224 @@ func (h *InternalHandler) DenyProposal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, comment)
 }
 
+// ─── WorkItems ──────────────────────────────────────────────────────────────
+// See docs/WORK_ITEMS_DESIGN.md for the design and state machine.
+
+// POST /api/internal/work-items
+// Idempotent on triggering_comment_id: if a WorkItem already exists for the
+// given comment, returns the existing one (HTTP 200) instead of creating a
+// duplicate. New creations return HTTP 201.
+func (h *InternalHandler) CreateWorkItem(w http.ResponseWriter, r *http.Request) {
+	var req model.CreateWorkItemRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.TaskID == "" || req.TargetPersona == "" {
+		writeError(w, http.StatusBadRequest, "taskId and targetPersona are required")
+		return
+	}
+
+	now := time.Now().UnixMilli()
+	maxRetries := 5
+	if req.MaxRetries != nil {
+		maxRetries = *req.MaxRetries
+	}
+	promptCtx := req.PromptContext
+	if promptCtx == nil {
+		promptCtx = json.RawMessage("{}")
+	}
+	props := req.Props
+	if props == nil {
+		props = json.RawMessage("{}")
+	}
+
+	wi := &model.WorkItem{
+		ID:                  uuid.New().String(),
+		TaskID:              req.TaskID,
+		TriggeringCommentID: req.TriggeringCommentID,
+		TargetPersona:       req.TargetPersona,
+		PromptContext:       promptCtx,
+		Output:              json.RawMessage("{}"),
+		Status:              "pending",
+		RetryCount:          0,
+		MaxRetries:          maxRetries,
+		Attempts:            json.RawMessage("[]"),
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		Props:               props,
+	}
+
+	result, created, err := h.store.CreateWorkItemIdempotent(r.Context(), wi)
+	if err != nil {
+		log.Printf("CreateWorkItem: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to create work item")
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, result)
+}
+
+// GET /api/internal/work-items?task_id=&status=&persona=
+func (h *InternalHandler) ListWorkItems(w http.ResponseWriter, r *http.Request) {
+	var taskIDPtr, statusPtr, personaPtr *string
+	if s := r.URL.Query().Get("task_id"); s != "" {
+		taskIDPtr = &s
+	}
+	if s := r.URL.Query().Get("status"); s != "" {
+		statusPtr = &s
+	}
+	if s := r.URL.Query().Get("persona"); s != "" {
+		personaPtr = &s
+	}
+
+	items, err := h.store.ListWorkItems(r.Context(), taskIDPtr, statusPtr, personaPtr)
+	if err != nil {
+		log.Printf("ListWorkItems: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if items == nil {
+		items = []model.WorkItem{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// GET /api/internal/work-items/pickup
+// Returns WorkItems eligible for dispatch: pending OR (failed AND retry_count
+// < max_retries). Used by work_item_handler poller.
+func (h *InternalHandler) ListWorkItemsForPickup(w http.ResponseWriter, r *http.Request) {
+	items, err := h.store.ListWorkItemsForPickup(r.Context())
+	if err != nil {
+		log.Printf("ListWorkItemsForPickup: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if items == nil {
+		items = []model.WorkItem{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// GET /api/internal/work-items/{id}
+func (h *InternalHandler) GetWorkItem(w http.ResponseWriter, r *http.Request) {
+	id := extractPathParam(r.URL.Path, 3)
+	wi, err := h.store.GetWorkItem(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if wi == nil {
+		writeError(w, http.StatusNotFound, "work item not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, wi)
+}
+
+// PATCH /api/internal/work-items/{id}
+// Partial update: status, retry_count, props. Status transitions validated.
+func (h *InternalHandler) UpdateWorkItem(w http.ResponseWriter, r *http.Request) {
+	id := extractPathParam(r.URL.Path, 3)
+	var req model.UpdateWorkItemRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	wi, err := h.store.UpdateWorkItem(r.Context(), id, &req, time.Now().UnixMilli())
+	if err != nil {
+		// State machine violations come back as fmt.Errorf with a clear message.
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if wi == nil {
+		writeError(w, http.StatusNotFound, "work item not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, wi)
+}
+
+// POST /api/internal/work-items/{id}/submit-output
+// Records the AI's parsed output and flips status to 'completed'.
+// Only valid when current status is 'dispatched'.
+func (h *InternalHandler) SubmitWorkItemOutput(w http.ResponseWriter, r *http.Request) {
+	id := extractPathParam(r.URL.Path, 3) // /api/internal/work-items/:id/submit-output
+	var req model.SubmitWorkItemOutputRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(req.Output) == 0 {
+		writeError(w, http.StatusBadRequest, "output is required")
+		return
+	}
+	wi, err := h.store.SubmitWorkItemOutput(r.Context(), id, req.Output, time.Now().UnixMilli())
+	if err != nil {
+		log.Printf("SubmitWorkItemOutput(%s): %v", id, err)
+		writeError(w, http.StatusInternalServerError, "failed to submit output")
+		return
+	}
+	if wi == nil {
+		writeError(w, http.StatusNotFound, "work item not found or not in dispatched state")
+		return
+	}
+	writeJSON(w, http.StatusOK, wi)
+}
+
+// POST /api/internal/work-items/{id}/record-attempt
+// Appends an attempt entry, increments retry_count, flips to 'failed'.
+// Only valid from 'dispatched'.
+func (h *InternalHandler) RecordWorkItemAttempt(w http.ResponseWriter, r *http.Request) {
+	id := extractPathParam(r.URL.Path, 3)
+	var req model.RecordWorkItemAttemptRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Error == "" {
+		writeError(w, http.StatusBadRequest, "error is required")
+		return
+	}
+	now := time.Now().UnixMilli()
+	attempt := map[string]any{
+		"at":    now,
+		"error": req.Error,
+	}
+	if req.DurationMs != nil {
+		attempt["durationMs"] = *req.DurationMs
+	}
+	if req.CostUSD != nil {
+		attempt["costUsd"] = *req.CostUSD
+	}
+	if req.Runtime != "" {
+		attempt["runtime"] = req.Runtime
+	}
+	if req.Model != "" {
+		attempt["model"] = req.Model
+	}
+	if req.StopReason != "" {
+		attempt["stopReason"] = req.StopReason
+	}
+	attemptJSON, err := json.Marshal(attempt)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode attempt")
+		return
+	}
+	wi, err := h.store.RecordWorkItemAttempt(r.Context(), id, attemptJSON, req.Error, now)
+	if err != nil {
+		log.Printf("RecordWorkItemAttempt(%s): %v", id, err)
+		writeError(w, http.StatusInternalServerError, "failed to record attempt")
+		return
+	}
+	if wi == nil {
+		writeError(w, http.StatusNotFound, "work item not found or not in dispatched state")
+		return
+	}
+	writeJSON(w, http.StatusOK, wi)
+}
+
 // ServeHTTP routes /api/internal/ requests.
 func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
@@ -446,6 +690,10 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/tasks/") && strings.Count(path, "/") == 4:
 		h.UpdateTask(w, r)
 
+	// DELETE /api/internal/tasks/:id
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/tasks/") && strings.Count(path, "/") == 4:
+		h.DeleteTask(w, r)
+
 	// POST /api/internal/comments/:id/approve
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/approve"):
 		h.ApproveProposal(w, r)
@@ -457,6 +705,38 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// PATCH /api/internal/comments/:id
 	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/comments/") && strings.Count(path, "/") == 4:
 		h.UpdateComment(w, r)
+
+	// ── WorkItems ────────────────────────────────────────────────────
+	// /pickup must be checked before /:id, and the action subpaths
+	// (/submit-output, /record-attempt) before plain /:id.
+
+	// POST /api/internal/work-items
+	case r.Method == http.MethodPost && path == "/api/internal/work-items":
+		h.CreateWorkItem(w, r)
+
+	// GET /api/internal/work-items/pickup  (poller queue scan)
+	case r.Method == http.MethodGet && path == "/api/internal/work-items/pickup":
+		h.ListWorkItemsForPickup(w, r)
+
+	// GET /api/internal/work-items?…  (list/filter)
+	case r.Method == http.MethodGet && path == "/api/internal/work-items":
+		h.ListWorkItems(w, r)
+
+	// POST /api/internal/work-items/:id/submit-output
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/internal/work-items/") && strings.HasSuffix(path, "/submit-output"):
+		h.SubmitWorkItemOutput(w, r)
+
+	// POST /api/internal/work-items/:id/record-attempt
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/internal/work-items/") && strings.HasSuffix(path, "/record-attempt"):
+		h.RecordWorkItemAttempt(w, r)
+
+	// GET /api/internal/work-items/:id
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/internal/work-items/") && strings.Count(path, "/") == 4:
+		h.GetWorkItem(w, r)
+
+	// PATCH /api/internal/work-items/:id
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/work-items/") && strings.Count(path, "/") == 4:
+		h.UpdateWorkItem(w, r)
 
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")

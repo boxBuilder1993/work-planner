@@ -583,6 +583,312 @@ func (s *Store) GetTaskByID(ctx context.Context, taskID string) (*model.Task, er
 	return &t, err
 }
 
+// ─── WorkItems ──────────────────────────────────────────────────────────────
+
+// CreateWorkItemIdempotent inserts a new WorkItem, or — if a WorkItem already
+// exists for the given triggering_comment_id — returns the existing one
+// without modification. This is the load-bearing idempotency primitive that
+// makes concurrent poll cycles safe (a unique partial index on
+// triggering_comment_id provides DB-level fallback).
+//
+// triggering_comment_id may be nil for sweep-created WorkItems; in that case
+// we always insert (no idempotency check possible).
+func (s *Store) CreateWorkItemIdempotent(ctx context.Context, w *model.WorkItem) (*model.WorkItem, bool, error) {
+	// If a triggering comment is given, check first within a serializable
+	// transaction so concurrent inserts can't both succeed. The unique
+	// partial index is the second line of defense.
+	if w.TriggeringCommentID != nil {
+		tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+		if err != nil {
+			return nil, false, err
+		}
+		defer tx.Rollback(ctx) //nolint:errcheck
+
+		var existing model.WorkItem
+		err = tx.QueryRow(ctx, `
+			SELECT id, task_id, triggering_comment_id, target_persona, prompt_context, output,
+			       status, retry_count, max_retries, attempts, last_error,
+			       created_at, updated_at, dispatched_at, completed_at, props
+			FROM work_items
+			WHERE triggering_comment_id = $1
+		`, *w.TriggeringCommentID).Scan(
+			&existing.ID, &existing.TaskID, &existing.TriggeringCommentID, &existing.TargetPersona,
+			&existing.PromptContext, &existing.Output,
+			&existing.Status, &existing.RetryCount, &existing.MaxRetries, &existing.Attempts, &existing.LastError,
+			&existing.CreatedAt, &existing.UpdatedAt, &existing.DispatchedAt, &existing.CompletedAt, &existing.Props,
+		)
+		if err == nil {
+			// Already exists — return existing, don't insert.
+			if err := tx.Commit(ctx); err != nil {
+				return nil, false, err
+			}
+			return &existing, false, nil
+		}
+		if err != pgx.ErrNoRows {
+			return nil, false, err
+		}
+
+		if err := insertWorkItemTx(ctx, tx, w); err != nil {
+			return nil, false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, false, err
+		}
+		return w, true, nil
+	}
+
+	// No triggering comment → straight insert, no idempotency check.
+	if err := insertWorkItemPool(ctx, s.pool, w); err != nil {
+		return nil, false, err
+	}
+	return w, true, nil
+}
+
+// Concrete typed inserts so callers can pass either the pool or a tx
+// without a generic interface dance (pgconn.CommandTag isn't worth wrapping).
+func insertWorkItemPool(ctx context.Context, pool *pgxpool.Pool, w *model.WorkItem) error {
+	_, err := pool.Exec(ctx, insertWorkItemSQL,
+		w.ID, w.TaskID, w.TriggeringCommentID, w.TargetPersona,
+		w.PromptContext, w.Output, w.Status, w.RetryCount, w.MaxRetries,
+		w.Attempts, w.LastError, w.CreatedAt, w.UpdatedAt, w.DispatchedAt, w.CompletedAt, w.Props,
+	)
+	return err
+}
+
+func insertWorkItemTx(ctx context.Context, tx pgx.Tx, w *model.WorkItem) error {
+	_, err := tx.Exec(ctx, insertWorkItemSQL,
+		w.ID, w.TaskID, w.TriggeringCommentID, w.TargetPersona,
+		w.PromptContext, w.Output, w.Status, w.RetryCount, w.MaxRetries,
+		w.Attempts, w.LastError, w.CreatedAt, w.UpdatedAt, w.DispatchedAt, w.CompletedAt, w.Props,
+	)
+	return err
+}
+
+const insertWorkItemSQL = `
+	INSERT INTO work_items (
+		id, task_id, triggering_comment_id, target_persona,
+		prompt_context, output, status, retry_count, max_retries,
+		attempts, last_error, created_at, updated_at, dispatched_at, completed_at, props
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+`
+
+// GetWorkItem fetches a WorkItem by ID. Returns (nil, nil) on not-found.
+func (s *Store) GetWorkItem(ctx context.Context, id string) (*model.WorkItem, error) {
+	var w model.WorkItem
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, task_id, triggering_comment_id, target_persona, prompt_context, output,
+		       status, retry_count, max_retries, attempts, last_error,
+		       created_at, updated_at, dispatched_at, completed_at, props
+		FROM work_items WHERE id = $1
+	`, id).Scan(
+		&w.ID, &w.TaskID, &w.TriggeringCommentID, &w.TargetPersona, &w.PromptContext, &w.Output,
+		&w.Status, &w.RetryCount, &w.MaxRetries, &w.Attempts, &w.LastError,
+		&w.CreatedAt, &w.UpdatedAt, &w.DispatchedAt, &w.CompletedAt, &w.Props,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &w, err
+}
+
+// ListWorkItems supports filtering by task_id, status, target_persona.
+func (s *Store) ListWorkItems(ctx context.Context, taskID, status, persona *string) ([]model.WorkItem, error) {
+	query := `
+		SELECT id, task_id, triggering_comment_id, target_persona, prompt_context, output,
+		       status, retry_count, max_retries, attempts, last_error,
+		       created_at, updated_at, dispatched_at, completed_at, props
+		FROM work_items WHERE 1=1`
+	args := []any{}
+	if taskID != nil {
+		args = append(args, *taskID)
+		query += fmt.Sprintf(" AND task_id = $%d", len(args))
+	}
+	if status != nil {
+		args = append(args, *status)
+		query += fmt.Sprintf(" AND status = $%d", len(args))
+	}
+	if persona != nil {
+		args = append(args, *persona)
+		query += fmt.Sprintf(" AND target_persona = $%d", len(args))
+	}
+	query += " ORDER BY created_at"
+	return s.scanWorkItems(ctx, query, args...)
+}
+
+// ListWorkItemsForPickup returns WorkItems eligible for dispatch by the
+// work_item_handler poller. Eligibility:
+//   - status = 'pending', OR
+//   - status = 'failed' AND retry_count < max_retries (auto-retry)
+//
+// Ordered oldest-first so the poller naturally drains backlogged work.
+func (s *Store) ListWorkItemsForPickup(ctx context.Context) ([]model.WorkItem, error) {
+	return s.scanWorkItems(ctx, `
+		SELECT id, task_id, triggering_comment_id, target_persona, prompt_context, output,
+		       status, retry_count, max_retries, attempts, last_error,
+		       created_at, updated_at, dispatched_at, completed_at, props
+		FROM work_items
+		WHERE status = 'pending'
+		   OR (status = 'failed' AND retry_count < max_retries)
+		ORDER BY created_at
+	`)
+}
+
+// CountDispatchedForTask returns how many WorkItems are currently dispatched
+// on a given task. Used by the poller's per-task concurrency cap.
+func (s *Store) CountDispatchedForTask(ctx context.Context, taskID string) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM work_items WHERE task_id = $1 AND status = 'dispatched'`,
+		taskID,
+	).Scan(&count)
+	return count, err
+}
+
+// validWorkItemTransitions lists allowed status transitions. The state
+// machine is enforced server-side; PATCHes that violate it return 400.
+var validWorkItemTransitions = map[string]map[string]bool{
+	"pending":    {"dispatched": true, "cancelled": true},
+	"dispatched": {"completed": true, "failed": true, "cancelled": true},
+	"completed":  {}, // terminal
+	"failed":     {"dispatched": true, "cancelled": true}, // retry path
+	"cancelled":  {}, // terminal
+}
+
+// UpdateWorkItem applies a partial update. Supports status transitions (with
+// validation), retry_count writes (for manual retry reset), and props merge.
+// Returns (nil, nil) on not-found, (nil, err) on invalid transition (err
+// message reports the bad transition).
+func (s *Store) UpdateWorkItem(ctx context.Context, id string, req *model.UpdateWorkItemRequest, updatedAt int64) (*model.WorkItem, error) {
+	// Read current state to validate transitions.
+	current, err := s.GetWorkItem(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		return nil, nil
+	}
+
+	if req.Status != nil {
+		allowed, ok := validWorkItemTransitions[current.Status]
+		if !ok || !allowed[*req.Status] {
+			return nil, fmt.Errorf("invalid status transition: %s → %s", current.Status, *req.Status)
+		}
+	}
+
+	setClauses := []string{"updated_at = @updated_at"}
+	args := pgx.NamedArgs{"id": id, "updated_at": updatedAt}
+
+	if req.Status != nil {
+		setClauses = append(setClauses, "status = @status")
+		args["status"] = *req.Status
+		// dispatched_at / completed_at side-effects of certain transitions:
+		if *req.Status == "dispatched" {
+			setClauses = append(setClauses, "dispatched_at = @updated_at")
+		}
+		if *req.Status == "completed" {
+			setClauses = append(setClauses, "completed_at = @updated_at")
+		}
+	}
+	if req.RetryCount != nil {
+		setClauses = append(setClauses, "retry_count = @retry_count")
+		args["retry_count"] = *req.RetryCount
+	}
+	if req.Props != nil {
+		setClauses = append(setClauses, "props = props || @props")
+		args["props"] = req.Props
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE work_items SET %s WHERE id = @id
+		RETURNING id, task_id, triggering_comment_id, target_persona, prompt_context, output,
+		          status, retry_count, max_retries, attempts, last_error,
+		          created_at, updated_at, dispatched_at, completed_at, props
+	`, joinStrings(setClauses, ", "))
+
+	var w model.WorkItem
+	err = s.pool.QueryRow(ctx, query, args).Scan(
+		&w.ID, &w.TaskID, &w.TriggeringCommentID, &w.TargetPersona, &w.PromptContext, &w.Output,
+		&w.Status, &w.RetryCount, &w.MaxRetries, &w.Attempts, &w.LastError,
+		&w.CreatedAt, &w.UpdatedAt, &w.DispatchedAt, &w.CompletedAt, &w.Props,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &w, err
+}
+
+// SubmitWorkItemOutput records the AI's parsed output and flips status to
+// 'completed'. Only valid when current status is 'dispatched' (the runtime
+// for any other status would be inconsistent — caller responsibility).
+func (s *Store) SubmitWorkItemOutput(ctx context.Context, id string, output json.RawMessage, completedAt int64) (*model.WorkItem, error) {
+	var w model.WorkItem
+	err := s.pool.QueryRow(ctx, `
+		UPDATE work_items
+		SET output = $2, status = 'completed', completed_at = $3, updated_at = $3
+		WHERE id = $1 AND status = 'dispatched'
+		RETURNING id, task_id, triggering_comment_id, target_persona, prompt_context, output,
+		          status, retry_count, max_retries, attempts, last_error,
+		          created_at, updated_at, dispatched_at, completed_at, props
+	`, id, output, completedAt).Scan(
+		&w.ID, &w.TaskID, &w.TriggeringCommentID, &w.TargetPersona, &w.PromptContext, &w.Output,
+		&w.Status, &w.RetryCount, &w.MaxRetries, &w.Attempts, &w.LastError,
+		&w.CreatedAt, &w.UpdatedAt, &w.DispatchedAt, &w.CompletedAt, &w.Props,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &w, err
+}
+
+// RecordWorkItemAttempt appends an attempt entry, increments retry_count,
+// flips status to 'failed', sets last_error. Only valid from 'dispatched'.
+// `attempt` is the JSON object to append to attempts[].
+func (s *Store) RecordWorkItemAttempt(ctx context.Context, id string, attempt json.RawMessage, errorMsg string, now int64) (*model.WorkItem, error) {
+	var w model.WorkItem
+	err := s.pool.QueryRow(ctx, `
+		UPDATE work_items
+		SET attempts = attempts || $2::jsonb,
+		    retry_count = retry_count + 1,
+		    status = 'failed',
+		    last_error = $3,
+		    updated_at = $4
+		WHERE id = $1 AND status = 'dispatched'
+		RETURNING id, task_id, triggering_comment_id, target_persona, prompt_context, output,
+		          status, retry_count, max_retries, attempts, last_error,
+		          created_at, updated_at, dispatched_at, completed_at, props
+	`, id, attempt, errorMsg, now).Scan(
+		&w.ID, &w.TaskID, &w.TriggeringCommentID, &w.TargetPersona, &w.PromptContext, &w.Output,
+		&w.Status, &w.RetryCount, &w.MaxRetries, &w.Attempts, &w.LastError,
+		&w.CreatedAt, &w.UpdatedAt, &w.DispatchedAt, &w.CompletedAt, &w.Props,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &w, err
+}
+
+func (s *Store) scanWorkItems(ctx context.Context, query string, args ...any) ([]model.WorkItem, error) {
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []model.WorkItem
+	for rows.Next() {
+		var w model.WorkItem
+		if err := rows.Scan(
+			&w.ID, &w.TaskID, &w.TriggeringCommentID, &w.TargetPersona, &w.PromptContext, &w.Output,
+			&w.Status, &w.RetryCount, &w.MaxRetries, &w.Attempts, &w.LastError,
+			&w.CreatedAt, &w.UpdatedAt, &w.DispatchedAt, &w.CompletedAt, &w.Props,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, w)
+	}
+	return items, rows.Err()
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func joinStrings(s []string, sep string) string {

@@ -35,6 +35,66 @@ type Comment struct {
 	UpdatedAt        int64           `json:"updatedAt"`
 }
 
+// WorkItem is the unit of AI execution. Every dispatch — whether triggered
+// by a user mention, a manager orchestration mention, or a future periodic
+// sweep — flows through a WorkItem row. See docs/WORK_ITEMS_DESIGN.md.
+type WorkItem struct {
+	ID                  string          `json:"id"`
+	TaskID              string          `json:"taskId"`
+	TriggeringCommentID *string         `json:"triggeringCommentId"`
+	TargetPersona       string          `json:"targetPersona"`
+	PromptContext       json.RawMessage `json:"promptContext"`
+	Output              json.RawMessage `json:"output"`
+	Status              string          `json:"status"`
+	RetryCount          int             `json:"retryCount"`
+	MaxRetries          int             `json:"maxRetries"`
+	Attempts            json.RawMessage `json:"attempts"`
+	LastError           *string         `json:"lastError"`
+	CreatedAt           int64           `json:"createdAt"`
+	UpdatedAt           int64           `json:"updatedAt"`
+	DispatchedAt        *int64          `json:"dispatchedAt"`
+	CompletedAt         *int64          `json:"completedAt"`
+	Props               json.RawMessage `json:"props"`
+}
+
+// CreateWorkItemRequest is the body for POST /api/internal/work-items.
+// triggering_comment_id is optional (sweep-created items have none).
+type CreateWorkItemRequest struct {
+	TaskID              string          `json:"taskId"`
+	TriggeringCommentID *string         `json:"triggeringCommentId,omitempty"`
+	TargetPersona       string          `json:"targetPersona"`
+	PromptContext       json.RawMessage `json:"promptContext,omitempty"`
+	MaxRetries          *int            `json:"maxRetries,omitempty"`
+	Props               json.RawMessage `json:"props,omitempty"`
+}
+
+// UpdateWorkItemRequest is the body for PATCH /api/internal/work-items/:id.
+// Only the listed fields can be patched; status transitions are validated
+// server-side.
+type UpdateWorkItemRequest struct {
+	Status     *string         `json:"status,omitempty"`
+	RetryCount *int            `json:"retryCount,omitempty"`
+	Props      json.RawMessage `json:"props,omitempty"`
+}
+
+// SubmitWorkItemOutputRequest is the body for POST /work-items/:id/submit-output.
+// Called by work_item_handler when the AI returns a parseable reply.
+type SubmitWorkItemOutputRequest struct {
+	Output json.RawMessage `json:"output"`
+}
+
+// RecordWorkItemAttemptRequest is the body for POST /work-items/:id/record-attempt.
+// Called on dispatch failure. Appends to attempts[], increments retry_count,
+// flips status to 'failed', sets last_error.
+type RecordWorkItemAttemptRequest struct {
+	Error      string  `json:"error"`
+	DurationMs *int64  `json:"durationMs,omitempty"`
+	CostUSD    *float64 `json:"costUsd,omitempty"`
+	Runtime    string  `json:"runtime,omitempty"`
+	Model      string  `json:"model,omitempty"`
+	StopReason string  `json:"stopReason,omitempty"`
+}
+
 type RepeatingTask struct {
 	ID              string          `json:"id"`
 	TaskID          string          `json:"taskId"`
