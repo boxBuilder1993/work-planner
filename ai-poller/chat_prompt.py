@@ -38,6 +38,7 @@ class PromptPayload:
     user: str                    # → final positional prompt argument
     model: str                   # → --model
     allowed_tools: list[str] = field(default_factory=list)   # → --allowed-tools
+    max_turns: int = 20          # → --max-turns
 
 
 def build_prompt(
@@ -87,6 +88,7 @@ def build_prompt(
         user=user_msg,
         model=persona.model,
         allowed_tools=list(persona.tools),
+        max_turns=persona.max_turns,
     )
 
 
