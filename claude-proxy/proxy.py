@@ -405,6 +405,16 @@ class ClaudeRuntime:
             if stderr_text:
                 logger.warning("Claude stderr: %s", stderr_text[:500])
 
+            # Forensic trail: always log the result string the AI produced,
+            # win or lose. Without this, the only copy lives on the in-memory
+            # job for JOB_TTL (5 min) — then it's gone. Cap so the log file
+            # doesn't balloon for long runs.
+            if stdout_text:
+                logger.info(
+                    "Claude stdout (task=%s, first 4000 chars): %s",
+                    req.task_id, stdout_text[:4000],
+                )
+
             if code == 0 and stdout_text.strip():
                 metadata: dict = {}
                 try:

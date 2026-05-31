@@ -210,12 +210,19 @@ def work_item_detail(w: dict) -> None:
         console.print()
         console.print(f"[bold]Attempts ({len(attempts)})[/bold]")
         for i, a in enumerate(attempts, 1):
+            err = a.get("error") or ""
+            err_lines = err.splitlines()
             console.print(
-                f"  {i}. {_fmt_ts(a.get('at'))}  "
+                f"  [bold]{i}.[/bold] {_fmt_ts(a.get('at'))}  "
                 f"cost={a.get('costUsd', '-')}  "
-                f"duration={a.get('durationMs', '-')}ms  "
-                f"error={(a.get('error') or '')[:100]}"
+                f"duration={a.get('durationMs', '-')}ms"
             )
+            if err_lines:
+                console.print(f"     [red]{err_lines[0][:200]}[/red]")
+                # Print remaining lines indented; full content (no truncation)
+                # so raw model output embedded in the error is readable.
+                for line in err_lines[1:]:
+                    console.print(f"     [dim]{line}[/dim]")
     output = w.get("output") or {}
     if output:
         console.print()

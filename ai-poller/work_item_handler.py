@@ -356,12 +356,21 @@ class WorkItemHandler:
 # ─── Module helpers ───────────────────────────────────────────────────────
 
 
+_RAW_OUTPUT_CAP = 8000  # chars; enough to debug truncation/format drift without
+                        # blowing up the attempts[] JSONB row
+
+
 def _parse_proxy_done(data: dict[str, Any]) -> DispatchOutcome:
     """Parse the proxy's `done` envelope into a DispatchOutcome.
 
     `data["result"]` is a JSON string the AI emitted; expected shape is
     `{reply_text, artifacts?, context_update?}`. Empty or unparseable
     becomes a failure (the work_item_handler will retry).
+
+    On parse failure we embed the raw model output in the error message
+    so it's visible via `wp work-items show` — otherwise the proxy's job
+    TTL (5 min) garbage-collects the only copy and forensic debugging
+    becomes impossible.
     """
     runtime = data.get("runtime", "")
     metadata = data.get("metadata") or {}
@@ -376,18 +385,30 @@ def _parse_proxy_done(data: dict[str, Any]) -> DispatchOutcome:
     except json.JSONDecodeError as e:
         return DispatchOutcome(
             success=False, runtime=runtime, metadata=metadata,
-            error=f"inner JSON parse failed: {e}",
+            error=(
+                f"inner JSON parse failed: {e}\n"
+                f"---RAW OUTPUT (first {_RAW_OUTPUT_CAP} chars)---\n"
+                f"{result_str[:_RAW_OUTPUT_CAP]}"
+            ),
         )
     if not isinstance(inner, dict):
         return DispatchOutcome(
             success=False, runtime=runtime, metadata=metadata,
-            error="inner output is not a JSON object",
+            error=(
+                f"inner output is not a JSON object (got {type(inner).__name__})\n"
+                f"---RAW OUTPUT (first {_RAW_OUTPUT_CAP} chars)---\n"
+                f"{result_str[:_RAW_OUTPUT_CAP]}"
+            ),
         )
     reply_text = inner.get("reply_text", "")
     if not isinstance(reply_text, str) or not reply_text.strip():
         return DispatchOutcome(
             success=False, runtime=runtime, metadata=metadata,
-            error="reply_text missing or empty",
+            error=(
+                "reply_text missing or empty\n"
+                f"---PARSED INNER JSON (keys: {list(inner.keys())})---\n"
+                f"{json.dumps(inner, indent=2)[:_RAW_OUTPUT_CAP]}"
+            ),
         )
     return DispatchOutcome(
         success=True, runtime=runtime, output=inner, metadata=metadata,
