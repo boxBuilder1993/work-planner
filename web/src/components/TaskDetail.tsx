@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import type { TaskEntity } from '../types';
 import { useTasks } from '../hooks/useTasks';
@@ -137,11 +137,24 @@ export default function TaskDetail() {
     }
   }, [taskId, parentIdParam, getTaskById, getRepeatingTaskForTask]);
 
-  // Fetch breadcrumbs, children, and repeating task from API + auto-refresh every 10s
+  // Mirror isEditing into a ref so the interval callback (declared once at
+  // effect setup) can read the latest value without re-creating the interval
+  // every time the flag toggles. Without this the auto-refresh fires during
+  // edits and re-renders the form mid-typing — focus loss + input flicker.
+  const isEditingRef = useRef(isEditing);
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
+
+  // Fetch breadcrumbs, children, and repeating task from API + auto-refresh
+  // every 3s. Pauses while the user is in edit mode (the local editedTask
+  // state would still be preserved, but the rerender from store updates is
+  // disruptive to typing).
   useEffect(() => {
     if (!taskId) return;
     let cancelled = false;
     const fetchData = () => {
+      if (isEditingRef.current) return;  // skip tick while editing
       refreshTask(taskId);
       getBreadcrumbs(taskId).then((crumbs) => {
         if (!cancelled) setBreadcrumbs(crumbs);
