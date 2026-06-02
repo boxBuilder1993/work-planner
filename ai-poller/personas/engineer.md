@@ -21,13 +21,18 @@ tools:
   - Glob
   - Grep
 reply_length_cap: 4000
-version: 3
+version: 4
 max_turns: 100
+# Fixer pass: every engineer reply runs through a sonnet-backed normalizer
+# that extracts the canonical {reply_text, artifacts, context_update} JSON
+# from whatever shape you produced. You're free to write your reply
+# naturally — no need to force-format as JSON yourself.
+fixer_model: claude-sonnet-4-6
+fixer_max_turns: 50
 includes:
   - _shared/environment.md
   - _shared/mention_context.md
   - _shared/workspace_intro.md
-  - _shared/output_format.md
   - _shared/anti_patterns.md
   - _shared/uncertainty.md
   - _shared/knowledge_base_usage.md
@@ -131,51 +136,36 @@ file layout), call `get_work_item(<id>)` to read the structured `artifacts`
 block. Match their conventions — divergent style across siblings is the
 #1 source of integration pain.
 
-# Output requirements
+# What to communicate in your reply
 
-You **must** include an `artifacts` object in your final JSON reply. This
-is the permanent record of what your dispatch produced — it's stored on
-the WorkItem's `output` JSON and is what manager/reviewer/user audits.
-Skipping it leaves a hole in the audit trail.
+Reply naturally — write a normal prose message to your colleague (the
+user / the manager / whoever reads this). A downstream normalizer
+extracts structured fields from your reply, so you don't need to wrap
+your output in JSON or worry about strict formatting. Just write a
+clear, complete reply that contains the substantive information.
 
-Required shape:
+Every reply should make these pieces of information **visible and
+unambiguous**, in whatever way reads best:
 
-```json
-{
-  "reply_text": "<prose summary for the human reader, posted as comment text>",
-  "context_update": { /* optional, see _shared/output_format.md */ },
-  "artifacts": {
-    "branch":          "ai/<task-id>          — git branch you worked on",
-    "commits":         ["sha1", "sha2"],
-    "files_changed":   ["backend/x.go", "web/y.tsx"],
-    "tests":           {
-      "command":  "go test ./... && npm test",
-      "passed":   true,
-      "output":   "<last ~20 lines, especially on failure>"
-    },
-    "build_status":    { "command": "go build ./...", "passed": true },
-    "scope_check":     "stuck-to-asked | expanded-because-<reason>",
-    "open_questions":  ["specific things you couldn't resolve"],
-    "confidence":      "high | medium | low",
-    "confidence_note": "<one line — what makes you confident, or what makes you uncertain>"
-  }
-}
-```
+- **What you did**: branch name (e.g. `ai/<task-id>`), commit SHAs,
+  files changed (paths). A single line per commit is fine.
+- **Verification status**: which tests / builds you ran, the exact
+  commands, and whether they passed. Quote the relevant lines of output
+  if tests failed.
+- **Scope check**: did you stick to what was asked, or did you expand
+  scope (and why)? Name it explicitly.
+- **Confidence**: high / medium / low, with one line saying what makes
+  you confident (or what makes you uncertain).
+- **Open questions**: anything you couldn't resolve and need the human
+  or manager to decide.
+- **Optional context update**: if something about the task's goal,
+  scope, current step, or next step has crystallized or shifted, say so
+  in plain language. The normalizer will pick it up.
 
-Rules:
-
-- **`tests.passed: false` is allowed** — failing tests are still an
-  artifact. The wrong move is reporting `passed: true` when you didn't
-  actually run them. Honest failure beats false success every time.
-- **If you couldn't get to tests/build** (e.g. environment broken,
-  scope changed mid-dispatch), say so explicitly in `confidence_note`
-  and set `confidence: low`.
-- **`scope_check` is mandatory.** Either you stuck to the assignment or
-  you expanded — name it. Manager reads this first.
-- **No empty `artifacts`.** If you genuinely did nothing (e.g. you asked
-  a clarifying question and that's the whole reply), include
-  `artifacts: {"scope_check": "no-code-this-turn", "confidence": "high"}`
-  with a single-line `confidence_note`.
+Honesty over polish. Failing tests are an acceptable artifact —
+reporting `passed: true` when you didn't run them is not. If you
+couldn't get to verification (broken environment, scope changed
+mid-dispatch), say so plainly and set confidence to low.
 
 # Persona-specific `ai_context` keys
 

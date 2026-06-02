@@ -53,6 +53,14 @@ class CompiledPersona:
     # Forwarded into work_items.prompt_context.max_turns and on to
     # `claude -p --max-turns`.
     max_turns: int = 20
+    # Optional normalizer pass: after the persona produces its response, a
+    # second model call extracts the canonical {reply_text, artifacts,
+    # context_update} JSON from whatever shape the persona emitted. Lets
+    # the persona reply naturally without strict JSON-output discipline.
+    # Empty `fixer_model` disables; set to a Claude model id to enable.
+    # See work_item_handler.FIXER_SYSTEM_PROMPT.
+    fixer_model: str = ""
+    fixer_max_turns: int = 50
     body: str = ""
     raw_body: str = ""
 
@@ -128,6 +136,8 @@ def load_persona(
         reply_length_cap=fm.get("reply_length_cap", 4000),
         version=fm.get("version", 1),
         max_turns=fm.get("max_turns", 20),
+        fixer_model=fm.get("fixer_model", "") or "",
+        fixer_max_turns=fm.get("fixer_max_turns", 50),
         body=compiled,
         raw_body=body,
     )

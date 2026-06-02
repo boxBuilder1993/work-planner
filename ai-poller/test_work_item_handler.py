@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from work_item_handler import _parse_proxy_done, _telemetry_props
+from work_item_handler import _parse_proxy_done, _parse_result_str, _telemetry_props
 
 
 class TestParseProxyDone(unittest.TestCase):
@@ -119,6 +119,43 @@ class TestTelemetryProps(unittest.TestCase):
         out = _telemetry_props({"duration_ms": 5})
         self.assertEqual(out, {"ai-duration-ms": 5})
         self.assertNotIn("ai-cost-usd", out)
+
+
+class TestParseResultStrFixerFailure(unittest.TestCase):
+    """The fixer signals an explicit failure via {"_fixer_failed": true,
+    "reason": "..."}. The parser preserves that so _invoke_proxy can surface
+    a clear error (rather than the generic "reply_text missing" message)."""
+
+    def test_fixer_failed_marker_returns_success_with_marker(self):
+        # Important: _parse_result_str returns success=True so the caller
+        # (_invoke_proxy) can detect the marker and route to its own
+        # failure path with the right error message. The marker is its own
+        # contract; the strict-parse step just transports it.
+        out = _parse_result_str(
+            '{"_fixer_failed": true, "reason": "no recoverable content"}',
+            runtime="claude", metadata={},
+        )
+        self.assertTrue(out.success)
+        self.assertTrue(out.output.get("_fixer_failed"))
+        self.assertIn("no recoverable", out.output.get("reason", ""))
+
+
+class TestParseProxyDoneBackCompat(unittest.TestCase):
+    """The old _parse_proxy_done(data) shape — kept as a shim so the rest
+    of the tests in this file still type-check. New code paths use
+    _parse_result_str directly."""
+
+    def test_shim_unwraps_data_dict(self):
+        out = _parse_proxy_done({
+            "status": "done",
+            "result": '{"reply_text": "hi"}',
+            "runtime": "claude",
+            "metadata": {"duration_ms": 5},
+        })
+        self.assertTrue(out.success)
+        self.assertEqual(out.output["reply_text"], "hi")
+        self.assertEqual(out.runtime, "claude")
+        self.assertEqual(out.metadata, {"duration_ms": 5})
 
 
 if __name__ == "__main__":

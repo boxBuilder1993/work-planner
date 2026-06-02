@@ -54,6 +54,51 @@ PROXY_POLL_MAX_S = int(os.environ.get("WORK_ITEM_PROXY_POLL_MAX_S", "1800"))
 PER_TASK_CONCURRENCY = 2  # at most this many dispatched WorkItems per task
 
 
+# System prompt for the optional normalizer/fixer pass. The fixer's only
+# job is to extract the canonical JSON shape from an arbitrary AI agent's
+# output. Personas opt in via `fixer_model` in their frontmatter; when
+# enabled, they're free to reply naturally and the fixer enforces schema.
+FIXER_SYSTEM_PROMPT = """You are a normalizer. Your input is the raw \
+stdout of another AI agent (an "engineer", "manager", "planner", or \
+similar persona running with tool access). That output may contain prose, \
+markdown, code fences, planning aloud, partial JSON, multiple JSON \
+blocks, or any combination — agents drift from format under long prompts.
+
+Your only job is to extract that agent's communication into this exact \
+JSON object:
+
+{
+  "reply_text":     "<string, REQUIRED — the agent's prose communication \
+to the human reader, cleaned of meta-commentary like 'Let me write the \
+reply' or 'Here is my response'>",
+  "artifacts":      <object, OPTIONAL — structured facts the agent \
+reported (branch, commits, tests, scope checks, etc.); preserve whatever \
+field names the agent used; do not invent or paraphrase>,
+  "context_update": <object, OPTIONAL — context patch the agent emitted \
+for task.props.ai_context>
+}
+
+Rules:
+- Output ONLY the JSON object. No prose around it, no markdown code \
+fences, no explanation.
+- If the agent already emitted JSON inline, extract its fields verbatim. \
+Do not summarize, paraphrase, or invent values.
+- reply_text should be the agent's substantive human-readable reply, \
+posted as-is into a comment thread. Markdown is fine. Strip meta- \
+commentary about formatting; keep substantive content (findings, \
+verdicts, hand-offs to other personas, questions).
+- If the agent's output contains nothing recoverable, return:
+  {"_fixer_failed": true, "reason": "<one-line explanation>"}
+- You are a translator, not a generator. Never add fields the agent did \
+not produce. If artifacts is missing, omit the key — do not invent one.
+"""
+
+# Cap on how much raw text we embed in error messages when the fixer (or
+# strict parser) fails. Survives Postgres JSONB size limits + keeps wp
+# work-items show readable.
+_RAW_OUTPUT_CAP = 8000
+
+
 # ─── Dispatch outcome ─────────────────────────────────────────────────────
 
 
@@ -64,6 +109,18 @@ class DispatchOutcome:
     output: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     error: str = ""
+
+
+@dataclass
+class _ProxyCall:
+    """Result of a single submit-and-poll round-trip to the proxy. The
+    `_invoke_proxy` orchestrator uses two of these (main + optional fixer)
+    and merges them into a DispatchOutcome."""
+    ok: bool
+    raw_result: str = ""        # only meaningful when ok=True
+    runtime: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    error: str = ""             # only meaningful when ok=False
 
 
 # ─── Work-item handler ────────────────────────────────────────────────────
@@ -143,9 +200,25 @@ class WorkItemHandler:
         return self._finalize_failure(w, outcome)
 
     async def _invoke_proxy(self, w: WorkItemEntity) -> DispatchOutcome:
-        """Submit job to proxy and poll until done. Parse inner JSON."""
+        """Run the main persona dispatch, optionally followed by a fixer
+        normalizer pass that translates raw output into the canonical JSON
+        schema.
+
+        Flow:
+          1. Submit the persona's prompt to the proxy. Wait for done/error.
+          2. If `prompt_context.fixer_model` is set on the WorkItem, take the
+             raw result string and submit a second job to the fixer with a
+             system prompt that extracts {reply_text, artifacts,
+             context_update}. The persona is free to emit any shape; the
+             fixer is the schema enforcer.
+          3. Parse the final JSON (from either the fixer's output or, when
+             fixer is disabled, the persona's raw output).
+
+        Failures at any stage become a DispatchOutcome with success=False;
+        the caller records an attempt and the WorkItem auto-retries.
+        """
         ctx = w.prompt_context or {}
-        body = {
+        main_body = {
             "prompt": ctx.get("user", ""),
             "system_prompt": ctx.get("system", ""),
             "model": ctx.get("model", ""),
@@ -159,13 +232,94 @@ class WorkItemHandler:
             "workplanner_api_url": self._config.api_url,
             "internal_api_key": self._config.internal_api_key,
         }
+
+        # ── Main dispatch ──────────────────────────────────────────────
+        main_outcome = await self._submit_and_poll(main_body)
+        if not main_outcome.ok:
+            return DispatchOutcome(
+                success=False,
+                runtime=main_outcome.runtime,
+                metadata=main_outcome.metadata,
+                error=main_outcome.error,
+            )
+
+        raw_result = main_outcome.raw_result
+        main_metadata = main_outcome.metadata
+        main_runtime = main_outcome.runtime
+
+        fixer_model = (ctx.get("fixer_model") or "").strip()
+
+        # ── Fixer pass (optional, per-persona config) ──────────────────
+        if fixer_model:
+            fixer_body = {
+                "prompt": raw_result,
+                "system_prompt": FIXER_SYSTEM_PROMPT,
+                "model": fixer_model,
+                "preferred_runtime": "claude",
+                "fallback_runtimes": [],
+                "max_turns": int(ctx.get("fixer_max_turns", 50)),
+                # Fixer is pure text-to-text; no MCP tools so it can't get
+                # distracted reading the task or making side effects.
+                "allowed_tools": [],
+                "disallowed_tools": [],
+                "task_id": w.task_id,
+                "work_item_id": w.id,
+                "workplanner_api_url": self._config.api_url,
+                "internal_api_key": self._config.internal_api_key,
+            }
+            fixer_outcome = await self._submit_and_poll(fixer_body)
+            if not fixer_outcome.ok:
+                return DispatchOutcome(
+                    success=False,
+                    runtime=main_runtime,
+                    metadata={
+                        **main_metadata,
+                        "fixer_metadata": fixer_outcome.metadata,
+                        "fixer_error": fixer_outcome.error,
+                    },
+                    error=f"fixer pass failed: {fixer_outcome.error}",
+                )
+            # The fixer's response should be the canonical JSON. Parse it.
+            parsed = _parse_result_str(
+                fixer_outcome.raw_result,
+                runtime=main_runtime,
+                metadata={
+                    **main_metadata,
+                    "fixer_metadata": fixer_outcome.metadata,
+                    "fixer_model": fixer_model,
+                    "normalized": True,
+                },
+            )
+            # Detect explicit fixer-failure marker.
+            if parsed.success and parsed.output.get("_fixer_failed"):
+                return DispatchOutcome(
+                    success=False,
+                    runtime=main_runtime,
+                    metadata=parsed.metadata,
+                    error=(
+                        f"fixer declined to normalize: "
+                        f"{parsed.output.get('reason', 'no reason given')}\n"
+                        f"---RAW PERSONA OUTPUT (first {_RAW_OUTPUT_CAP} chars)---\n"
+                        f"{raw_result[:_RAW_OUTPUT_CAP]}"
+                    ),
+                )
+            return parsed
+
+        # ── No fixer: strict-parse the persona's raw output (legacy path) ──
+        return _parse_result_str(
+            raw_result, runtime=main_runtime, metadata=main_metadata,
+        )
+
+    async def _submit_and_poll(self, body: dict[str, Any]) -> "_ProxyCall":
+        """Submit a job to the proxy and poll until it terminates. Returns
+        the raw result string on success; never parses inner JSON (caller's
+        job). Used for both the main persona dispatch and the fixer pass."""
         headers = {"Content-Type": "application/json"}
         if self._proxy_key:
             headers["X-Proxy-Key"] = self._proxy_key
 
         loop = asyncio.get_event_loop()
 
-        # Submit
         try:
             submit = await loop.run_in_executor(
                 None,
@@ -174,23 +328,20 @@ class WorkItemHandler:
                 ),
             )
         except Exception as e:
-            return DispatchOutcome(
-                success=False,
+            return _ProxyCall(
+                ok=False,
                 error=f"proxy /run exception: {type(e).__name__}: {str(e)[:300]}",
             )
 
         if submit.status_code != 200:
-            return DispatchOutcome(
-                success=False,
+            return _ProxyCall(
+                ok=False,
                 error=f"proxy /run returned {submit.status_code}: {submit.text[:300]}",
             )
         job_id = submit.json().get("job_id")
         if not job_id:
-            return DispatchOutcome(
-                success=False, error="proxy /run returned no job_id"
-            )
+            return _ProxyCall(ok=False, error="proxy /run returned no job_id")
 
-        # Poll
         deadline = time.time() + PROXY_POLL_MAX_S
         while time.time() < deadline:
             await asyncio.sleep(PROXY_POLL_INTERVAL_S)
@@ -209,17 +360,22 @@ class WorkItemHandler:
             data = resp.json()
             status = data.get("status", "")
             if status == "done":
-                return _parse_proxy_done(data)
+                return _ProxyCall(
+                    ok=True,
+                    raw_result=(data.get("result") or "").strip(),
+                    runtime=data.get("runtime", ""),
+                    metadata=data.get("metadata") or {},
+                )
             if status == "error":
-                return DispatchOutcome(
-                    success=False,
+                return _ProxyCall(
+                    ok=False,
                     runtime=data.get("runtime", ""),
                     metadata=data.get("metadata") or {},
                     error=str(data.get("error", "unknown proxy error"))[:500],
                 )
 
-        return DispatchOutcome(
-            success=False,
+        return _ProxyCall(
+            ok=False,
             error=f"proxy did not complete within {PROXY_POLL_MAX_S}s",
         )
 
@@ -356,25 +512,24 @@ class WorkItemHandler:
 # ─── Module helpers ───────────────────────────────────────────────────────
 
 
-_RAW_OUTPUT_CAP = 8000  # chars; enough to debug truncation/format drift without
-                        # blowing up the attempts[] JSONB row
+def _parse_result_str(
+    result_str: str,
+    runtime: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> DispatchOutcome:
+    """Parse a JSON result string into a DispatchOutcome.
 
+    Used twice in the dispatch flow:
+      - When the fixer pass is enabled: the fixer's output should be valid
+        JSON of the canonical shape; this validates and unpacks it.
+      - When the fixer pass is disabled (legacy persona): the persona's
+        own output is strict-parsed directly.
 
-def _parse_proxy_done(data: dict[str, Any]) -> DispatchOutcome:
-    """Parse the proxy's `done` envelope into a DispatchOutcome.
-
-    `data["result"]` is a JSON string the AI emitted; expected shape is
-    `{reply_text, artifacts?, context_update?}`. Empty or unparseable
-    becomes a failure (the work_item_handler will retry).
-
-    On parse failure we embed the raw model output in the error message
-    so it's visible via `wp work-items show` — otherwise the proxy's job
-    TTL (5 min) garbage-collects the only copy and forensic debugging
-    becomes impossible.
+    On parse failure we embed the raw text in the error message so it's
+    visible via `wp work-items show` — the proxy's job TTL (5 min) GCs
+    the only other copy.
     """
-    runtime = data.get("runtime", "")
-    metadata = data.get("metadata") or {}
-    result_str = (data.get("result") or "").strip()
+    metadata = metadata or {}
     if not result_str:
         return DispatchOutcome(
             success=False, runtime=runtime, metadata=metadata,
@@ -400,6 +555,13 @@ def _parse_proxy_done(data: dict[str, Any]) -> DispatchOutcome:
                 f"{result_str[:_RAW_OUTPUT_CAP]}"
             ),
         )
+    # The fixer's signal-failure response. Caller (_invoke_proxy) handles
+    # this by surfacing a DispatchOutcome failure that retries the whole
+    # pass.
+    if inner.get("_fixer_failed"):
+        return DispatchOutcome(
+            success=True, runtime=runtime, output=inner, metadata=metadata,
+        )
     reply_text = inner.get("reply_text", "")
     if not isinstance(reply_text, str) or not reply_text.strip():
         return DispatchOutcome(
@@ -412,6 +574,16 @@ def _parse_proxy_done(data: dict[str, Any]) -> DispatchOutcome:
         )
     return DispatchOutcome(
         success=True, runtime=runtime, output=inner, metadata=metadata,
+    )
+
+
+# Back-compat alias for tests that still import the old name. New code
+# should call _parse_result_str directly.
+def _parse_proxy_done(data: dict[str, Any]) -> DispatchOutcome:
+    return _parse_result_str(
+        (data.get("result") or "").strip(),
+        runtime=data.get("runtime", ""),
+        metadata=data.get("metadata") or {},
     )
 
 

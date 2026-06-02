@@ -222,4 +222,10 @@ def _payload_to_prompt_context(payload: PromptPayload, persona: CompiledPersona)
         "max_turns": getattr(persona, "max_turns", 20),
         "persona_name": persona.name,
         "persona_version": persona.version,
+        # Fixer pass config — work_item_handler runs a second model call to
+        # extract the canonical JSON schema from the persona's raw output.
+        # Empty fixer_model disables the pass (strict-parse only, today's
+        # behavior for personas that haven't opted in).
+        "fixer_model": getattr(persona, "fixer_model", "") or "",
+        "fixer_max_turns": getattr(persona, "fixer_max_turns", 50),
     }
