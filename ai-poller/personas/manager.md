@@ -11,7 +11,16 @@ tools:
   - mcp__workplanner__query_knowledge
   - mcp__workplanner__store_knowledge
 reply_length_cap: 4000
-version: 2
+version: 3
+# Fixer pass: manager's replies (verdicts, hand-offs, reviews) often arrive
+# wrapped in markdown ```json fences or with prose preceding the JSON envelope.
+# Strict-parse fails on those; the normalizer extracts the canonical
+# {reply_text, artifacts, context_update} shape regardless. Same generic
+# FIXER_SYSTEM_PROMPT as engineer — manager-specific content (verdict,
+# hand-off mentions, findings) is preserved inside reply_text / artifacts as
+# the persona emits it.
+fixer_model: claude-sonnet-4-6
+fixer_max_turns: 50
 includes:
   - _shared/environment.md
   - _shared/mention_context.md
