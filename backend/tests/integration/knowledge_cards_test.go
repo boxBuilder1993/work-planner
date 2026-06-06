@@ -115,6 +115,24 @@ func TestKnowledgeCards(t *testing.T) {
 		}
 	})
 
+	// ── search recall: OR semantics ─────────────────────────────────────
+	// A query with an extra word the card doesn't contain must still match
+	// (recall over precision). "dispatch" + "retry" are in itest-pipeline;
+	// "fail"/"failed" is in none. Under AND semantics this returns nothing —
+	// the bug we're guarding against. Under OR semantics it still finds the
+	// card on the matching terms.
+	t.Run("search_or_recall", func(t *testing.T) {
+		h := search("retry dispatch failed")
+		if !contains(ids(h), "itest-pipeline") {
+			t.Errorf("OR recall: 'retry dispatch failed' should still match itest-pipeline; got %v", ids(h))
+		}
+		// A query whose terms appear in NO card still returns nothing — OR
+		// doesn't mean "match everything".
+		if h := search("zzzfoo zzzbar"); len(h) != 0 {
+			t.Errorf("OR with no matching terms: want 0 got %v", ids(h))
+		}
+	})
+
 	// ── edit + validity ─────────────────────────────────────────────────
 	t.Run("edit_and_validity", func(t *testing.T) {
 		st, _ := do(t, "PATCH", "/api/internal/knowledge-cards/itest-auth-jwt", map[string]any{
