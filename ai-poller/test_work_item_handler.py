@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import unittest
 
-from work_item_handler import _parse_proxy_done, _parse_result_str, _telemetry_props
+from work_item_handler import (
+    DEFAULT_FIXER_MODEL,
+    _parse_proxy_done,
+    _parse_result_str,
+    _strip_code_fences,
+    _telemetry_props,
+)
 
 
 class TestParseProxyDone(unittest.TestCase):
@@ -156,6 +162,36 @@ class TestParseProxyDoneBackCompat(unittest.TestCase):
         self.assertEqual(out.output["reply_text"], "hi")
         self.assertEqual(out.runtime, "claude")
         self.assertEqual(out.metadata, {"duration_ms": 5})
+
+
+class TestFenceStripping(unittest.TestCase):
+    """The fixer is the sole JSON parse point now, so _parse_result_str must
+    tolerate a fenced ```json block (a fixer fence would otherwise fail all
+    retries)."""
+
+    def test_plain_json_unchanged(self):
+        out = _parse_result_str('{"reply_text": "hi"}')
+        self.assertTrue(out.success)
+        self.assertEqual(out.output["reply_text"], "hi")
+
+    def test_json_fence_stripped(self):
+        out = _parse_result_str('```json\n{"reply_text": "hi"}\n```')
+        self.assertTrue(out.success, out.error)
+        self.assertEqual(out.output["reply_text"], "hi")
+
+    def test_bare_fence_stripped(self):
+        out = _parse_result_str('```\n{"reply_text": "hi"}\n```')
+        self.assertTrue(out.success, out.error)
+        self.assertEqual(out.output["reply_text"], "hi")
+
+    def test_strip_helper_leaves_unfenced(self):
+        self.assertEqual(_strip_code_fences('{"a":1}'), '{"a":1}')
+        self.assertEqual(_strip_code_fences('```json\n{"a":1}\n```'), '{"a":1}')
+
+    def test_default_fixer_model_configured(self):
+        # The fixer always runs; a default model must exist for personas that
+        # don't override it.
+        self.assertTrue(DEFAULT_FIXER_MODEL)
 
 
 if __name__ == "__main__":

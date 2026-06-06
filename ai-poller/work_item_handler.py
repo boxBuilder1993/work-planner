@@ -53,11 +53,17 @@ PROXY_POLL_INTERVAL_S = 5
 PROXY_POLL_MAX_S = int(os.environ.get("WORK_ITEM_PROXY_POLL_MAX_S", "1800"))
 PER_TASK_CONCURRENCY = 2  # at most this many dispatched WorkItems per task
 
+# The fixer normalizer runs on EVERY dispatch (it is the sole producer of the
+# canonical JSON — the main persona never needs to emit JSON). Persona
+# frontmatter may override the model via `fixer_model`; otherwise this default
+# applies. Env-overridable for ops tuning.
+DEFAULT_FIXER_MODEL = os.environ.get("WORK_ITEM_FIXER_MODEL", "claude-sonnet-4-6")
 
-# System prompt for the optional normalizer/fixer pass. The fixer's only
-# job is to extract the canonical JSON shape from an arbitrary AI agent's
-# output. Personas opt in via `fixer_model` in their frontmatter; when
-# enabled, they're free to reply naturally and the fixer enforces schema.
+
+# System prompt for the normalizer/fixer pass. The fixer's only job is to
+# extract the canonical JSON shape from an arbitrary AI agent's output. It
+# runs on every dispatch, so personas can reply naturally and the fixer
+# enforces the schema.
 FIXER_SYSTEM_PROMPT = """You are a normalizer. Your input is the raw \
 stdout of another AI agent (an "engineer", "manager", "planner", or \
 similar persona running with tool access). That output may contain prose, \
@@ -247,68 +253,67 @@ class WorkItemHandler:
         main_metadata = main_outcome.metadata
         main_runtime = main_outcome.runtime
 
-        fixer_model = (ctx.get("fixer_model") or "").strip()
-
-        # ── Fixer pass (optional, per-persona config) ──────────────────
-        if fixer_model:
-            fixer_body = {
-                "prompt": raw_result,
-                "system_prompt": FIXER_SYSTEM_PROMPT,
-                "model": fixer_model,
-                "preferred_runtime": "claude",
-                "fallback_runtimes": [],
-                "max_turns": int(ctx.get("fixer_max_turns", 50)),
-                # Fixer is pure text-to-text; no MCP tools so it can't get
-                # distracted reading the task or making side effects.
-                "allowed_tools": [],
-                "disallowed_tools": [],
-                "task_id": w.task_id,
-                "work_item_id": w.id,
-                "workplanner_api_url": self._config.api_url,
-                "internal_api_key": self._config.internal_api_key,
-            }
-            fixer_outcome = await self._submit_and_poll(fixer_body)
-            if not fixer_outcome.ok:
-                return DispatchOutcome(
-                    success=False,
-                    runtime=main_runtime,
-                    metadata={
-                        **main_metadata,
-                        "fixer_metadata": fixer_outcome.metadata,
-                        "fixer_error": fixer_outcome.error,
-                    },
-                    error=f"fixer pass failed: {fixer_outcome.error}",
-                )
-            # The fixer's response should be the canonical JSON. Parse it.
-            parsed = _parse_result_str(
-                fixer_outcome.raw_result,
+        # ── Fixer pass (always on) ─────────────────────────────────────
+        # The fixer ALWAYS runs and is the sole producer of the canonical
+        # JSON — the main persona never needs to emit JSON, it just talks.
+        # This removes the strict-parse-the-persona-output path entirely, so
+        # a dispatch can't fail just because the persona replied in prose /
+        # markdown / fenced JSON. Persona frontmatter may override the fixer
+        # model; otherwise DEFAULT_FIXER_MODEL is used.
+        fixer_model = (ctx.get("fixer_model") or "").strip() or DEFAULT_FIXER_MODEL
+        fixer_body = {
+            "prompt": raw_result,
+            "system_prompt": FIXER_SYSTEM_PROMPT,
+            "model": fixer_model,
+            "preferred_runtime": "claude",
+            "fallback_runtimes": [],
+            "max_turns": int(ctx.get("fixer_max_turns", 50)),
+            # Fixer is pure text-to-text; no MCP tools so it can't get
+            # distracted reading the task or making side effects.
+            "allowed_tools": [],
+            "disallowed_tools": [],
+            "task_id": w.task_id,
+            "work_item_id": w.id,
+            "workplanner_api_url": self._config.api_url,
+            "internal_api_key": self._config.internal_api_key,
+        }
+        fixer_outcome = await self._submit_and_poll(fixer_body)
+        if not fixer_outcome.ok:
+            return DispatchOutcome(
+                success=False,
                 runtime=main_runtime,
                 metadata={
                     **main_metadata,
                     "fixer_metadata": fixer_outcome.metadata,
-                    "fixer_model": fixer_model,
-                    "normalized": True,
+                    "fixer_error": fixer_outcome.error,
                 },
+                error=f"fixer pass failed: {fixer_outcome.error}",
             )
-            # Detect explicit fixer-failure marker.
-            if parsed.success and parsed.output.get("_fixer_failed"):
-                return DispatchOutcome(
-                    success=False,
-                    runtime=main_runtime,
-                    metadata=parsed.metadata,
-                    error=(
-                        f"fixer declined to normalize: "
-                        f"{parsed.output.get('reason', 'no reason given')}\n"
-                        f"---RAW PERSONA OUTPUT (first {_RAW_OUTPUT_CAP} chars)---\n"
-                        f"{raw_result[:_RAW_OUTPUT_CAP]}"
-                    ),
-                )
-            return parsed
-
-        # ── No fixer: strict-parse the persona's raw output (legacy path) ──
-        return _parse_result_str(
-            raw_result, runtime=main_runtime, metadata=main_metadata,
+        # The fixer's response should be the canonical JSON. Parse it.
+        parsed = _parse_result_str(
+            fixer_outcome.raw_result,
+            runtime=main_runtime,
+            metadata={
+                **main_metadata,
+                "fixer_metadata": fixer_outcome.metadata,
+                "fixer_model": fixer_model,
+                "normalized": True,
+            },
         )
+        # Detect explicit fixer-failure marker.
+        if parsed.success and parsed.output.get("_fixer_failed"):
+            return DispatchOutcome(
+                success=False,
+                runtime=main_runtime,
+                metadata=parsed.metadata,
+                error=(
+                    f"fixer declined to normalize: "
+                    f"{parsed.output.get('reason', 'no reason given')}\n"
+                    f"---RAW PERSONA OUTPUT (first {_RAW_OUTPUT_CAP} chars)---\n"
+                    f"{raw_result[:_RAW_OUTPUT_CAP]}"
+                ),
+            )
+        return parsed
 
     async def _submit_and_poll(self, body: dict[str, Any]) -> "_ProxyCall":
         """Submit a job to the proxy and poll until it terminates. Returns
@@ -512,22 +517,35 @@ class WorkItemHandler:
 # ─── Module helpers ───────────────────────────────────────────────────────
 
 
+def _strip_code_fences(s: str) -> str:
+    """Strip a leading ```json / ``` fence and trailing ``` if the whole
+    string is a fenced block. The fixer is told not to fence, but models do
+    it anyway; since the fixer's output is now the SOLE parse point (its
+    failure would burn all retries), we defensively unwrap it."""
+    t = s.strip()
+    if t.startswith("```"):
+        # drop the opening fence line (``` or ```json)
+        nl = t.find("\n")
+        if nl != -1:
+            t = t[nl + 1:]
+        if t.rstrip().endswith("```"):
+            t = t.rstrip()[:-3]
+    return t.strip()
+
+
 def _parse_result_str(
     result_str: str,
     runtime: str = "",
     metadata: dict[str, Any] | None = None,
 ) -> DispatchOutcome:
-    """Parse a JSON result string into a DispatchOutcome.
+    """Parse a JSON result string (the fixer's output) into a DispatchOutcome.
 
-    Used twice in the dispatch flow:
-      - When the fixer pass is enabled: the fixer's output should be valid
-        JSON of the canonical shape; this validates and unpacks it.
-      - When the fixer pass is disabled (legacy persona): the persona's
-        own output is strict-parsed directly.
-
-    On parse failure we embed the raw text in the error message so it's
-    visible via `wp work-items show` — the proxy's job TTL (5 min) GCs
-    the only other copy.
+    The fixer normalizer runs on every dispatch and is the sole producer of
+    the canonical JSON, so this is where its output is validated. Tolerates
+    a fenced ```json block (defensive — a fixer fence would otherwise fail
+    all retries). On parse failure we embed the raw text in the error so it's
+    visible via `wp work-items show` — the proxy's job TTL (5 min) GCs the
+    only other copy.
     """
     metadata = metadata or {}
     if not result_str:
@@ -535,6 +553,7 @@ def _parse_result_str(
             success=False, runtime=runtime, metadata=metadata,
             error="proxy returned empty result string",
         )
+    result_str = _strip_code_fences(result_str)
     try:
         inner = json.loads(result_str)
     except json.JSONDecodeError as e:

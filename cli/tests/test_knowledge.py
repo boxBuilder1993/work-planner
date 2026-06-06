@@ -97,6 +97,32 @@ class KnowledgeCLITest(unittest.TestCase):
         self.assertEqual(res.exit_code, 0, res.output)
         client.list_knowledge_cards.assert_called_once_with(tag="backend", include_invalid=True)
 
+    def test_list_shows_full_content_when_piped(self):
+        # Under CliRunner stdout is not a TTY, so output must be the FULL card
+        # content (what an AI persona sees), not the ~80-char truncated table.
+        # This is the fix that lets a single `wp knowledge search` give the
+        # persona the whole answer.
+        client = mock.MagicMock()
+        long = "A" * 200 + " UNIQUE_TAIL_MARKER"
+        client.list_knowledge_cards.return_value = [{
+            "id": "big-card", "content": long, "tags": ["x"],
+            "isValid": True, "createdAt": 0, "updatedAt": 0,
+        }]
+        res = self._invoke(["knowledge", "list"], client)
+        self.assertEqual(res.exit_code, 0, res.output)
+        self.assertIn("UNIQUE_TAIL_MARKER", res.output)  # full content, not clipped
+
+    def test_search_shows_full_content_when_piped(self):
+        client = mock.MagicMock()
+        long = "B" * 200 + " SEARCH_TAIL_MARKER"
+        client.search_knowledge_cards.return_value = [{
+            "id": "hit", "content": long, "tags": [],
+            "isValid": True, "createdAt": 0, "updatedAt": 0,
+        }]
+        res = self._invoke(["knowledge", "search", "foo"], client)
+        self.assertEqual(res.exit_code, 0, res.output)
+        self.assertIn("SEARCH_TAIL_MARKER", res.output)
+
     # ── show ─────────────────────────────────────────────────────────
 
     def test_show_renders_content(self):
