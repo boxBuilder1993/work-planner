@@ -31,6 +31,12 @@ func internalKey() string {
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
+// seedUserEmail is the ONE canonical user every test seeds. /auth/local upserts
+// on email, so repeated seeds return the same user and the DB keeps exactly one
+// user — which TestInternalRootTaskCreation/sole_user_default relies on. Any
+// test that seeds a *different* email would break that invariant, so don't.
+const seedUserEmail = "itest-user@example.com"
+
 // do issues an internal-key request and returns (status, raw body).
 func do(t *testing.T, method, path string, body any) (int, []byte) {
 	t.Helper()

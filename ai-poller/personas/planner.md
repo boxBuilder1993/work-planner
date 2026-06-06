@@ -11,7 +11,10 @@ tools:
   - mcp__workplanner__query_knowledge
   - mcp__workplanner__store_knowledge
   - mcp__workplanner__create_task
-  - Bash(wp knowledge:*)
+  # Read-only KB access — cards are written by the archivist, not personas.
+  - Bash(wp knowledge search:*)
+  - Bash(wp knowledge show:*)
+  - Bash(wp knowledge list:*)
 reply_length_cap: 4000
 version: 2
 max_turns: 40

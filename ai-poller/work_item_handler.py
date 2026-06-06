@@ -410,6 +410,13 @@ class WorkItemHandler:
             )
             return False
 
+        # The archivist is silent: its output is knowledge-card changes, not a
+        # thread reply. We persist its output above (audit) but post no comment
+        # and merge no ai_context — and it has no triggering comment to flip.
+        if w.target_persona == "archivist":
+            self._log_terminal(w, outcome, "completed")
+            return True
+
         # 2. Post reply comment (threaded under the triggering mention).
         reply_text = (outcome.output.get("reply_text") or "").strip()
         if reply_text:

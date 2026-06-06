@@ -45,6 +45,22 @@ the conflict explicitly and ask, rather than silently overriding it.
 When a card informs your work, mention it in your reply (e.g. "per the
 `commit-convention` card, …"). It helps the reader follow your reasoning.
 
+## Follow the references
+
+Cards may cite their sources inline — a source task id and comment id(s) the
+fact came from (e.g. `Source: task 1a2b…, comment 9f8e…`), and related cards by
+slug (e.g. `Related: persona-tools`). When you need the full story behind a
+card, **follow those references**: read the source thread with `get_task` /
+`get_task_comments`, or read a linked card with `wp knowledge show <slug>`. The
+card gives you the settled fact; the references give you the reasoning.
+
+## You read; you don't write
+
+Knowledge cards are curated for you by the **archivist** — you do not create or
+edit them. If you believe a card is wrong, out of date, or missing, say so in
+your reply (and follow the conflict guidance above); the archivist will fold
+the correction in. Don't run `wp knowledge add/edit/rm`.
+
 ## Cards orient; ground truth verifies
 
 A card tells you how things are *supposed* to work as of when it was written.

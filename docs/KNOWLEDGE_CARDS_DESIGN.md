@@ -118,12 +118,50 @@ proves weak in practice.
 
 ## Write access
 
-Create / edit / delete are **human-only via `wp knowledge`** in v1.
-Personas do not write cards (no pollution risk, format still proving out).
-A persona that discovers something worth recording says so in its reply; a
-human adds the card. **Manager-write** is a plausible future (manager is the
-orchestrator) but needs either shell access or an infosec-reviewed tool —
-deferred.
+Cards are written by **humans** (via `wp knowledge`) and by the **archivist**
+— and by nobody else. The working personas (engineer, manager, planner,
+reviewer, default) are **read-only**: their `wp knowledge` grant is scoped to
+`search`/`show`/`list`, and the shared fragment tells them not to write. A
+persona that spots something worth recording says so in its reply; the
+archivist folds it in.
+
+## Archivist — automated knowledge maintenance
+
+The archivist is a dedicated persona (`personas/archivist.md`, sonnet) whose
+sole job is to keep the card base correct and current. It is **not** in the
+chat/dispatch path — it does no reviewing or coding and posts no comments.
+
+**Trigger.** Every new comment is a chance for the knowledge base to drift, so
+the archivist reviews comments. `archivist_handler` (a third stage of the chat
+cycle, gated by `ENABLE_ARCHIVIST`) sweeps
+`GET /api/internal/comments?needs_archival=true` — comments with no
+`archivist-reviewed` prop — oldest-first, capped at `ARCHIVIST_BATCH` per cycle.
+For each it creates a sweep WorkItem (`target_persona=archivist`,
+`triggering_comment_id=NULL`) and marks the comment reviewed. Dispatch reuses
+`work_item_handler` + the always-on fixer pass.
+
+**Cutoff, not backlog.** Migration `010` marks all pre-existing comments
+reviewed, so the archivist only processes comments created from its
+introduction forward. On a fresh DB this is a no-op — a new install archives
+from its first comment.
+
+**What it does.** Reads the full task context, searches existing cards, then
+does exactly one of: **create** a card, **update** one, or **nothing** (the
+common, correct default). Cards it touches are tagged `archivist`.
+
+**References.** Every card it writes cites its provenance inline — source task
+id + comment id(s) — and cross-links related cards by slug. The shared fragment
+tells reading personas to follow those references (`get_task`,
+`get_task_comments`, `wp knowledge show <slug>`) when they need the full story.
+
+**Silent + audited.** Its real output is the card changes; `work_item_handler`
+suppresses the reply comment for archivist items but still persists the output
+on the WorkItem for audit.
+
+> Note: cards land as `is_valid=true` immediately — there is no candidate/review
+> gate. The archivist is trusted to curate conservatively (search-first,
+> bias-to-nothing). A `candidate → promote` gate is the obvious lever if
+> auto-authored noise ever becomes a problem.
 
 ## Authoring
 
@@ -144,7 +182,9 @@ human review — but that's a future phase, not v1.
 
 - User-facing JWT read endpoints + web UI search.
 - Pre-dispatch injection token-budget tuning.
-- Agent-proposed cards / manager-write.
-- Code-mining extraction flow.
+- A candidate/review gate for archivist-authored cards (cards are live
+  immediately today; add the gate only if auto-authored noise warrants it).
+- Code-mining extraction flow (one-shot bulk draft from the repos — distinct
+  from the archivist's per-comment upkeep).
 - `pgvector` semantic retrieval — only if corpus outgrows FTS+context.
 - Card structure (types, lifecycle) — only if a real need forces it.

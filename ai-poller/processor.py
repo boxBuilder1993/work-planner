@@ -15,6 +15,7 @@ from algo_sdlc import SDLC
 from algo_simple_answer import SimpleAnswer
 from algorithm import AlgorithmRegistry, TaskContext
 from api_client import ApiClient
+from archivist_handler import ArchivistHandler
 from chat_handler import ChatHandler
 from work_item_handler import WorkItemHandler
 from config import Config
@@ -64,6 +65,9 @@ class PollCycleProcessor:
         # Two-poller pipeline: chat_handler enqueues WorkItems, this one
         # dispatches them. Both run each cycle when ENABLE_CHAT_HANDLER=true.
         self._work_item_handler = WorkItemHandler(api=api, config=config)
+        # Archivist: reviews every new comment for knowledge-base upkeep.
+        # Enqueues archival WorkItems (dispatched by _work_item_handler).
+        self._archivist_handler = ArchivistHandler(api=api, config=config)
 
     async def run_cycle(self) -> int:
         """Run one poll cycle. Returns the number of actions taken.
@@ -79,10 +83,15 @@ class PollCycleProcessor:
 
     async def _run_chat_cycle(self) -> int:
         """Chat-mention path: scan mentions → create WorkItems, then dispatch
-        pending WorkItems through the proxy. Two stages per cycle."""
+        pending WorkItems through the proxy. The archivist (when enabled) adds
+        a third stage that enqueues knowledge-base reviews from new comments;
+        its WorkItems are dispatched by the same work_item_handler."""
         enqueued = await self._chat_handler.run_cycle()
+        archived = 0
+        if self._config.enable_archivist:
+            archived = await self._archivist_handler.run_cycle()
         dispatched = await self._work_item_handler.run_cycle()
-        return enqueued + dispatched
+        return enqueued + archived + dispatched
 
     async def _run_legacy_cycle(self) -> int:
         """Legacy algorithm dispatch path (SDLC / orchestrated / etc.).
