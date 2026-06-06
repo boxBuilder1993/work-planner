@@ -77,21 +77,44 @@ DELETE /api/internal/knowledge-cards/:id        delete
   `/search`, `/:id`) is a trivial future add when a web UI needs it. Cards
   are company-global (no per-user scoping).
 
-## Consumption (no MCP)
+## Consumption — agentic pull (no MCP, no injection)
 
-1. **Pre-dispatch injection (primary, all personas).** When the poller
-   builds a dispatch prompt, it searches the knowledge backend (plain HTTP,
-   like it already fetches tasks/comments) for cards relevant to the task —
-   by the task's tags and/or a keyword pass over its title+description — and
-   injects the matched cards into the prompt. Works for every persona,
-   including shell-less manager/planner. Token-budgeted (top-N).
+Personas retrieve cards **themselves, on demand**, as a required
+due-diligence step — rather than the poller guessing relevance and pushing
+cards in. Agentic pull gives better relevance (the agent knows its own
+task), keeps context lean (no irrelevant cards diluting attention), and
+lets the agent iterate (search → read → search again). This mirrors how
+agents already navigate *code* (grep/read on demand) — we extend the same
+philosophy to knowledge.
 
-2. **Active query via CLI (shell-capable personas).** The engineer runs
-   `wp knowledge search "..."` through its existing Bash capability for
-   deeper lookups mid-task. No new tool surface.
+**Mechanism (no new MCP tool — infosec-friendly):**
+
+- Every persona that does substantive work gets a **scoped Bash
+  capability** limited to the knowledge CLI: `Bash(wp knowledge:*)`. They
+  can run `wp knowledge search "..."` and `wp knowledge show <id>` and
+  nothing else — no `rm`, no `curl`, no filesystem. Engineer already has
+  full Bash; manager and planner get this narrow grant. Per-persona
+  `tools:` frontmatter is the existing scoping mechanism (it becomes
+  `--allowedTools`), so this is a one-line addition per persona.
+- `wp` is installed + configured in the dispatch environment. The proxy
+  exports `WP_BASE_URL` / `WP_INTERNAL_KEY` (from its `WORKPLANNER_API_URL`
+  / `INTERNAL_API_KEY`) into the agent's environment so `wp knowledge`
+  authenticates without a config file.
+- A shared persona instruction makes KB search a **required first step**:
+  search before proposing / deciding / implementing, read the relevant
+  cards, and state what was found (or that nothing relevant exists).
+  `max_turns` is raised so personas can afford the lookups (cost is a
+  non-issue on the Max subscription).
 
 Personas are told: cards orient you, but live code/systems are ground
 truth — verify specifics against them when correctness matters.
+
+**Optional enhancement — card catalog (unknown-unknowns).** Pure pull only
+finds what the agent thinks to search for. A lightweight catalog (just
+`id` + `tags` + a one-line summary per card) injected into every prompt
+lets the agent see *what knowledge exists*, then pull the full content of
+what it needs. Small, cacheable, low attention cost. Deferred unless recall
+proves weak in practice.
 
 ## Write access
 

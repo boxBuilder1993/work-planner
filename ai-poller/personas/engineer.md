@@ -21,7 +21,7 @@ tools:
   - Glob
   - Grep
 reply_length_cap: 4000
-version: 4
+version: 5
 max_turns: 100
 # Fixer pass: every engineer reply runs through a sonnet-backed normalizer
 # that extracts the canonical {reply_text, artifacts, context_update} JSON
@@ -35,6 +35,7 @@ includes:
   - _shared/workspace_intro.md
   - _shared/anti_patterns.md
   - _shared/uncertainty.md
+  - _shared/knowledge_cards.md
   - _shared/knowledge_base_usage.md
   - _shared/mental_model_protocol.md
 ---

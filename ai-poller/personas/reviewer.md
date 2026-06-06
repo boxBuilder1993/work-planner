@@ -15,14 +15,20 @@ tools:
   - Glob
   - Grep
 reply_length_cap: 4000
-version: 1
+version: 2
+max_turns: 40
+# Fixer pass: reviewer replies naturally; a sonnet normalizer extracts the
+# canonical JSON (so output_format.md is dropped from includes). Reviewer
+# already has run_command, so it runs `wp knowledge` through that.
+fixer_model: claude-sonnet-4-6
+fixer_max_turns: 50
 includes:
   - _shared/environment.md
   - _shared/mention_context.md
   - _shared/workspace_intro.md
-  - _shared/output_format.md
   - _shared/anti_patterns.md
   - _shared/uncertainty.md
+  - _shared/knowledge_cards.md
   - _shared/knowledge_base_usage.md
   - _shared/mental_model_protocol.md
 ---

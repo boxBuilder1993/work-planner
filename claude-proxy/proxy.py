@@ -206,6 +206,21 @@ def _workplanner_env(req: RunRequest) -> dict[str, str]:
     return env
 
 
+def _claude_subprocess_env() -> dict[str, str]:
+    """Environment for the `claude -p` process itself (distinct from the MCP
+    server env). Carries WP_BASE_URL / WP_INTERNAL_KEY so a persona running
+    `wp knowledge search ...` via its Bash tool authenticates without a
+    config file. Mapped from the proxy's own backend config; empty values are
+    omitted so `wp` falls back to its config file if the proxy wasn't given a
+    backend URL/key."""
+    env = os.environ.copy()
+    if WORKPLANNER_API_URL:
+        env["WP_BASE_URL"] = WORKPLANNER_API_URL
+    if INTERNAL_API_KEY:
+        env["WP_INTERNAL_KEY"] = INTERNAL_API_KEY
+    return env
+
+
 def _algo_env(req: RunRequest) -> dict[str, str]:
     return {
         "WORKPLANNER_API_URL": WORKPLANNER_API_URL,
@@ -401,6 +416,7 @@ class ClaudeRuntime:
                 cmd,
                 stdin_text=req.prompt,
                 cwd=run_cwd,
+                env=_claude_subprocess_env(),
             )
             if stderr_text:
                 logger.warning("Claude stderr: %s", stderr_text[:500])

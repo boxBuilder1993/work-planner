@@ -284,5 +284,54 @@ class TestMentionRegex(unittest.TestCase):
         self.assertEqual(m.group(1), "planner")
 
 
+class RealPersonaKnowledgeCardsTest(unittest.TestCase):
+    """Phase C wiring: every working persona must include the knowledge-card
+    due-diligence fragment, run the fixer (so it can reply naturally), and
+    have a way to run `wp knowledge` — either run_command or the scoped Bash
+    grant. These load the actual on-disk persona files."""
+
+    PERSONAS = ["engineer", "manager", "planner", "reviewer", "default"]
+
+    def _load(self, name):
+        return load_persona(name)
+
+    def test_all_include_knowledge_cards_fragment(self) -> None:
+        for name in self.PERSONAS:
+            p = self._load(name)
+            self.assertIn(
+                "Company knowledge cards", p.body,
+                f"{name} is missing the knowledge_cards fragment",
+            )
+
+    def test_all_have_fixer(self) -> None:
+        for name in self.PERSONAS:
+            p = self._load(name)
+            self.assertTrue(
+                p.fixer_model,
+                f"{name} should have a fixer_model so it can reply naturally",
+            )
+
+    def test_each_persona_can_run_wp_knowledge(self) -> None:
+        # Either the run_command MCP tool (engineer/reviewer) or the scoped
+        # Bash grant (manager/planner/default) — every persona needs one path
+        # to execute `wp knowledge`.
+        for name in self.PERSONAS:
+            p = self._load(name)
+            has_run_command = "mcp__workplanner__run_command" in p.tools
+            has_scoped_bash = any(t.startswith("Bash(wp knowledge") for t in p.tools)
+            self.assertTrue(
+                has_run_command or has_scoped_bash,
+                f"{name} has no way to run wp knowledge (no run_command, no scoped Bash)",
+            )
+
+    def test_max_turns_affords_lookups(self) -> None:
+        # Personas that default to 20 were bumped to >= 40 so KB lookups fit.
+        for name in self.PERSONAS:
+            p = self._load(name)
+            self.assertGreaterEqual(
+                p.max_turns, 40, f"{name} max_turns too low for due-diligence lookups"
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

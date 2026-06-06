@@ -46,7 +46,18 @@ claude --version
 # Verify Claude is authenticated
 claude auth status
 # Should show: loggedIn: true, subscriptionType: max
+
+# wp CLI — personas run `wp knowledge search` for KB due diligence.
+# Must be on PATH wherever the proxy spawns claude -p (i.e. this host).
+make -C .. install-cli        # pipx install ./cli  → puts `wp` on PATH
+wp --version
 ```
+
+The proxy injects `WP_BASE_URL` / `WP_INTERNAL_KEY` (from its own
+`WORKPLANNER_API_URL` / `INTERNAL_API_KEY`) into the `claude -p` environment,
+so `wp knowledge` authenticates with no config file. If `wp` isn't on PATH,
+personas simply can't do KB lookups — dispatches still run, just without
+knowledge-card grounding.
 
 ## First-time setup
 
