@@ -24,6 +24,12 @@ Minimal `knowledge_cards` table, CRUD, Postgres FTS. No ChromaDB.
   list, search (keyword/multiword/tag/miss), validity exclude+include,
   delete. ✅
 - [x] **A7. Commit + push.**
+- [x] **A8. Committed integration tests** (`backend/tests/integration/`,
+  `//go:build integration`) — black-box HTTP against an isolated e2e stack
+  (`docker-compose.test.yml`: ephemeral Postgres + backend, ports 5433/8081).
+  `make test-e2e-up|down`, `make test-integration`, `make test-e2e` (one-shot).
+  New `integration` job in `.github/workflows/test.yml` runs on PRs. 6/6
+  subtests pass. ✅
 
 ## Phase B — `wp knowledge` CLI
 

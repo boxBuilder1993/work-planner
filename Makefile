@@ -1,4 +1,4 @@
-.PHONY: ai-ollama ai-claude dev-backend dev dev-stack dev-stack-down dev-stack-logs dev-proxy help test test-backend test-poller test-proxy test-web test-mobile test-app test-cli install-cli
+.PHONY: ai-ollama ai-claude dev-backend dev dev-stack dev-stack-down dev-stack-logs dev-proxy help test test-backend test-poller test-proxy test-web test-mobile test-app test-cli install-cli test-e2e-up test-e2e-down test-integration test-e2e
 
 help:
 	@echo "Local dev (Docker Compose + claude-proxy on Mac):"
@@ -144,3 +144,36 @@ install-cli:
 	@command -v pipx >/dev/null 2>&1 || (echo "pipx not found. brew install pipx"; exit 1)
 	pipx install --force ./cli
 	@echo "Installed. Try: wp --help"
+
+# ─── Integration tests (isolated e2e stack) ────────────────────────────────
+# A separate Postgres + backend on test ports (5433 / 8081), ephemeral DB.
+# Defined in docker-compose.test.yml (project: workplanner-test) so it never
+# clashes with the dev stack. Integration tests are Go, black-box HTTP, tagged
+# `integration` so they're excluded from `make test-backend`.
+
+# Bring the test stack up and wait for healthchecks (leave it running so you
+# can poke at http://localhost:8081 yourself).
+test-e2e-up:
+	docker compose -f docker-compose.test.yml up --build -d --wait
+
+# Tear the test stack down (removes its containers + ephemeral data).
+test-e2e-down:
+	docker compose -f docker-compose.test.yml down -v
+
+# Run the integration suite against an already-running test stack.
+test-integration:
+	cd backend && \
+		TEST_BASE_URL=$${TEST_BASE_URL:-http://localhost:8081} \
+		TEST_INTERNAL_KEY=$${TEST_INTERNAL_KEY:-test-internal-key} \
+		go test -tags=integration -count=1 -v ./tests/integration/...
+
+# One-shot: bring the stack up, run the suite, tear it down (always — even on
+# test failure). This is what CI runs.
+test-e2e:
+	docker compose -f docker-compose.test.yml up --build -d --wait
+	@cd backend && \
+		TEST_BASE_URL=http://localhost:8081 TEST_INTERNAL_KEY=test-internal-key \
+		go test -tags=integration -count=1 -v ./tests/integration/... ; \
+		status=$$? ; \
+		cd .. && docker compose -f docker-compose.test.yml down -v ; \
+		exit $$status

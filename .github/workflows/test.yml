@@ -124,3 +124,26 @@ jobs:
 
       - name: Run unit tests
         run: make test-app
+
+  integration:
+    name: Integration (e2e stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: backend/go.sum
+
+      - name: Bring up the isolated test stack
+        run: docker compose -f docker-compose.test.yml up --build -d --wait
+
+      - name: Run integration tests
+        run: make test-integration
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v

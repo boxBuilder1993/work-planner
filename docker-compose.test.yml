@@ -1,0 +1,47 @@
+# Isolated end-to-end test stack. Separate from docker-compose.yml:
+#   - own project name (workplanner-test) → separate containers + network
+#   - ephemeral Postgres (tmpfs) → clean every run, no volume to wipe
+#   - test ports (5433 / 8081) → no clash with the dev stack
+#   - hardcoded test creds → safe to commit; only ever used here
+#
+# Bring up:   make test-e2e-up      (or docker compose -f docker-compose.test.yml up --build -d --wait)
+# Run tests:  make test-integration
+# One-shot:   make test-e2e         (up → test → down)
+name: workplanner-test
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: workplanner_test
+      POSTGRES_USER: workplanner_test
+      POSTGRES_PASSWORD: workplanner_test
+    tmpfs:
+      - /var/lib/postgresql/data   # ephemeral — fresh DB every run
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workplanner_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend-test:
+    build: ./backend
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://workplanner_test:workplanner_test@postgres-test:5432/workplanner_test?sslmode=disable
+      MIGRATIONS_DIR: /migrations
+      PORT: "8080"
+      INTERNAL_API_KEY: test-internal-key
+      JWT_SECRET: test-jwt-secret
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
