@@ -125,6 +125,21 @@ jobs:
       - name: Run unit tests
         run: make test-app
 
+  cli:
+    name: CLI (wp, Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install + unit tests
+        run: make test-cli
+
   integration:
     name: Integration (e2e stack)
     runs-on: ubuntu-latest

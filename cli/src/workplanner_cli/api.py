@@ -166,3 +166,46 @@ class Client:
 
     def update_work_item(self, work_item_id: str, fields: dict) -> dict:
         return self._patch(f"/api/internal/work-items/{work_item_id}", fields)
+
+    # ── Knowledge Cards ──────────────────────────────────
+
+    def create_knowledge_card(self, card_id: str, content: str, tags: list[str]) -> dict:
+        return self._post(
+            "/api/internal/knowledge-cards",
+            {"id": card_id, "content": content, "tags": tags},
+        )
+
+    def get_knowledge_card(self, card_id: str) -> dict:
+        return self._get(f"/api/internal/knowledge-cards/{card_id}")
+
+    def list_knowledge_cards(self, tag: str | None = None, include_invalid: bool = False) -> list[dict]:
+        params: dict[str, Any] = {}
+        if tag:
+            params["tag"] = tag
+        if include_invalid:
+            params["includeInvalid"] = "true"
+        return self._get("/api/internal/knowledge-cards", params=params or None)
+
+    def search_knowledge_cards(
+        self,
+        query: str | None = None,
+        tag: str | None = None,
+        include_invalid: bool = False,
+        limit: int | None = None,
+    ) -> list[dict]:
+        params: dict[str, Any] = {}
+        if query:
+            params["q"] = query
+        if tag:
+            params["tag"] = tag
+        if include_invalid:
+            params["includeInvalid"] = "true"
+        if limit:
+            params["limit"] = str(limit)
+        return self._get("/api/internal/knowledge-cards/search", params=params or None)
+
+    def update_knowledge_card(self, card_id: str, fields: dict) -> dict:
+        return self._patch(f"/api/internal/knowledge-cards/{card_id}", fields)
+
+    def delete_knowledge_card(self, card_id: str) -> None:
+        self._delete(f"/api/internal/knowledge-cards/{card_id}")
