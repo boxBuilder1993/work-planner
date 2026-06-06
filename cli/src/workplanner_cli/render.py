@@ -240,6 +240,34 @@ def work_item_detail(w: dict) -> None:
                 console.print(f"    {line}")
 
 
+def knowledge_card_table(cards: Iterable[dict], title: str | None = None) -> None:
+    table = Table(title=title, show_lines=False, header_style="bold")
+    table.add_column("ID", style="dim", no_wrap=True)
+    table.add_column("Valid", no_wrap=True)
+    table.add_column("Tags", no_wrap=True)
+    table.add_column("Content")
+    for c in cards:
+        valid = "[green]✓[/green]" if c.get("isValid", True) else "[red]✗[/red]"
+        tags = " ".join(c.get("tags") or [])
+        # Single-line preview of content.
+        content = (c.get("content") or "").replace("\n", " ")
+        preview = content[:80] + ("…" if len(content) > 80 else "")
+        table.add_row(c["id"], valid, f"[cyan]{tags}[/cyan]", preview)
+    console.print(table)
+
+
+def knowledge_card_detail(c: dict) -> None:
+    valid = "[green]valid[/green]" if c.get("isValid", True) else "[red]invalid[/red]"
+    console.rule(f"[bold]{c['id']}[/bold]  {valid}")
+    tags = c.get("tags") or []
+    if tags:
+        console.print(f"  [bold]Tags[/bold]     [cyan]{' '.join(tags)}[/cyan]")
+    console.print(f"  [bold]Created[/bold]  {_fmt_ts(c.get('createdAt'))}")
+    console.print(f"  [bold]Updated[/bold]  {_fmt_ts(c.get('updatedAt'))}")
+    console.print()
+    console.print(c.get("content") or "")
+
+
 def info(msg: str) -> None:
     console.print(f"[green]✓[/green] {msg}")
 

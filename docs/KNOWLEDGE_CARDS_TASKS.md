@@ -31,23 +31,20 @@ Minimal `knowledge_cards` table, CRUD, Postgres FTS. No ChromaDB.
   New `integration` job in `.github/workflows/test.yml` runs on PRs. 6/6
   subtests pass. ✅
 
-## Phase B — `wp knowledge` CLI
+## Phase B — `wp knowledge` CLI  ✅ DONE (PR)
 
 Authoring surface for the sit-down + engineer's active query via shell.
 
-- [ ] **B1. API client methods** (`cli/.../api.py`): create/get/list/search/
+- [x] **B1. API client methods** (`cli/.../api.py`): create/get/list/search/
   update/delete knowledge cards.
-- [ ] **B2. Render helpers** (`cli/.../render.py`): card table + detail.
-- [ ] **B3. `wp knowledge` command group** (`cli/.../cli.py`):
-  - `add <id> [-c content | stdin | @file] [--tag ...]`
-  - `list [--tag ...] [--all]`
-  - `show <id>`
-  - `search "<phrase>" [--tag ...] [--all]`
-  - `edit <id> [-c content | --tag ... | --valid/--invalid]`
-  - `rm <id>`
-- [ ] **B4. README** — command table + authoring workflow.
-- [ ] **B5. Smoke test** against prod: add a real card, list/show/search.
-- [ ] **B6. Commit + push.**
+- [x] **B2. Render helpers** (`cli/.../render.py`): card table + detail.
+- [x] **B3. `wp knowledge` command group** — add/list/show/search/edit/rm.
+  `add`/`edit` content from `-c`, `@file`, or stdin; slug validation.
+- [x] **B4. README** — command table + authoring workflow.
+- [x] **B5. Tests** — `cli/tests/test_knowledge.py` (14 unittest + CliRunner,
+  mocked Client). Wired into `make test-cli` + a new `cli` CI job. Also
+  manually verified end-to-end against localdev. ✅
+- [x] **B6. Branch + PR** (per the new branch/PR/CI-green norm).
 
 ## Sit-down — populate the corpus
 

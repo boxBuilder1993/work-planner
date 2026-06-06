@@ -56,7 +56,32 @@ WP_INTERNAL_KEY=$(grep INTERNAL_API_KEY .env | cut -d= -f2) \
 | `wp work-items show <uuid>`          | Full WorkItem detail: assignment, output, attempts.             |
 | `wp work-items cancel <uuid>`        | Cancel a pending or failed WorkItem.                            |
 | `wp work-items retry <uuid>`         | Reset retry_count on a failed WorkItem.                         |
+| `wp knowledge add <id> [-c … \| @file \| stdin] [--tag …]` | Create a knowledge card.                  |
+| `wp knowledge list [--tag …] [--all]`| List cards (valid only unless `--all`).                         |
+| `wp knowledge show <id>`             | Show a card's full content.                                     |
+| `wp knowledge search "<phrase>" [--tag …]` | Full-text search over card content; filter by tag.        |
+| `wp knowledge edit <id> [-c … \| --tag … \| --clear-tags \| --valid/--invalid]` | Edit content/tags/validity. |
+| `wp knowledge rm <id>`               | Delete a card.                                                  |
 | `wp config init / show`              | Manage the config file.                                         |
+
+### Knowledge cards
+
+The knowledge base is a set of searchable text **cards** the AI personas read
+to ground their work (see `docs/KNOWLEDGE_CARDS_DESIGN.md`). Author them here:
+
+```sh
+# inline, from a file, or from stdin
+wp knowledge add commit-style -c "Conventional commits. Co-Authored-By for AI." --tag convention
+wp knowledge add architecture @notes/arch.md --tag architecture --tag backend
+some-generator | wp knowledge add gen-notes --tag generated
+
+wp knowledge search "how does auth work"     # full-text search
+wp knowledge list --tag backend
+wp knowledge edit commit-style --invalid       # retire without deleting
+```
+
+`id` is a slug (lowercase, digits, hyphens). Invalid cards are hidden from
+search/list unless you pass `--all`.
 
 ### ID resolution
 

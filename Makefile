@@ -130,14 +130,15 @@ test-mobile:
 test-app:
 	./gradlew test --no-daemon
 
-# CLI (Python, pipx-installable). Smoke-tests the entry point.
+# CLI (Python). Installs the package, smoke-tests the entry point, and runs
+# the unittest suite (click CliRunner with a mocked API client).
 test-cli:
 	cd cli && \
 		( [ -d .venv ] || python3 -m venv .venv ) && \
 		. .venv/bin/activate && \
 		pip install --quiet --disable-pip-version-check -e . && \
 		wp --help > /dev/null && \
-		echo "✓ wp --help works"
+		python -m unittest discover -s tests -p 'test_*.py' -v
 
 # Install the CLI globally via pipx. Re-run to upgrade.
 install-cli:

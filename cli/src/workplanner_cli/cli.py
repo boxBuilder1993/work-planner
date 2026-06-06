@@ -508,6 +508,127 @@ def cmd_wi_retry(ctx: click.Context, work_item_id: str) -> None:
     )
 
 
+# ─── knowledge ───────────────────────────────────────────────────────
+
+CARD_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
+
+
+@main.group(name="knowledge")
+def knowledge_cmd() -> None:
+    """Manage the company knowledge base — searchable cards the AI personas
+    read to ground their work. See docs/KNOWLEDGE_CARDS_DESIGN.md."""
+
+
+def _read_content_arg(content: str | None) -> str:
+    """Resolve card content from --content, an @file path, or stdin ('-')."""
+    if content is None or content == "-":
+        text = sys.stdin.read()
+    elif content.startswith("@"):
+        path = content[1:]
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError as e:
+            raise click.UsageError(f"cannot read {path}: {e}")
+    else:
+        text = content
+    text = text.strip()
+    if not text:
+        raise click.UsageError("Empty card content.")
+    return text
+
+
+@knowledge_cmd.command("add")
+@click.argument("card_id")
+@click.option("--content", "-c", help="Card text, an @file path, or '-' for stdin (default).")
+@click.option("--tag", "tags", multiple=True, help="Tag (repeatable).")
+@click.pass_context
+def cmd_kn_add(ctx: click.Context, card_id: str, content: str | None, tags: tuple[str, ...]) -> None:
+    """Create a knowledge card. CARD_ID is a slug (lowercase, digits, hyphens)."""
+    if not CARD_SLUG_RE.match(card_id):
+        raise click.UsageError("CARD_ID must be a slug: lowercase letters, digits, hyphens (2-64 chars).")
+    body = _read_content_arg(content)
+    client = _get_client(ctx)
+    card = client.create_knowledge_card(card_id, body, list(tags))
+    render.info(f"Created card {card['id']} ({len(card.get('tags') or [])} tags).")
+
+
+@knowledge_cmd.command("list")
+@click.option("--tag", help="Filter by tag.")
+@click.option("--all", "show_all", is_flag=True, help="Include invalid cards.")
+@click.pass_context
+def cmd_kn_list(ctx: click.Context, tag: str | None, show_all: bool) -> None:
+    """List knowledge cards (valid only unless --all)."""
+    client = _get_client(ctx)
+    cards = client.list_knowledge_cards(tag=tag, include_invalid=show_all)
+    title = f"Knowledge cards{f' (tag={tag})' if tag else ''}"
+    render.knowledge_card_table(cards, title=title)
+
+
+@knowledge_cmd.command("show")
+@click.argument("card_id")
+@click.pass_context
+def cmd_kn_show(ctx: click.Context, card_id: str) -> None:
+    """Show a card's full content."""
+    client = _get_client(ctx)
+    render.knowledge_card_detail(client.get_knowledge_card(card_id))
+
+
+@knowledge_cmd.command("search")
+@click.argument("query", required=False)
+@click.option("--tag", help="Filter by tag.")
+@click.option("--all", "show_all", is_flag=True, help="Include invalid cards.")
+@click.option("--limit", type=int, help="Max results (default 10).")
+@click.pass_context
+def cmd_kn_search(ctx: click.Context, query: str | None, tag: str | None, show_all: bool, limit: int | None) -> None:
+    """Full-text search over card content; filter by tag. Either or both."""
+    client = _get_client(ctx)
+    cards = client.search_knowledge_cards(query=query, tag=tag, include_invalid=show_all, limit=limit)
+    render.knowledge_card_table(cards, title=f"Search: {query or '(tag-only)'}")
+
+
+@knowledge_cmd.command("edit")
+@click.argument("card_id")
+@click.option("--content", "-c", help="New content, an @file path, or '-' for stdin.")
+@click.option("--tag", "tags", multiple=True, help="Replace tags (repeatable). Pass none with --clear-tags to empty.")
+@click.option("--clear-tags", is_flag=True, help="Set tags to empty.")
+@click.option("--valid/--invalid", "is_valid", default=None, help="Mark the card valid or invalid.")
+@click.pass_context
+def cmd_kn_edit(
+    ctx: click.Context,
+    card_id: str,
+    content: str | None,
+    tags: tuple[str, ...],
+    clear_tags: bool,
+    is_valid: bool | None,
+) -> None:
+    """Edit a card's content, tags, or validity."""
+    fields: dict[str, Any] = {}
+    if content is not None:
+        fields["content"] = _read_content_arg(content)
+    if clear_tags:
+        fields["tags"] = []
+    elif tags:
+        fields["tags"] = list(tags)
+    if is_valid is not None:
+        fields["isValid"] = is_valid
+    if not fields:
+        raise click.UsageError("Nothing to edit — pass --content, --tag/--clear-tags, or --valid/--invalid.")
+    client = _get_client(ctx)
+    card = client.update_knowledge_card(card_id, fields)
+    render.info(f"Updated card {card['id']}.")
+
+
+@knowledge_cmd.command("rm")
+@click.argument("card_id")
+@click.pass_context
+def cmd_kn_rm(ctx: click.Context, card_id: str) -> None:
+    """Delete a knowledge card."""
+    client = _get_client(ctx)
+    client.delete_knowledge_card(card_id)
+    render.info(f"Deleted card {card_id}.")
+
+
 # ─── Entry point ─────────────────────────────────────────────────────
 
 # The click group is `_cli_group`; `main` is the script entry point that
