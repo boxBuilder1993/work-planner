@@ -928,6 +928,15 @@ func (s *Store) ListKnowledgeCards(ctx context.Context, tag *string, includeInva
 // SearchKnowledgeCards runs full-text search over content (when q is
 // non-empty), optionally filtered by tag, ranked by relevance. Invalid cards
 // excluded unless includeInvalid. An empty q with a tag is a tag-only listing.
+//
+// Recall over precision: a knowledge base should surface a relevant card even
+// when the query has extra words the card doesn't contain. plainto_tsquery
+// ANDs every term, so one missing word excludes the whole card — bad for the
+// natural-language queries personas make. We instead match on OR (any term)
+// and let ts_rank order by how well each card matches. The OR query is
+// derived by rewriting plainto_tsquery's safe lexeme output ('a & b & c')
+// into 'a | b | c' — keeps plainto's robust input handling, swaps the
+// connective.
 func (s *Store) SearchKnowledgeCards(ctx context.Context, q string, tag *string, includeInvalid bool, limit int) ([]model.KnowledgeCard, error) {
 	if limit <= 0 {
 		limit = 10
@@ -935,12 +944,16 @@ func (s *Store) SearchKnowledgeCards(ctx context.Context, q string, tag *string,
 	return s.scanKnowledgeCards(ctx, `
 		SELECT id, content, tags, is_valid, created_at, updated_at
 		FROM knowledge_cards
-		WHERE ($1 = '' OR to_tsvector('english', coalesce(content,'')) @@ plainto_tsquery('english', $1))
+		WHERE ($1 = '' OR to_tsvector('english', coalesce(content,'')) @@
+		       replace(plainto_tsquery('english', $1)::text, '&', '|')::tsquery)
 		  AND ($2::text IS NULL OR $2 = ANY(tags))
 		  AND (is_valid OR $3)
 		ORDER BY
 			CASE WHEN $1 = '' THEN 0
-			     ELSE ts_rank(to_tsvector('english', coalesce(content,'')), plainto_tsquery('english', $1))
+			     ELSE ts_rank(
+			         to_tsvector('english', coalesce(content,'')),
+			         replace(plainto_tsquery('english', $1)::text, '&', '|')::tsquery
+			     )
 			END DESC,
 			updated_at DESC
 		LIMIT $4
