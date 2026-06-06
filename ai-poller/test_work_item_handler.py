@@ -8,9 +8,14 @@ manual smoke-test in Phase 1.
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
+from config import Config
+from models import WorkItemEntity
 from work_item_handler import (
     DEFAULT_FIXER_MODEL,
+    DispatchOutcome,
+    WorkItemHandler,
     _parse_proxy_done,
     _parse_result_str,
     _strip_code_fences,
@@ -192,6 +197,50 @@ class TestFenceStripping(unittest.TestCase):
         # The fixer always runs; a default model must exist for personas that
         # don't override it.
         self.assertTrue(DEFAULT_FIXER_MODEL)
+
+
+class TestArchivistFinalizeIsSilent(unittest.TestCase):
+    """Archivist WorkItems persist their output (audit) but post NO reply
+    comment, merge NO ai_context, and flip no triggering comment — their real
+    output is the knowledge-card changes done via the shell during dispatch."""
+
+    def _handler(self) -> tuple[WorkItemHandler, mock.MagicMock]:
+        api = mock.MagicMock()
+        return WorkItemHandler(api=api, config=Config()), api
+
+    def _archivist_item(self) -> WorkItemEntity:
+        return WorkItemEntity(
+            id="wi-arch", task_id="T-1", target_persona="archivist",
+            triggering_comment_id=None,
+            prompt_context={"persona_name": "archivist"},
+        )
+
+    def test_archivist_output_persisted_but_no_comment(self):
+        handler, api = self._handler()
+        outcome = DispatchOutcome(
+            success=True,
+            output={"reply_text": "Created card foo", "context_update": {"k": "v"}},
+            metadata={"duration_ms": 10},
+        )
+        ok = handler._finalize_success(self._archivist_item(), outcome)
+        self.assertTrue(ok)
+        api.submit_work_item_output.assert_called_once()          # audit kept
+        api.create_comment_with_props.assert_not_called()         # silent
+        api.update_task.assert_not_called()                       # no ai_context merge
+        api.update_comment_props.assert_not_called()              # nothing to flip
+
+    def test_non_archivist_still_posts_comment(self):
+        handler, api = self._handler()
+        item = WorkItemEntity(
+            id="wi-eng", task_id="T-1", target_persona="engineer",
+            triggering_comment_id="c-1",
+            prompt_context={"persona_name": "engineer"},
+        )
+        outcome = DispatchOutcome(
+            success=True, output={"reply_text": "done"}, metadata={},
+        )
+        handler._finalize_success(item, outcome)
+        api.create_comment_with_props.assert_called_once()
 
 
 if __name__ == "__main__":

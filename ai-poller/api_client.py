@@ -191,6 +191,19 @@ class ApiClient:
         params = {"needs_ai_reply": "true"}
         return [CommentEntity(**c) for c in self._get("/api/internal/comments", params)]
 
+    def list_comments_needing_archival(self, limit: int = 20) -> list[CommentEntity]:
+        """Return comments the archivist has not yet reviewed (props
+        'archivist-reviewed' unset), oldest first, capped at `limit`.
+
+        Migration 010 marks all pre-existing comments reviewed, so only
+        comments created after the archivist was introduced surface here.
+        Internal endpoint only — the archivist sweep is the sole caller.
+        """
+        if not self._is_internal:
+            raise RuntimeError("list_comments_needing_archival requires INTERNAL_API_KEY")
+        params = {"needs_archival": "true", "limit": str(limit)}
+        return [CommentEntity(**c) for c in self._get("/api/internal/comments", params)]
+
     def approve_proposal(self, comment_id: str) -> CommentEntity:
         """Approve a PROPOSAL comment."""
         if self._is_internal:

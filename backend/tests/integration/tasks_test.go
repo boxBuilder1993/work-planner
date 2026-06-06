@@ -39,7 +39,7 @@ func seedUser(t *testing.T, email string) string {
 }
 
 func TestInternalRootTaskCreation(t *testing.T) {
-	owner := seedUser(t, "root-task-test@example.com")
+	owner := seedUser(t, seedUserEmail)
 
 	cleanup := func(id string) {
 		if id != "" {

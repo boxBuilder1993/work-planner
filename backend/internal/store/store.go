@@ -368,6 +368,29 @@ func (s *Store) ListCommentsNeedingAIReply(ctx context.Context) ([]model.Comment
 	`)
 }
 
+// ListCommentsNeedingArchival returns comments the archivist has not yet
+// reviewed (props `archivist-reviewed` unset), oldest first, capped at
+// `limit`.
+//
+// The archivist reviews every new comment — user input or AI reply — to keep
+// the knowledge base current, so this filters on nothing but the review flag.
+// Migration 010 marks all pre-existing comments reviewed, so only comments
+// created after the archivist was introduced surface here (no historical
+// backlog). The per-call `limit` is a second guard against bursts.
+//
+// The poller marks each returned comment reviewed at enqueue time (mirroring
+// the ai-comment-status flow), which is what removes it from this result on
+// the next sweep.
+func (s *Store) ListCommentsNeedingArchival(ctx context.Context, limit int) ([]model.Comment, error) {
+	return s.scanComments(ctx, `
+		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.props, c.created_at, c.updated_at
+		FROM comments c
+		WHERE (c.props->>'archivist-reviewed') IS NULL
+		ORDER BY c.created_at ASC
+		LIMIT $1
+	`, limit)
+}
+
 func (s *Store) UpdateProposalStatus(ctx context.Context, userID, commentID, status string, feedback *string, updatedAt int64) (*model.Comment, error) {
 	var c model.Comment
 	err := s.pool.QueryRow(ctx, `

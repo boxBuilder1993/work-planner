@@ -398,6 +398,27 @@ func (h *InternalHandler) ListCommentsNeedingAIReply(w http.ResponseWriter, r *h
 	writeJSON(w, http.StatusOK, comments)
 }
 
+// GET /api/internal/comments?needs_archival=true&limit=N
+// Returns comments the archivist has not yet reviewed (oldest first, capped).
+func (h *InternalHandler) ListCommentsNeedingArchival(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	comments, err := h.store.ListCommentsNeedingArchival(r.Context(), limit)
+	if err != nil {
+		log.Printf("ListCommentsNeedingArchival: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if comments == nil {
+		comments = []model.Comment{}
+	}
+	writeJSON(w, http.StatusOK, comments)
+}
+
 // POST /api/internal/comments/:id/approve
 func (h *InternalHandler) ApproveProposal(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
@@ -834,6 +855,11 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// to ListComments (per-task) and produces a malformed query.
 	case r.Method == http.MethodGet && path == "/api/internal/comments" && r.URL.Query().Get("needs_ai_reply") == "true":
 		h.ListCommentsNeedingAIReply(w, r)
+
+	// GET /api/internal/comments?needs_archival=true — must also precede the
+	// suffix-match for /comments (same reason as needs_ai_reply above).
+	case r.Method == http.MethodGet && path == "/api/internal/comments" && r.URL.Query().Get("needs_archival") == "true":
+		h.ListCommentsNeedingArchival(w, r)
 
 	// GET /api/internal/tasks/:id/children
 	case r.Method == http.MethodGet && strings.HasSuffix(path, "/children"):

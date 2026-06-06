@@ -56,6 +56,14 @@ class Config:
     # flip to True on Railway env to switch over. See docs/CHAT_DESIGN.md.
     enable_chat_handler: bool = False
 
+    # Archivist: a knowledge-base maintenance agent that reviews every new
+    # comment and decides whether the company knowledge cards need updating
+    # (create / update / nothing). Runs as part of the chat cycle. Off by
+    # default; requires enable_chat_handler too. `archivist_batch` caps how
+    # many comments it enqueues per cycle so the queue drains steadily.
+    enable_archivist: bool = False
+    archivist_batch: int = 10
+
     # Sub-configs
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
@@ -109,6 +117,8 @@ def load_config(env_path: str | None = None) -> Config:
         anthropic_api_key=_env("ANTHROPIC_API_KEY"),
         poll_interval_seconds=_int("POLL_INTERVAL_SECONDS", 60),
         enable_chat_handler=_bool("ENABLE_CHAT_HANDLER", False),
+        enable_archivist=_bool("ENABLE_ARCHIVIST", False),
+        archivist_batch=_int("ARCHIVIST_BATCH", 10),
         agent_limits=AgentLimits(
             max_global_agents=_int("MAX_GLOBAL_AGENTS", 20),
             max_orchestrators=_int("MAX_ORCHESTRATORS", 1),
