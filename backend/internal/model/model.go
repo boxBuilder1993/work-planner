@@ -160,6 +160,12 @@ type CreateTaskRequest struct {
 	Title       string   `json:"title"`
 	Description string   `json:"description,omitempty"`
 	ParentID    *string  `json:"parentId,omitempty"`
+	// OwnerID assigns the task's user for root (parent-less) creation via the
+	// internal API, which has no JWT to infer the owner from. Ignored when
+	// ParentID is set (owner is derived from the parent). When both ParentID
+	// and OwnerID are absent, the backend defaults to the sole user (single-
+	// user deployments).
+	OwnerID     string   `json:"ownerId,omitempty"`
 	Priority    *int     `json:"priority,omitempty"`
 	DueDate     *int64   `json:"dueDate,omitempty"`
 	PlannedTime *int64   `json:"plannedTime,omitempty"`

@@ -58,6 +58,32 @@ func do(t *testing.T, method, path string, body any) (int, []byte) {
 	return resp.StatusCode, data
 }
 
+// doNoAuth issues a request with no auth headers (for public endpoints like
+// /auth/local). Returns (status, raw body).
+func doNoAuth(t *testing.T, method, path string, body any) (int, []byte) {
+	t.Helper()
+	var rdr io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal body: %v", err)
+		}
+		rdr = bytes.NewReader(b)
+	}
+	req, err := http.NewRequest(method, baseURL()+path, rdr)
+	if err != nil {
+		t.Fatalf("new request %s %s: %v", method, path, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, data
+}
+
 // decodeJSON unmarshals a response body into T, failing the test on error.
 func decodeJSON[T any](t *testing.T, data []byte) T {
 	t.Helper()
