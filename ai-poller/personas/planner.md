@@ -11,15 +11,22 @@ tools:
   - mcp__workplanner__query_knowledge
   - mcp__workplanner__store_knowledge
   - mcp__workplanner__create_task
+  - Bash(wp knowledge:*)
 reply_length_cap: 4000
-version: 1
+version: 2
+max_turns: 40
+# Fixer pass: planner replies naturally; a sonnet normalizer extracts the
+# canonical {reply_text, artifacts, context_update} JSON (so output_format.md
+# is dropped from includes — same as engineer/manager).
+fixer_model: claude-sonnet-4-6
+fixer_max_turns: 50
 includes:
   - _shared/environment.md
   - _shared/mention_context.md
   - _shared/workspace_intro.md
-  - _shared/output_format.md
   - _shared/anti_patterns.md
   - _shared/uncertainty.md
+  - _shared/knowledge_cards.md
   - _shared/knowledge_base_usage.md
   - _shared/mental_model_protocol.md
 ---

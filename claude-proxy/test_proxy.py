@@ -166,6 +166,45 @@ class WorkplannerEnvTests(unittest.TestCase):
             proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY = orig_url, orig_key
 
 
+class ClaudeSubprocessEnvTests(unittest.TestCase):
+    """The `claude -p` process gets WP_BASE_URL / WP_INTERNAL_KEY so a persona
+    running `wp knowledge ...` via its shell tool authenticates without a
+    config file. Mapped from the proxy's own backend config; omitted when the
+    proxy wasn't given a backend URL/key (so wp falls back to its config)."""
+
+    def test_maps_backend_config_to_wp_env(self):
+        orig_url, orig_key = proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY
+        proxy.WORKPLANNER_API_URL = "https://backend.example"
+        proxy.INTERNAL_API_KEY = "secret-key"
+        try:
+            env = proxy._claude_subprocess_env()
+            self.assertEqual(env["WP_BASE_URL"], "https://backend.example")
+            self.assertEqual(env["WP_INTERNAL_KEY"], "secret-key")
+        finally:
+            proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY = orig_url, orig_key
+
+    def test_omits_wp_env_when_unset(self):
+        orig_url, orig_key = proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY
+        proxy.WORKPLANNER_API_URL = ""
+        proxy.INTERNAL_API_KEY = ""
+        try:
+            env = proxy._claude_subprocess_env()
+            self.assertNotIn("WP_BASE_URL", env)
+            self.assertNotIn("WP_INTERNAL_KEY", env)
+        finally:
+            proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY = orig_url, orig_key
+
+    def test_inherits_process_environment(self):
+        # It's os.environ + the WP_* additions, so existing vars survive.
+        import os
+        os.environ["_PHASE_C_PROBE"] = "yes"
+        try:
+            env = proxy._claude_subprocess_env()
+            self.assertEqual(env.get("_PHASE_C_PROBE"), "yes")
+        finally:
+            del os.environ["_PHASE_C_PROBE"]
+
+
 class StatusResponseTests(unittest.TestCase):
     def test_metadata_defaults_to_empty_dict(self):
         resp = proxy.StatusResponse(status="done")

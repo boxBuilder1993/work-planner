@@ -10,8 +10,10 @@ tools:
   - mcp__workplanner__search_tasks
   - mcp__workplanner__query_knowledge
   - mcp__workplanner__store_knowledge
+  - Bash(wp knowledge:*)
 reply_length_cap: 4000
-version: 3
+version: 4
+max_turns: 40
 # Fixer pass: manager's replies (verdicts, hand-offs, reviews) often arrive
 # wrapped in markdown ```json fences or with prose preceding the JSON envelope.
 # Strict-parse fails on those; the normalizer extracts the canonical
@@ -25,9 +27,9 @@ includes:
   - _shared/environment.md
   - _shared/mention_context.md
   - _shared/workspace_intro.md
-  - _shared/output_format.md
   - _shared/anti_patterns.md
   - _shared/uncertainty.md
+  - _shared/knowledge_cards.md
   - _shared/knowledge_base_usage.md
   - _shared/mental_model_protocol.md
 ---

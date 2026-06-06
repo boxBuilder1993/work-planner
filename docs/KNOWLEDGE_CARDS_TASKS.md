@@ -55,20 +55,44 @@ Interactive ~1-2 hr session with `wp knowledge add`. Not code.
   AI-orchestration model (personas / work-items / proxy / fixer).
 - [ ] **S2. Tag them well** (so injection + search land).
 
-## Phase C — Pre-dispatch injection
+## Phase C — Agentic knowledge pull  ✅ BUILT (C6 verify pending cards)
 
-Surface cards to personas. Build after cards exist.
+Personas search + read cards themselves via `wp knowledge` as a required
+due-diligence step. No injection, no MCP. Branch `feat/knowledge-due-diligence`.
 
-- [ ] **C1. Poller API-client method** (`ai-poller/api_client.py`):
-  `search_knowledge_cards(query, tags, limit)`.
-- [ ] **C2. Injection in the dispatch path** — fetch task-relevant cards
-  (tags + keyword from task title/description), render a `<knowledge>`
-  block, prepend to the persona context. Top-N by rank; log drops.
-- [ ] **C3. Shared persona fragment** — how to read injected cards (orient
-  with them; live code/systems are truth) + engineer can
-  `wp knowledge search` for more.
-- [ ] **C4. Tests** (selection/rendering).
-- [ ] **C5. Commit + push.**
+- [x] **C1. `wp` reachable in the dispatch environment** — proxy
+  `_claude_subprocess_env()` exports `WP_BASE_URL` / `WP_INTERNAL_KEY` (from
+  `WORKPLANNER_API_URL` / `INTERNAL_API_KEY`) into the `claude -p` subprocess.
+  `wp` install documented in the proxy README. Proxy tests (3) cover it.
+- [x] **C2. Shell path for every persona** — engineer + reviewer already have
+  `mcp__workplanner__run_command`; manager / planner / default got
+  `Bash(wp knowledge:*)` (the scopable grant — `run_command` is unrestricted).
+  persona test asserts every persona has run_command OR scoped Bash.
+  **⚠️ C6 must verify** the `Bash(wp knowledge:*)` pattern actually gates
+  under `--allowedTools` + `--dangerously-skip-permissions`. If it doesn't
+  scope, manager/planner/default get full Bash — decide then.
+- [x] **C3. Shared fragment** `_shared/knowledge_cards.md`, included in all
+  five personas: first-action mandate, cost framing, conflict rule, mention
+  cards used, cards-orient-but-verify. No verification/gate (trust the prompt).
+- [x] **C3b. Fixer on the rest** — planner / reviewer / default given
+  `fixer_model` (engineer + manager already had it); `output_format.md`
+  dropped from their includes. All five now reply naturally.
+- [x] **C4. `max_turns` → 40** for manager / planner / reviewer / default
+  (engineer stays 100). All persona `version`s bumped.
+- [x] **C5. Tests** — proxy `ClaudeSubprocessEnvTests` (3) + poller
+  `RealPersonaKnowledgeCardsTest` (4: fragment / fixer / shell-path /
+  max_turns). proxy 20/20, poller 95/95.
+- [ ] **C6. Manual verify** (after sit-down) — dispatch a real mention;
+  confirm the persona runs `wp knowledge search`, uses a card, and that the
+  scoped Bash genuinely restricts manager/planner/default.
+- [x] **C7. Branch + PR + CI green + merge.** *(PR open; merge after green)*
+
+### Phase C — optional fast-follow
+
+- [ ] **Card catalog injection** — poller injects `id` + `tags` + one-line
+  per card (lightweight, cacheable) so personas know what exists and can
+  pull the rest. Only if pure-pull recall proves weak. (A recall aid, not a
+  verification.)
 
 ## Future (not scheduled)
 
