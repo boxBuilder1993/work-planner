@@ -241,6 +241,23 @@ def work_item_detail(w: dict) -> None:
 
 
 def knowledge_card_table(cards: Iterable[dict], title: str | None = None) -> None:
+    cards = list(cards)
+    # When the output is piped (an AI persona running `wp knowledge search`
+    # via its shell, or any non-interactive caller), render FULL card content
+    # — a truncated table would hide the answer and force a second `show`
+    # call. Interactive terminals get the compact table.
+    if not console.is_terminal:
+        if not cards:
+            print("(no matching cards)")
+            return
+        for c in cards:
+            tags = " ".join(c.get("tags") or [])
+            flag = "" if c.get("isValid", True) else " [INVALID]"
+            print(f"# {c['id']}{flag}  [tags: {tags}]")
+            print(c.get("content") or "")
+            print()
+        return
+
     table = Table(title=title, show_lines=False, header_style="bold")
     table.add_column("ID", style="dim", no_wrap=True)
     table.add_column("Valid", no_wrap=True)

@@ -11,6 +11,12 @@ You read them with the `wp knowledge` CLI, run through your shell tool
     wp knowledge show <card-id>                         # read one in full
     wp knowledge list --tag <area>                      # browse by tag
 
+When you run these in a script/non-interactive shell (which you are),
+`search` and `list` print the **full content** of each matching card — not a
+truncated preview — so a single `search` gives you everything. **Read the
+returned content carefully**; the answer is in the card body, not just the
+title. Use `show <id>` if you want to re-read one specific card.
+
 ## Required: search first
 
 Your **first action** on any substantive task is to search the knowledge
