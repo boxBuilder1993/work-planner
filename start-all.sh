@@ -11,6 +11,11 @@
 #   ./start-all.sh             # start everything (default)
 #   ./start-all.sh --no-build  # skip the docker rebuild
 #   ./start-all.sh --logs      # tail compose logs after starting
+#   ./start-all.sh --env-only  # just bootstrap .env (if missing) and exit
+#
+# On first run with no .env, this bootstraps one from .env.example with freshly
+# generated JWT_SECRET + INTERNAL_API_KEY — so a fresh checkout (dev or a
+# company laptop) needs nothing but Docker + uv.
 #
 # Stop with:
 #   docker compose down        # stop the stack (keeps data)
@@ -27,23 +32,46 @@ PROXY_PID_FILE="$REPO_ROOT/.claude-proxy.pid"
 
 BUILD_FLAG="--build"
 TAIL_LOGS=0
+ENV_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --no-build) BUILD_FLAG="" ;;
     --logs)     TAIL_LOGS=1 ;;
+    --env-only) ENV_ONLY=1 ;;
     *)
       echo "unknown arg: $arg"; exit 2 ;;
   esac
 done
 
-# ── Pre-flight ────────────────────────────────────────────────────────────
+# ── .env bootstrap ─────────────────────────────────────────────────────────
+# Create .env on first run so a fresh checkout is one command. Never touches an
+# existing .env — your secrets are preserved.
 
 if [ ! -f .env ]; then
-  echo "❌ .env missing. Copy from .env.example and set JWT_SECRET + INTERNAL_API_KEY:"
-  echo "     cp .env.example .env"
-  echo "     openssl rand -hex 32  # use for JWT_SECRET and INTERNAL_API_KEY"
-  exit 1
+  if [ ! -f .env.example ]; then
+    echo "❌ neither .env nor .env.example present; cannot bootstrap."
+    exit 1
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "❌ openssl not found — needed to generate secrets. Install it and retry."
+    exit 1
+  fi
+  echo "→ no .env found — creating one from .env.example with generated secrets …"
+  cp .env.example .env
+  jwt_value="$(openssl rand -hex 32)"
+  int_value="$(openssl rand -hex 32)"
+  # hex values are regex-safe (no /), so plain s/// is fine.
+  perl -pi -e "s/^JWT_SECRET=.*/JWT_SECRET=${jwt_value}/; s/^INTERNAL_API_KEY=.*/INTERNAL_API_KEY=${int_value}/" .env
+  echo "✓ .env created with random JWT_SECRET + INTERNAL_API_KEY."
+else
+  [ "$ENV_ONLY" -eq 1 ] && echo "✓ .env already present — leaving it alone."
 fi
+
+if [ "$ENV_ONLY" -eq 1 ]; then
+  exit 0
+fi
+
+# ── Pre-flight ────────────────────────────────────────────────────────────
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "❌ uv not found. Install: brew install uv"

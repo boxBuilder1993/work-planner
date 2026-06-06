@@ -1,8 +1,9 @@
-.PHONY: ai-ollama ai-claude dev-backend dev dev-stack dev-stack-down dev-stack-logs dev-proxy help test test-backend test-poller test-proxy test-web test-mobile test-app test-cli install-cli test-e2e-up test-e2e-down test-integration test-e2e
+.PHONY: ai-ollama ai-claude dev-backend dev dev-stack dev-stack-down dev-stack-logs dev-proxy env help test test-backend test-poller test-proxy test-web test-mobile test-app test-cli install-cli test-e2e-up test-e2e-down test-integration test-e2e
 
 help:
 	@echo "Local dev (Docker Compose + claude-proxy on Mac):"
-	@echo "  make dev              - Start everything (proxy on Mac + Docker stack). Idempotent."
+	@echo "  make dev              - Bring up the whole stack (auto-creates .env, proxy on Mac + Docker stack). Idempotent."
+	@echo "  make env              - Just create .env from .env.example with generated secrets (if missing)."
 	@echo "  make dev-proxy        - Start ONLY claude-proxy on Mac (port 8400)."
 	@echo "  make dev-stack        - Start ONLY the Docker stack (postgres + chromadb + backend + ai-poller + web)"
 	@echo "  make dev-stack-down   - Stop the Docker stack (keeps data; doesn't touch the proxy)"
@@ -67,10 +68,17 @@ dev-backend:
 # Set ENABLE_CHAT_HANDLER=true on ai-poller and forward WORKPLANNER_WORKSPACE_BASE
 # to the host home dir so claude-proxy can mkdir there.
 
-# One-shot: starts the proxy (if not already on :8400) and the Docker stack.
-# Both are idempotent.
+# One-shot: bootstraps .env if missing, then starts the proxy (if not already
+# on :8400) and the Docker stack. Everything is idempotent. THIS is the single
+# "bring up the whole local e2e stack" command.
 dev:
 	./start-all.sh
+
+# Create the root .env (idempotent) from .env.example with freshly generated
+# JWT_SECRET + INTERNAL_API_KEY. Never overwrites an existing .env. `make dev`
+# does this automatically; use this to bootstrap env without starting anything.
+env:
+	./start-all.sh --env-only
 
 # Foreground proxy (separate terminal). Use this if you want the proxy logs
 # in your terminal; otherwise `make dev` handles startup in the background.
@@ -80,7 +88,7 @@ dev-proxy:
 
 # Then in this terminal:
 dev-stack:
-	@test -f .env || (echo "Missing .env — copy from .env.example and edit. JWT_SECRET + INTERNAL_API_KEY required."; exit 1)
+	@./start-all.sh --env-only
 	docker compose up --build
 
 dev-stack-down:
