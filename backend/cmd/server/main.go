@@ -143,6 +143,12 @@ func main() {
 	internalMux.HandleFunc("/api/internal/work-items", func(w http.ResponseWriter, r *http.Request) {
 		internalHandler.ServeHTTP(w, r)
 	})
+	internalMux.HandleFunc("/api/internal/knowledge-cards/", func(w http.ResponseWriter, r *http.Request) {
+		internalHandler.ServeHTTP(w, r)
+	})
+	internalMux.HandleFunc("/api/internal/knowledge-cards", func(w http.ResponseWriter, r *http.Request) {
+		internalHandler.ServeHTTP(w, r)
+	})
 
 	// Apply auth middleware to protected routes.
 	authMw := middleware.AuthMiddleware(a, internalAPIKey)

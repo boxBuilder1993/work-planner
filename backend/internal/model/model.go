@@ -95,6 +95,31 @@ type RecordWorkItemAttemptRequest struct {
 	StopReason string  `json:"stopReason,omitempty"`
 }
 
+// KnowledgeCard is a chunk of company knowledge — freeform text + tags,
+// searchable by full-text or tag. See docs/KNOWLEDGE_CARDS_DESIGN.md.
+type KnowledgeCard struct {
+	ID        string   `json:"id"`
+	Content   string   `json:"content"`
+	Tags      []string `json:"tags"`
+	IsValid   bool     `json:"isValid"`
+	CreatedAt int64    `json:"createdAt"`
+	UpdatedAt int64    `json:"updatedAt"`
+}
+
+type CreateKnowledgeCardRequest struct {
+	ID      string   `json:"id"`
+	Content string   `json:"content"`
+	Tags    []string `json:"tags,omitempty"`
+}
+
+// UpdateKnowledgeCardRequest is a partial update. A nil field is left
+// unchanged; a non-nil field (incl. an empty Tags slice) is applied.
+type UpdateKnowledgeCardRequest struct {
+	Content *string  `json:"content,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+	IsValid *bool    `json:"isValid,omitempty"`
+}
+
 type RepeatingTask struct {
 	ID              string          `json:"id"`
 	TaskID          string          `json:"taskId"`

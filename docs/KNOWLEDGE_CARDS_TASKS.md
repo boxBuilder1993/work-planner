@@ -4,97 +4,73 @@ Phased implementation of [KNOWLEDGE_CARDS_DESIGN.md](KNOWLEDGE_CARDS_DESIGN.md).
 Build order: storage backend → CLI (authoring) → sit-down population →
 persona consumption.
 
-Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
+Status: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ---
 
-## Phase A — Backend storage + retrieval
+## Phase A — Backend storage + retrieval  ✅ DONE
 
-The `knowledge_cards` table, CRUD, and Postgres FTS. No ChromaDB.
+Minimal `knowledge_cards` table, CRUD, Postgres FTS. No ChromaDB.
 
-- [ ] **A1. Migration `008_knowledge_cards`** (up + down)
-  - Table per the design schema (slug PK, lifecycle CHECKs, arrays).
-  - Indexes: `(type,status)`, `(authority,status)`, GIN on `tags`, GIN on
-    the `to_tsvector('english', title||question||answer||body)` expression.
-- [ ] **A2. `model.KnowledgeCard`** + request types
-  - `KnowledgeCard` struct (camelJSON tags).
-  - `CreateKnowledgeCardRequest`, `UpdateKnowledgeCardRequest`.
-- [ ] **A3. Store methods** (`store.go`)
-  - `CreateKnowledgeCard` (reject duplicate slug with clear error).
-  - `GetKnowledgeCard(id)`.
-  - `ListKnowledgeCards(type, status, authority, tags)`.
-  - `SearchKnowledgeCards(q, type, tags, authority, includeSuperseded)` —
-    `plainto_tsquery` + `ts_rank`, default excludes superseded/archived,
-    authority-weighted ordering (canonical > reviewed > candidate).
-  - `UpdateKnowledgeCard` (partial; supports status/authority transitions,
-    supersedes/superseded_by linking, field edits).
-- [ ] **A4. Handlers + routes** (`internal.go`)
-  - Create / List / Get / Search / Update handlers.
-  - Route cases (search before `/:id`, like the work-items ordering).
-- [ ] **A5. Register routes** (`main.go`)
-  - `/api/internal/knowledge-cards` and `/api/internal/knowledge-cards/`.
-- [ ] **A6. Smoke test** via curl against localdev: create → list → get →
-  search (keyword hit + miss) → supersede → verify excluded from default
-  search.
-- [ ] **A7. Commit + push.**
+- [x] **A1. Migration `008_knowledge_cards`** (up + down)
+- [x] **A2. `model.KnowledgeCard`** + create/update request types
+- [x] **A3. Store methods** — Create/Get/List/Search/Update/Delete +
+  scanKnowledgeCards. FTS via `plainto_tsquery` + `ts_rank`; invalid
+  excluded by default.
+- [x] **A4. Handlers + routes** (`internal.go`) — slug validation, 409 on
+  dup, search before `/:id`.
+- [x] **A5. Register routes** (`main.go`).
+- [x] **A6. Smoke test** — all paths verified: create/dup-409/bad-slug-400,
+  list, search (keyword/multiword/tag/miss), validity exclude+include,
+  delete. ✅
+- [x] **A7. Commit + push.**
 
 ## Phase B — `wp knowledge` CLI
 
 Authoring surface for the sit-down + engineer's active query via shell.
 
-- [ ] **B1. API client methods** (`cli/.../api.py`)
-  - `create_knowledge_card`, `get_knowledge_card`, `list_knowledge_cards`,
-    `search_knowledge_cards`, `update_knowledge_card`.
-- [ ] **B2. Render helpers** (`cli/.../render.py`)
-  - `knowledge_card_table`, `knowledge_card_detail` (frontmatter + answer +
-    body + lifecycle + related).
-- [ ] **B3. CLI commands** (`cli/.../cli.py`) — `wp knowledge` group:
-  - `add` — interactive prompts (id/type/title/question/answer/body/tags),
-    or flags for scripted use. Defaults authority=candidate unless
-    `--canonical`.
-  - `list [--type --status --authority --tag]`
+- [ ] **B1. API client methods** (`cli/.../api.py`): create/get/list/search/
+  update/delete knowledge cards.
+- [ ] **B2. Render helpers** (`cli/.../render.py`): card table + detail.
+- [ ] **B3. `wp knowledge` command group** (`cli/.../cli.py`):
+  - `add <id> [-c content | stdin | @file] [--tag ...]`
+  - `list [--tag ...] [--all]`
   - `show <id>`
-  - `search <query> [--type --tag]`
-  - `edit <id> [--field ...]`
-  - `promote <id>` — authority → canonical.
-  - `supersede <old-id> <new-id>` — link + flip old to superseded.
-- [ ] **B4. README** — command table + the card-authoring workflow.
-- [ ] **B5. Smoke test**: `wp knowledge add` a real card, list/show/search it.
+  - `search "<phrase>" [--tag ...] [--all]`
+  - `edit <id> [-c content | --tag ... | --valid/--invalid]`
+  - `rm <id>`
+- [ ] **B4. README** — command table + authoring workflow.
+- [ ] **B5. Smoke test** against prod: add a real card, list/show/search.
 - [ ] **B6. Commit + push.**
 
 ## Sit-down — populate the corpus
 
-Not code. ~1-2 hour interactive session using `wp knowledge add`.
+Interactive ~1-2 hr session with `wp knowledge add`. Not code.
 
-- [ ] **S1. Seed the highest-value cards**: tech stack, repo layout, commit/
-  branch conventions, the WorkPlanner architecture, the meal-planner domain
-  rules, the AI-orchestration model (personas/work-items/proxy).
-- [ ] **S2. Tag + set authority=canonical** on the verified ones.
+- [ ] **S1. Seed high-value cards**: tech stack, repo layout, commit/branch
+  conventions, WorkPlanner architecture, meal-planner domain rules, the
+  AI-orchestration model (personas / work-items / proxy / fixer).
+- [ ] **S2. Tag them well** (so injection + search land).
 
 ## Phase C — Pre-dispatch injection
 
-Surface cards to personas. Build after cards exist (post sit-down).
+Surface cards to personas. Build after cards exist.
 
-- [ ] **C1. Poller API-client method** (`ai-poller/api_client.py`)
-  - `search_knowledge_cards(query, tags, type, limit)`.
-- [ ] **C2. Injection in the dispatch path**
-  - In prompt-building (chat_prompt / chat_handler): fetch task-relevant
-    cards (by tags/keyword from task title+description), render an injected
-    `<knowledge>` block, prepend to the persona context. Order stable-first
-    for cache-friendliness.
-  - Cap the injected set (token budget) — top-N by rank; log what was
-    dropped.
-- [ ] **C3. Persona prompt note** — a shared fragment telling personas how to
-  read injected cards (canonical = trusted, candidate = verify; cards
-  orient, live code/systems are truth) and that engineer can
+- [ ] **C1. Poller API-client method** (`ai-poller/api_client.py`):
+  `search_knowledge_cards(query, tags, limit)`.
+- [ ] **C2. Injection in the dispatch path** — fetch task-relevant cards
+  (tags + keyword from task title/description), render a `<knowledge>`
+  block, prepend to the persona context. Top-N by rank; log drops.
+- [ ] **C3. Shared persona fragment** — how to read injected cards (orient
+  with them; live code/systems are truth) + engineer can
   `wp knowledge search` for more.
-- [ ] **C4. Tests** (poller-side rendering/selection logic).
+- [ ] **C4. Tests** (selection/rendering).
 - [ ] **C5. Commit + push.**
 
 ## Future (not scheduled)
 
-- [ ] Code-mining extraction flow (AI drafts `system`/`convention`
-  candidates from repos).
-- [ ] `pgvector` semantic retrieval — when corpus outgrows cached context.
-- [ ] Auto repo-map generation for engineer orientation.
-- [ ] Staleness sweep (`last_verified` aging → flag for re-verification).
+- [ ] User-facing JWT read endpoints + web UI search.
+- [ ] Manager-write (needs shell or infosec-reviewed tool).
+- [ ] Code-mining extraction flow (AI drafts candidate cards from repos).
+- [ ] `pgvector` semantic retrieval — if corpus outgrows FTS + context.
+- [ ] Card structure (types / lifecycle) — only if a real need forces it.

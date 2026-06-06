@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -647,6 +649,151 @@ func (h *InternalHandler) RecordWorkItemAttempt(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, wi)
 }
 
+// ─── Knowledge Cards ──────────────────────────────────────────────────────
+// See docs/KNOWLEDGE_CARDS_DESIGN.md.
+
+var validCardSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,63}$`)
+
+// POST /api/internal/knowledge-cards
+func (h *InternalHandler) CreateKnowledgeCard(w http.ResponseWriter, r *http.Request) {
+	var req model.CreateKnowledgeCardRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if !validCardSlug.MatchString(req.ID) {
+		writeError(w, http.StatusBadRequest, "id must be a slug: lowercase letters, digits, hyphens (2-64 chars)")
+		return
+	}
+	if strings.TrimSpace(req.Content) == "" {
+		writeError(w, http.StatusBadRequest, "content is required")
+		return
+	}
+
+	now := time.Now().UnixMilli()
+	tags := req.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	card := &model.KnowledgeCard{
+		ID:        req.ID,
+		Content:   req.Content,
+		Tags:      tags,
+		IsValid:   true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := h.store.CreateKnowledgeCard(r.Context(), card); err != nil {
+		// Duplicate slug → 409.
+		if strings.Contains(err.Error(), "23505") || strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+			writeError(w, http.StatusConflict, "a card with that id already exists")
+			return
+		}
+		log.Printf("CreateKnowledgeCard: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to create card")
+		return
+	}
+	writeJSON(w, http.StatusCreated, card)
+}
+
+// GET /api/internal/knowledge-cards?tag=&includeInvalid=
+func (h *InternalHandler) ListKnowledgeCards(w http.ResponseWriter, r *http.Request) {
+	var tagPtr *string
+	if t := r.URL.Query().Get("tag"); t != "" {
+		tagPtr = &t
+	}
+	includeInvalid := r.URL.Query().Get("includeInvalid") == "true"
+
+	cards, err := h.store.ListKnowledgeCards(r.Context(), tagPtr, includeInvalid)
+	if err != nil {
+		log.Printf("ListKnowledgeCards: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if cards == nil {
+		cards = []model.KnowledgeCard{}
+	}
+	writeJSON(w, http.StatusOK, cards)
+}
+
+// GET /api/internal/knowledge-cards/search?q=&tag=&includeInvalid=&limit=
+func (h *InternalHandler) SearchKnowledgeCards(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	var tagPtr *string
+	if t := r.URL.Query().Get("tag"); t != "" {
+		tagPtr = &t
+	}
+	includeInvalid := r.URL.Query().Get("includeInvalid") == "true"
+	limit := 10
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	cards, err := h.store.SearchKnowledgeCards(r.Context(), q, tagPtr, includeInvalid, limit)
+	if err != nil {
+		log.Printf("SearchKnowledgeCards: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if cards == nil {
+		cards = []model.KnowledgeCard{}
+	}
+	writeJSON(w, http.StatusOK, cards)
+}
+
+// GET /api/internal/knowledge-cards/{id}
+func (h *InternalHandler) GetKnowledgeCard(w http.ResponseWriter, r *http.Request) {
+	id := extractPathParam(r.URL.Path, 3)
+	card, err := h.store.GetKnowledgeCard(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if card == nil {
+		writeError(w, http.StatusNotFound, "card not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, card)
+}
+
+// PATCH /api/internal/knowledge-cards/{id}
+func (h *InternalHandler) UpdateKnowledgeCard(w http.ResponseWriter, r *http.Request) {
+	id := extractPathParam(r.URL.Path, 3)
+	var req model.UpdateKnowledgeCardRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	card, err := h.store.UpdateKnowledgeCard(r.Context(), id, &req, time.Now().UnixMilli())
+	if err != nil {
+		log.Printf("UpdateKnowledgeCard(%s): %v", id, err)
+		writeError(w, http.StatusInternalServerError, "failed to update card")
+		return
+	}
+	if card == nil {
+		writeError(w, http.StatusNotFound, "card not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, card)
+}
+
+// DELETE /api/internal/knowledge-cards/{id}
+func (h *InternalHandler) DeleteKnowledgeCard(w http.ResponseWriter, r *http.Request) {
+	id := extractPathParam(r.URL.Path, 3)
+	err := h.store.DeleteKnowledgeCard(r.Context(), id)
+	if err == pgx.ErrNoRows {
+		writeError(w, http.StatusNotFound, "card not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete card")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id})
+}
+
 // ServeHTTP routes /api/internal/ requests.
 func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
@@ -737,6 +884,33 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// PATCH /api/internal/work-items/:id
 	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/work-items/") && strings.Count(path, "/") == 4:
 		h.UpdateWorkItem(w, r)
+
+	// ── Knowledge Cards ──────────────────────────────────────────────
+	// /search must be checked before /:id.
+
+	// POST /api/internal/knowledge-cards
+	case r.Method == http.MethodPost && path == "/api/internal/knowledge-cards":
+		h.CreateKnowledgeCard(w, r)
+
+	// GET /api/internal/knowledge-cards/search
+	case r.Method == http.MethodGet && path == "/api/internal/knowledge-cards/search":
+		h.SearchKnowledgeCards(w, r)
+
+	// GET /api/internal/knowledge-cards
+	case r.Method == http.MethodGet && path == "/api/internal/knowledge-cards":
+		h.ListKnowledgeCards(w, r)
+
+	// GET /api/internal/knowledge-cards/:id
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/internal/knowledge-cards/") && strings.Count(path, "/") == 4:
+		h.GetKnowledgeCard(w, r)
+
+	// PATCH /api/internal/knowledge-cards/:id
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/knowledge-cards/") && strings.Count(path, "/") == 4:
+		h.UpdateKnowledgeCard(w, r)
+
+	// DELETE /api/internal/knowledge-cards/:id
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/knowledge-cards/") && strings.Count(path, "/") == 4:
+		h.DeleteKnowledgeCard(w, r)
 
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")

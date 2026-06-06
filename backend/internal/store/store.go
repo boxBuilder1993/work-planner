@@ -889,6 +889,127 @@ func (s *Store) scanWorkItems(ctx context.Context, query string, args ...any) ([
 	return items, rows.Err()
 }
 
+// ─── Knowledge Cards ──────────────────────────────────────────────────────
+
+// CreateKnowledgeCard inserts a card. Returns a clear error if the slug id
+// already exists (the handler maps it to 409).
+func (s *Store) CreateKnowledgeCard(ctx context.Context, c *model.KnowledgeCard) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO knowledge_cards (id, content, tags, is_valid, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, c.ID, c.Content, c.Tags, c.IsValid, c.CreatedAt, c.UpdatedAt)
+	return err
+}
+
+func (s *Store) GetKnowledgeCard(ctx context.Context, id string) (*model.KnowledgeCard, error) {
+	var c model.KnowledgeCard
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, content, tags, is_valid, created_at, updated_at
+		FROM knowledge_cards WHERE id = $1
+	`, id).Scan(&c.ID, &c.Content, &c.Tags, &c.IsValid, &c.CreatedAt, &c.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &c, err
+}
+
+// ListKnowledgeCards returns cards, optionally filtered by tag. Invalid cards
+// are excluded unless includeInvalid is true.
+func (s *Store) ListKnowledgeCards(ctx context.Context, tag *string, includeInvalid bool) ([]model.KnowledgeCard, error) {
+	return s.scanKnowledgeCards(ctx, `
+		SELECT id, content, tags, is_valid, created_at, updated_at
+		FROM knowledge_cards
+		WHERE ($1::text IS NULL OR $1 = ANY(tags))
+		  AND (is_valid OR $2)
+		ORDER BY updated_at DESC
+	`, tag, includeInvalid)
+}
+
+// SearchKnowledgeCards runs full-text search over content (when q is
+// non-empty), optionally filtered by tag, ranked by relevance. Invalid cards
+// excluded unless includeInvalid. An empty q with a tag is a tag-only listing.
+func (s *Store) SearchKnowledgeCards(ctx context.Context, q string, tag *string, includeInvalid bool, limit int) ([]model.KnowledgeCard, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	return s.scanKnowledgeCards(ctx, `
+		SELECT id, content, tags, is_valid, created_at, updated_at
+		FROM knowledge_cards
+		WHERE ($1 = '' OR to_tsvector('english', coalesce(content,'')) @@ plainto_tsquery('english', $1))
+		  AND ($2::text IS NULL OR $2 = ANY(tags))
+		  AND (is_valid OR $3)
+		ORDER BY
+			CASE WHEN $1 = '' THEN 0
+			     ELSE ts_rank(to_tsvector('english', coalesce(content,'')), plainto_tsquery('english', $1))
+			END DESC,
+			updated_at DESC
+		LIMIT $4
+	`, q, tag, includeInvalid, limit)
+}
+
+// UpdateKnowledgeCard applies a partial update. nil fields are left unchanged.
+// Returns (nil, nil) on not-found.
+func (s *Store) UpdateKnowledgeCard(ctx context.Context, id string, req *model.UpdateKnowledgeCardRequest, updatedAt int64) (*model.KnowledgeCard, error) {
+	setClauses := []string{"updated_at = @updated_at"}
+	args := pgx.NamedArgs{"id": id, "updated_at": updatedAt}
+
+	if req.Content != nil {
+		setClauses = append(setClauses, "content = @content")
+		args["content"] = *req.Content
+	}
+	if req.Tags != nil {
+		setClauses = append(setClauses, "tags = @tags")
+		args["tags"] = req.Tags
+	}
+	if req.IsValid != nil {
+		setClauses = append(setClauses, "is_valid = @is_valid")
+		args["is_valid"] = *req.IsValid
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE knowledge_cards SET %s WHERE id = @id
+		RETURNING id, content, tags, is_valid, created_at, updated_at
+	`, joinStrings(setClauses, ", "))
+
+	var c model.KnowledgeCard
+	err := s.pool.QueryRow(ctx, query, args).Scan(
+		&c.ID, &c.Content, &c.Tags, &c.IsValid, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &c, err
+}
+
+func (s *Store) DeleteKnowledgeCard(ctx context.Context, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM knowledge_cards WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) scanKnowledgeCards(ctx context.Context, query string, args ...any) ([]model.KnowledgeCard, error) {
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cards []model.KnowledgeCard
+	for rows.Next() {
+		var c model.KnowledgeCard
+		if err := rows.Scan(&c.ID, &c.Content, &c.Tags, &c.IsValid, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, err
+		}
+		cards = append(cards, c)
+	}
+	return cards, rows.Err()
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func joinStrings(s []string, sep string) string {

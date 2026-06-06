@@ -1,159 +1,127 @@
 # Knowledge Cards
 
-A curated, retrievable company knowledge base for the AI personas. Each
-**card** answers one question an agent will actually ask. Cards are the
-unit of company context — authored by humans (and AI-assisted extraction),
-stored durably, and surfaced to personas at dispatch time.
+A simple, searchable company knowledge base for the AI personas (and for
+humans). A **card** is a chunk of freeform text with tags. Personas read
+cards to ground their work; humans author and curate them.
 
-This doc is the design. The phased work-list lives in
-[KNOWLEDGE_CARDS_TASKS.md](KNOWLEDGE_CARDS_TASKS.md).
+Work-list: [KNOWLEDGE_CARDS_TASKS.md](KNOWLEDGE_CARDS_TASKS.md).
 
-## Why cards, not a wiki / vector dump
+## Scope — deliberately minimal
 
-Retrieval is question-driven. An agent doesn't browse — it asks "how does
-our auth work?" and needs a self-contained answer back. So the unit of
-knowledge is **"an answer to a question someone will ask,"** not "a
-document about a topic." That single reframe fixes the format: small,
-atomic, front-loaded, one concept each.
+Started with an elaborate schema (types, authority lifecycle, supersession,
+answer/body split) and cut it back to the essentials. A card is just:
+
+- `id` — a short human slug (`auth-jwt-flow`), so cards can reference each
+  other inline and humans can address them.
+- `content` — freeform text. Any references (to other cards, URLs, files)
+  live *inside* the text; we don't model them as structured fields.
+- `tags` — for filtering.
+- `is_valid` — a boolean so a human can retire a card without deleting it.
+  Invalid cards are excluded from search by default.
+
+That's it. No type enum, no authority states, no supersession chains, no
+versioning. Add structure later only if a real need forces it.
 
 ## What we are NOT building (and why)
 
 - **No vector store / ChromaDB for v1.** The corpus is bounded and
-  hand-authored (dozens→low-hundreds of cards). It fits in context. For
-  bounded corpora, Postgres full-text search + tag filtering + cached
-  context injection beats a vector pipeline on fidelity *and* complexity.
-  Add `pgvector` only if/when the corpus outgrows a cached context budget.
-- **No new MCP tool.** Office infosec gates new MCP tools. Personas consume
-  knowledge via (1) pre-dispatch injection by the poller over plain HTTP,
-  and (2) the existing shell capability calling `wp knowledge search`.
-  Neither adds a reviewable tool surface.
-- **No raw-code caching.** Code is volatile (agents edit it live) and large.
-  Agents navigate code on demand (grep/read) — always current, strictly
-  better than a stale index. We cache *understanding* of the code
-  (`system` + `convention` cards), not the code itself.
+  hand-authored. Postgres full-text search + tag filtering covers it. Add
+  `pgvector` only if the corpus ever outgrows that.
+- **No new MCP tool.** Office infosec gates new MCP tools. Personas read
+  cards via (1) pre-dispatch injection by the poller over plain HTTP, and
+  (2) the existing shell capability calling `wp knowledge search`. Neither
+  adds a reviewable tool surface.
+- **No raw-code caching.** Agents navigate code live (grep/read) — always
+  current. Cards capture *understanding*, not the code itself.
 
-## The card
+## Data model
 
-Source of truth is a Postgres row. Authored/edited as the logical
-equivalent of this markdown shape:
-
-```markdown
----
-id: auth-jwt-flow                    # stable slug; used for cross-linking
-type: system                         # system|decision|runbook|convention|glossary|postmortem
-title: How JWT authentication works
-question: How does our auth / login / token validation work?
-tags: [auth, jwt, security, backend]
-applies_to: [backend, api]
-authority: canonical                 # candidate|reviewed|canonical
-status: active                       # active|superseded|stale|archived
-last_verified: 2026-06-03
-related: [auth-decision-jwt-over-sessions]
----
-
-**Answer (read this first).** Auth is JWT-based. Tokens issue on login at
-`/api/auth/google`, carry 30-day expiry, validated in `middleware/auth.go`
-on every protected route. No server-side sessions.
-
-## Details
-...
+```sql
+CREATE TABLE knowledge_cards (
+    id          TEXT PRIMARY KEY,        -- short slug: "auth-jwt-flow"
+    content     TEXT NOT NULL,           -- freeform text; references inline
+    tags        TEXT[] NOT NULL DEFAULT '{}',
+    is_valid    BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at  BIGINT NOT NULL,
+    updated_at  BIGINT NOT NULL
+);
+CREATE INDEX knowledge_cards_tags_idx  ON knowledge_cards USING GIN (tags);
+CREATE INDEX knowledge_cards_fts_idx   ON knowledge_cards
+    USING GIN (to_tsvector('english', coalesce(content,'')));
+CREATE INDEX knowledge_cards_valid_idx ON knowledge_cards (is_valid);
 ```
 
-### Card types (defined by the question shape)
+- `id` is an author-provided slug (PK). Renaming breaks inline references —
+  rare, deliberate.
+- Full-text search is over `content` (the only text field). `ts_rank` for
+  relevance ordering.
+- `is_valid` default true; search filters `is_valid = true` unless the
+  caller opts into invalid (human curation).
 
-| Question shape | type | Example |
-| --- | --- | --- |
-| "How does X work?" | `system` | How does the dispatch pipeline flow? |
-| "Why did we decide X?" | `decision` | Why JWT over sessions? |
-| "How do I do X?" | `runbook` | How to deploy a hotfix |
-| "What's our convention for X?" | `convention` | Commit message format |
-| "What does X mean?" | `glossary` | What is a "work item" |
-| "What broke and why?" | `postmortem` | The 901-task duplication incident |
+## API (internal-key auth)
 
-### Fields doing the heavy lifting
+```
+POST   /api/internal/knowledge-cards            create {id, content, tags}
+GET    /api/internal/knowledge-cards            list   (?tag=, ?includeInvalid=)
+GET    /api/internal/knowledge-cards/search     ?q=<phrase>&tag=<t>&includeInvalid=
+GET    /api/internal/knowledge-cards/:id        get one
+PATCH  /api/internal/knowledge-cards/:id        edit (content, tags, isValid)
+DELETE /api/internal/knowledge-cards/:id        delete
+```
 
-- **`question`** — embedded into FTS alongside the answer. A query like
-  "how do I log in" matches a card whose body never says "log in." Forces
-  the author to know what they're answering; no question → no card.
-- **`answer`** — front-loaded TL;DR, self-contained. The chunk most likely
-  surfaced; must stand alone.
-- **`authority`** defaults to `candidate` — agent-written cards and first
-  drafts are provisional until a human promotes them to `canonical`. This
-  is the pollution firewall: agents read canonical as trusted, candidates
-  as "verify before relying."
-- **`status` + `supersedes`/`superseded_by`** — lifecycle. Retrieval
-  excludes `superseded`/`archived` by default. A new decision marks the old
-  one superseded rather than deleting it (audit trail).
-- **`last_verified`** — staleness signal. Cards describe the world as of
-  this date; personas are told to verify specifics against live code/systems
-  when correctness matters.
-
-## Storage
-
-- **Source of truth: `knowledge_cards` table (Postgres).** Rows are
-  editable, listable, transactional, durable. Mirrors the WorkItems pattern.
-- **Retrieval: Postgres full-text search** over `title || question ||
-  answer || body`, plus tag/type/authority/status filtering. GIN indexes on
-  the tsvector expression and on `tags`.
-- **Slug `id`** (not UUID) — human-readable, good for `related` cross-links
-  and for referencing during authoring.
-
-## Trust division (cards vs ground truth)
-
-- **Cards = the mental model.** Fast orientation, possibly slightly stale.
-- **Live code / systems = ground truth.** When correctness matters, the
-  agent verifies against the real thing.
-
-Personas are told explicitly: *"system cards describe the code as of their
-`last_verified` date — orient with them, but the actual code is truth;
-verify specifics against it."* Stops stale cards from causing
-confident-but-wrong work.
+- **`search`** runs FTS over `content` (ranked) and/or filters by `tag`;
+  either or both. Excludes invalid by default. `limit` param (default 10).
+- All internal-key. The `wp` CLI (which holds your internal key) is the
+  human + engineer search surface for v1.
+- A **user-facing JWT read mirror** (`GET /api/knowledge-cards`,
+  `/search`, `/:id`) is a trivial future add when a web UI needs it. Cards
+  are company-global (no per-user scoping).
 
 ## Consumption (no MCP)
 
-1. **Pre-dispatch injection (primary).** When the poller builds a dispatch
-   prompt, it queries the knowledge backend (plain HTTP, like it already
-   does for tasks/comments) for cards relevant to the task — filtered by the
-   task's tags/type and/or a keyword pass — and injects the matched cards
-   into the prompt. Works for *every* persona regardless of tools (manager
-   and planner have no shell). Order the injected block by stability so it
-   caches well: conventions/architecture first (cached prefix), task-
-   relevant cards next.
+1. **Pre-dispatch injection (primary, all personas).** When the poller
+   builds a dispatch prompt, it searches the knowledge backend (plain HTTP,
+   like it already fetches tasks/comments) for cards relevant to the task —
+   by the task's tags and/or a keyword pass over its title+description — and
+   injects the matched cards into the prompt. Works for every persona,
+   including shell-less manager/planner. Token-budgeted (top-N).
 
-2. **Active query via CLI (shell-capable personas).** The engineer (which
-   already has Bash/run_command) runs `wp knowledge search "..."` for deeper
-   lookups mid-task. No new tool surface — it's the existing shell calling a
-   CLI binary that hits the HTTP API.
+2. **Active query via CLI (shell-capable personas).** The engineer runs
+   `wp knowledge search "..."` through its existing Bash capability for
+   deeper lookups mid-task. No new tool surface.
+
+Personas are told: cards orient you, but live code/systems are ground
+truth — verify specifics against them when correctness matters.
+
+## Write access
+
+Create / edit / delete are **human-only via `wp knowledge`** in v1.
+Personas do not write cards (no pollution risk, format still proving out).
+A persona that discovers something worth recording says so in its reply; a
+human adds the card. **Manager-write** is a plausible future (manager is the
+orchestrator) but needs either shell access or an infosec-reviewed tool —
+deferred.
 
 ## Authoring
 
-Humans don't write a wiki cold. The knowledge is un-externalized, not
-missing — it lives in code, git history, and your head. Authoring is
-AI-assisted:
-
-- **Sit-down session** using `wp knowledge add` — interactive: pick a topic
-  gap, answer a few sharp questions, a card is drafted in the canonical
-  format, you review and save. ~1-2 hours bootstraps a useful corpus.
-- **Code-mining (later)** — an extraction flow reads the repos and drafts
-  `system`/`convention` cards as `candidate`, queued for human promotion.
+Knowledge is un-externalized, not missing — it lives in code, git history,
+and your head. Authoring is a **sit-down session** (~1-2 hrs) using
+`wp knowledge add`: pick a topic, write the card, tag it, save. Later, an
+AI-assisted code-mining flow can draft `candidate` cards from the repos for
+human review — but that's a future phase, not v1.
 
 ## Surfaces
 
-- **Backend API** (Go, owns Postgres):
-  - `POST /api/internal/knowledge-cards` — create
-  - `GET /api/internal/knowledge-cards` — list/filter (type, status,
-    authority, tags)
-  - `GET /api/internal/knowledge-cards/:id` — fetch one
-  - `PATCH /api/internal/knowledge-cards/:id` — edit / supersede / promote
-  - `GET /api/internal/knowledge-cards/search?q=&type=&tags=&authority=` —
-    FTS retrieval, authority-weighted, superseded-excluded
-- **CLI**: `wp knowledge add|list|show|edit|promote|supersede|search`
+- **Backend API** (Go, owns Postgres) — the endpoints above.
+- **CLI**: `wp knowledge add|list|show|search|edit|rm`.
 - **Poller**: a `search_knowledge_cards` API-client method + a prompt-
   injection step in the dispatch path.
 
 ## Out of scope (future)
 
-- Vector search (`pgvector`) — only when corpus outgrows cached context.
-- Auto repo-map generation — when engineer orientation is the bottleneck.
-- Code-mining extraction flow — after the manual bootstrap proves the format.
-- Staleness sweeps / scheduled re-verification.
+- User-facing JWT read endpoints + web UI search.
+- Pre-dispatch injection token-budget tuning.
+- Agent-proposed cards / manager-write.
+- Code-mining extraction flow.
+- `pgvector` semantic retrieval — only if corpus outgrows FTS+context.
+- Card structure (types, lifecycle) — only if a real need forces it.
