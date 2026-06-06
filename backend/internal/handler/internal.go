@@ -281,18 +281,36 @@ func (h *InternalHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve user ID from parent task
+	// Resolve the owning user. Priority: parent's owner → explicit ownerId →
+	// the sole user (single-user deployments). The internal API has no JWT, so
+	// a root (parent-less) task needs the owner supplied or inferable.
 	var userID string
-	if req.ParentID != nil {
+	switch {
+	case req.ParentID != nil:
 		parent, err := h.store.GetTaskByID(r.Context(), *req.ParentID)
 		if err != nil || parent == nil {
 			writeError(w, http.StatusBadRequest, "parent task not found")
 			return
 		}
 		userID = parent.UserID
-	} else {
-		writeError(w, http.StatusBadRequest, "parentId is required for internal task creation")
-		return
+	case req.OwnerID != "":
+		ok, err := h.store.UserExists(r.Context(), req.OwnerID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		if !ok {
+			writeError(w, http.StatusBadRequest, "ownerId does not match any user")
+			return
+		}
+		userID = req.OwnerID
+	default:
+		uid, err := h.store.GetSoleUserID(r.Context())
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "root task needs an owner: "+err.Error())
+			return
+		}
+		userID = uid
 	}
 
 	now := time.Now().UnixMilli()

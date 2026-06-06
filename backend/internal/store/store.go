@@ -31,6 +31,46 @@ func (s *Store) UpsertUser(ctx context.Context, u *model.User) error {
 	return err
 }
 
+// GetSoleUserID returns the user id when exactly one user exists. Used by the
+// internal CreateTask path to assign an owner to a root (parent-less) task in
+// a single-user deployment, where there's no JWT to infer the owner from.
+// Returns an error if zero or multiple users exist (caller should then require
+// an explicit ownerId).
+func (s *Store) GetSoleUserID(ctx context.Context) (string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id FROM users LIMIT 2`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return "", err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	switch len(ids) {
+	case 0:
+		return "", fmt.Errorf("no users exist")
+	case 1:
+		return ids[0], nil
+	default:
+		return "", fmt.Errorf("multiple users exist; ownerId required")
+	}
+}
+
+// UserExists reports whether a user row with the given id exists. Used to
+// validate an explicit ownerId before assigning it (tasks.user_id is a FK).
+func (s *Store) UserExists(ctx context.Context, userID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, userID).Scan(&exists)
+	return exists, err
+}
+
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	var u model.User
 	err := s.pool.QueryRow(ctx, `
