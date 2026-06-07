@@ -290,7 +290,7 @@ class RealPersonaKnowledgeCardsTest(unittest.TestCase):
     have a way to run `wp knowledge` — either run_command or the scoped Bash
     grant. These load the actual on-disk persona files."""
 
-    PERSONAS = ["engineer", "manager", "planner", "reviewer", "default"]
+    PERSONAS = ["engineer", "manager", "planner", "reviewer", "default", "pm"]
 
     def _load(self, name):
         return load_persona(name)
@@ -331,6 +331,29 @@ class RealPersonaKnowledgeCardsTest(unittest.TestCase):
             self.assertGreaterEqual(
                 p.max_turns, 40, f"{name} max_turns too low for due-diligence lookups"
             )
+
+
+class PMPersonaTest(unittest.TestCase):
+    """The PM is advisory and read-only: it frames requirements + scope, but it
+    does not write code, create tasks, write knowledge cards, or run arbitrary
+    shell — and (being non-manager) its replies can't dispatch other personas."""
+
+    def test_pm_loads_and_routes(self):
+        p = route_mention("pm")
+        self.assertEqual(p.name, "pm")
+        self.assertTrue(p.body.strip())
+
+    def test_pm_is_read_only_and_advisory(self):
+        p = load_persona("pm")
+        # KB read only — no full write grant.
+        self.assertNotIn("Bash(wp knowledge:*)", p.tools)
+        self.assertTrue(
+            any(t.startswith("Bash(wp knowledge search") for t in p.tools),
+            "pm needs scoped read access to wp knowledge",
+        )
+        # Advisory — no task creation, no arbitrary command execution.
+        self.assertNotIn("mcp__workplanner__create_task", p.tools)
+        self.assertNotIn("mcp__workplanner__run_command", p.tools)
 
 
 if __name__ == "__main__":
