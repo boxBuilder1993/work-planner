@@ -89,6 +89,26 @@ if curl -s -m 2 "$PROXY_URL/health" 2>/dev/null | grep -q '"status":"ok"'; then
   echo "✓ claude-proxy already running on :8400 — leaving it alone."
 else
   echo "→ starting claude-proxy in background (logs: $PROXY_LOG) …"
+
+  # The proxy reads WORKPLANNER_API_URL + INTERNAL_API_KEY straight from its
+  # own env (no .env loader) and refuses to serve MCP/wp calls without them.
+  # For a local run, point it at the host-published backend (docker maps
+  # 8080:8080) and reuse the key from .env. Anything already exported — e.g. a
+  # prod-pointed proxy on your personal Mac — is respected, not overridden.
+  : "${WORKPLANNER_API_URL:=http://localhost:8080}"
+  if [ -z "${INTERNAL_API_KEY:-}" ]; then
+    INTERNAL_API_KEY="$(grep -E '^INTERNAL_API_KEY=' "$REPO_ROOT/.env" | head -1 | cut -d= -f2-)"
+    INTERNAL_API_KEY="${INTERNAL_API_KEY%\"}"; INTERNAL_API_KEY="${INTERNAL_API_KEY#\"}"
+    INTERNAL_API_KEY="$(printf '%s' "$INTERNAL_API_KEY" | tr -d '[:space:]')"
+  fi
+  if [ -z "$INTERNAL_API_KEY" ]; then
+    echo "❌ INTERNAL_API_KEY not found in .env or environment — the proxy would"
+    echo "   reject every MCP/wp call (so the archivist and @ai would do nothing)."
+    exit 1
+  fi
+  export WORKPLANNER_API_URL INTERNAL_API_KEY
+  echo "  proxy → backend at $WORKPLANNER_API_URL"
+
   cd "$REPO_ROOT/claude-proxy"
   nohup uv run python proxy.py > "$PROXY_LOG" 2>&1 &
   echo $! > "$PROXY_PID_FILE"
