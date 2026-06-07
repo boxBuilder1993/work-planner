@@ -156,9 +156,19 @@ claude auth status
 claude auth login
 ```
 
+### Backend connection (`WORKPLANNER_API_URL` / `INTERNAL_API_KEY`)
+The proxy reads these from its own environment and **exits if they're missing**
+(it can't run MCP/`wp` without them). How they get set:
+- **Local run (`make dev` → `start-all.sh`)**: wired automatically — the proxy
+  is pointed at the host-published local backend (`http://localhost:8080`) with
+  the `INTERNAL_API_KEY` from the repo-root `.env`. Anything already exported is
+  respected, so a prod-pointed proxy isn't clobbered.
+- **Prod (Railway-served)**: export them yourself (Railway backend URL + key)
+  before starting the proxy — see First-time setup.
+
 ### MCP server errors
 MCP servers are launched by `claude -p` per request. Check proxy logs for errors. The servers need these env vars (set automatically by the proxy):
-- `WORKPLANNER_API_URL` — Railway backend URL
+- `WORKPLANNER_API_URL` — backend URL (Railway in prod, `localhost:8080` locally)
 - `INTERNAL_API_KEY` — backend auth key
 - `ALGO_TASK_ID` — task being processed (algo server only)
 - `ALGO_AI_STATUS` — current task phase (algo server only)
