@@ -166,6 +166,54 @@ class WorkplannerEnvTests(unittest.TestCase):
             proxy.WORKPLANNER_API_URL, proxy.INTERNAL_API_KEY = orig_url, orig_key
 
 
+class LoadRepoEnvTests(unittest.TestCase):
+    """_load_repo_env makes the proxy self-sufficient: it pulls
+    WORKPLANNER_API_URL / INTERNAL_API_KEY from the repo-root .env when they
+    aren't already exported — so the proxy can do `wp`/MCP regardless of how it
+    was launched (make dev / make dev-proxy / manual). Already-set env wins."""
+
+    def _write_env(self, body: str):
+        import tempfile
+        from pathlib import Path
+        p = Path(tempfile.mkdtemp()) / ".env"
+        p.write_text(body)
+        return p
+
+    def test_loads_missing_keys_from_dotenv(self):
+        p = self._write_env(
+            "# comment\nINTERNAL_API_KEY=from-dotenv\n"
+            'WORKPLANNER_API_URL="http://localhost:8080"\n'
+        )
+        saved = {k: os.environ.get(k) for k in ("WORKPLANNER_API_URL", "INTERNAL_API_KEY")}
+        try:
+            os.environ.pop("WORKPLANNER_API_URL", None)
+            os.environ.pop("INTERNAL_API_KEY", None)
+            proxy._load_repo_env(p)
+            self.assertEqual(os.environ["INTERNAL_API_KEY"], "from-dotenv")
+            self.assertEqual(os.environ["WORKPLANNER_API_URL"], "http://localhost:8080")
+        finally:
+            for k, v in saved.items():
+                os.environ.pop(k, None)
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_existing_env_wins(self):
+        p = self._write_env("INTERNAL_API_KEY=from-dotenv\n")
+        saved = os.environ.get("INTERNAL_API_KEY")
+        try:
+            os.environ["INTERNAL_API_KEY"] = "already-exported"
+            proxy._load_repo_env(p)
+            self.assertEqual(os.environ["INTERNAL_API_KEY"], "already-exported")
+        finally:
+            os.environ.pop("INTERNAL_API_KEY", None)
+            if saved is not None:
+                os.environ["INTERNAL_API_KEY"] = saved
+
+    def test_missing_dotenv_is_noop(self):
+        from pathlib import Path
+        proxy._load_repo_env(Path("/nonexistent/does-not-exist/.env"))  # must not raise
+
+
 class ClaudeSubprocessEnvTests(unittest.TestCase):
     """The `claude -p` process gets WP_BASE_URL / WP_INTERNAL_KEY so a persona
     running `wp knowledge ...` via its shell tool authenticates without a
