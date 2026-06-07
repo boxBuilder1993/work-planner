@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Markdown from './Markdown';
 import {
   type KnowledgeCard,
   listCards,
@@ -160,7 +161,9 @@ function CardView({
           ))}
         </div>
       )}
-      <p className={styles.cardContent}>{card.content}</p>
+      <div className={styles.cardContent}>
+        <Markdown>{card.content}</Markdown>
+      </div>
     </div>
   );
 }

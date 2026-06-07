@@ -7,6 +7,7 @@ import BreadcrumbBar from './BreadcrumbBar';
 import TaskForm from './TaskForm';
 import TaskItem from './TaskItem';
 import CommentSection from './CommentSection';
+import Markdown from './Markdown';
 import PriorityBadge from './PriorityBadge';
 import styles from './TaskDetail.module.css';
 
@@ -324,9 +325,9 @@ export default function TaskDetail() {
           <div className={styles.viewSection}>
             <h1 className={styles.taskTitle}>{existingTask.title}</h1>
             {existingTask.description && (
-              <p className={styles.taskDescription}>
-                {existingTask.description}
-              </p>
+              <div className={styles.taskDescription}>
+                <Markdown>{existingTask.description}</Markdown>
+              </div>
             )}
             <div className={styles.chips}>
               <span

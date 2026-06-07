@@ -145,10 +145,7 @@
 }
 
 .cardContent {
-  white-space: pre-wrap;
   color: var(--text);
-  line-height: 1.5;
-  margin: 0;
 }
 
 .linkButton {
