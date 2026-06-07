@@ -7,7 +7,6 @@ export default function SignIn() {
   const auth = useAuth();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [showEmailFallback, setShowEmailFallback] = useState(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
 
   // Render the "Sign in with Google" button as soon as the GIS script is ready.
@@ -56,30 +55,18 @@ export default function SignIn() {
         <p className={styles.subtitle}>Organize your tasks and themes</p>
         {auth.error && <p className={styles.error}>{auth.error}</p>}
 
+        {/*
+          Auth mode is chosen by VITE_GOOGLE_CLIENT_ID:
+          - set (real deployments)  → Google sign-in.
+          - empty (local / self-hosted, e.g. the Docker stack on :3000 or a
+            company laptop) → email + name sign-in via /auth/local.
+          So the local version simply has no Google auth — no toggle, no error.
+        */}
         {GOOGLE_CLIENT_ID ? (
           <div className={styles.googleSection}>
             <div ref={googleButtonRef} className={styles.googleButton} />
           </div>
         ) : (
-          <p className={styles.error}>
-            Google sign-in unavailable (VITE_GOOGLE_CLIENT_ID not configured).
-          </p>
-        )}
-
-        {/*
-          Local email/name auth: dev-only. Prod builds tree-shake this branch
-          since `import.meta.env.DEV` is statically false at build time.
-        */}
-        {import.meta.env.DEV && !showEmailFallback && (
-          <button
-            type="button"
-            className={styles.linkButton}
-            onClick={() => setShowEmailFallback(true)}
-          >
-            Or sign in with email (dev only)
-          </button>
-        )}
-        {import.meta.env.DEV && showEmailFallback && (
           <form className={styles.form} onSubmit={handleSubmit}>
             <div>
               <label className={styles.label}>Email</label>
