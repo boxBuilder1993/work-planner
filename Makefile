@@ -5,7 +5,7 @@ help:
 	@echo "  make dev              - Bring up the whole stack (auto-creates .env, proxy on Mac + Docker stack). Idempotent."
 	@echo "  make env              - Just create .env from .env.example with generated secrets (if missing)."
 	@echo "  make dev-proxy        - Start ONLY claude-proxy on Mac (port 8400)."
-	@echo "  make dev-stack        - Start ONLY the Docker stack (postgres + chromadb + backend + ai-poller + web)"
+	@echo "  make dev-stack        - Start ONLY the Docker stack (postgres + backend + ai-poller + web)"
 	@echo "  make dev-stack-down   - Stop the Docker stack (keeps data; doesn't touch the proxy)"
 	@echo "  make dev-stack-logs   - Tail logs from all Docker services"
 	@echo ""

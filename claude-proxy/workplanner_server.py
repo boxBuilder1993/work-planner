@@ -12,7 +12,6 @@ import subprocess
 import time
 from typing import Any
 
-import chromadb
 from mcp.server import Server, InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent, ServerCapabilities
@@ -21,7 +20,6 @@ from api_client import ApiClient
 
 server = Server("workplanner")
 api: ApiClient | None = None
-_chroma_collection = None
 
 # Workspace confinement for `run_command`. Set by claude-proxy when dispatching
 # a chat persona; absent when the legacy algorithm path invokes the MCP.
@@ -83,22 +81,6 @@ def _resolve_working_dir(requested: str | None) -> tuple[str | None, str | None]
     return target_real, None
 
 
-def _knowledge():
-    global _chroma_collection
-    if _chroma_collection is None:
-        host = os.environ.get("CHROMADB_HOST", "chromadb-production-8d02.up.railway.app")
-        port = int(os.environ.get("CHROMADB_PORT", "443"))
-        ssl = port == 443
-        client = chromadb.HttpClient(host=host, port=port, ssl=ssl)
-        user_id = os.environ.get("CHROMADB_USER_ID", "default")
-        collection_name = f"workplanner_knowledge_{user_id.replace('-', '_')}"
-        _chroma_collection = client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"},
-        )
-    return _chroma_collection
-
-
 def _text(text: str) -> list[TextContent]:
     return [TextContent(type="text", text=text)]
 
@@ -148,24 +130,6 @@ async def list_tools() -> list[Tool]:
                  "working_dir": {"type": "string"},
                  "timeout": {"type": "number"},
              }, "required": ["command"]}),
-        Tool(name="query_knowledge",
-             description="Search the company knowledge base. Use this to find past decisions, "
-                         "architecture patterns, implementation notes, specs, and lessons learned "
-                         "across all projects. Call this anytime you need context — before proposing, "
-                         "when stuck, during review, or when making decisions.",
-             inputSchema={"type": "object", "properties": {
-                 "query": {"type": "string", "description": "Natural language search query"},
-                 "limit": {"type": "integer", "description": "Max results (default 5)"},
-             }, "required": ["query"]}),
-        Tool(name="store_knowledge",
-             description="Save knowledge to the company knowledge base for future reference. "
-                         "Store specs, architecture decisions, implementation notes, review feedback, "
-                         "patterns discovered, and lessons learned.",
-             inputSchema={"type": "object", "properties": {
-                 "content": {"type": "string", "description": "The knowledge to store"},
-                 "work_type": {"type": "string", "description": "Category: requirements_spec, adr, plan, implementation_note, review_feedback, delivery_report, clarification, debug_note"},
-                 "tags": {"type": "array", "items": {"type": "string"}, "description": "Free-form tags for context (e.g. project name, tech, feature)"},
-             }, "required": ["content", "work_type"]}),
         Tool(name="get_my_work_item",
              description="Return the WorkItem this dispatch is currently executing. "
                          "Includes the assignment (prompt_context), retry count, attempt history, "
@@ -261,43 +225,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "stderr": proc.stderr[-5000:] if len(proc.stderr) > 5000 else proc.stderr,
             }
             return _text(json.dumps(result, indent=2))
-
-        if name == "query_knowledge":
-            collection = _knowledge()
-            limit = arguments.get("limit", 5)
-            results = collection.query(
-                query_texts=[arguments["query"]],
-                n_results=limit,
-            )
-            docs = []
-            if results["ids"] and results["ids"][0]:
-                for i, doc_id in enumerate(results["ids"][0]):
-                    docs.append({
-                        "content": results["documents"][0][i] if results["documents"] else "",
-                        "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
-                        "relevance": 1 - (results["distances"][0][i] if results["distances"] else 1),
-                    })
-            if not docs:
-                return _text("No relevant knowledge found.")
-            return _text(json.dumps(docs, indent=2))
-
-        if name == "store_knowledge":
-            collection = _knowledge()
-            task_id = os.environ.get("ALGO_TASK_ID", "unknown")
-            doc_id = f"{task_id}:{arguments['work_type']}:{int(time.time() * 1000)}"
-            metadata: dict[str, Any] = {
-                "task_id": task_id,
-                "work_type": arguments["work_type"],
-                "timestamp": int(time.time() * 1000),
-            }
-            if arguments.get("tags"):
-                metadata["tags"] = ",".join(arguments["tags"])
-            collection.add(
-                ids=[doc_id],
-                documents=[arguments["content"]],
-                metadatas=[metadata],
-            )
-            return _text(f"Knowledge stored (id: {doc_id})")
 
         if name == "get_my_work_item":
             if not MY_WORK_ITEM_ID:

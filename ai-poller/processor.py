@@ -19,7 +19,6 @@ from archivist_handler import ArchivistHandler
 from chat_handler import ChatHandler
 from work_item_handler import WorkItemHandler
 from config import Config
-from knowledge import KnowledgeBase, KnowledgeBaseFactory
 from models import TaskEntity
 from spawner import AgentSpawner
 
@@ -53,12 +52,10 @@ class PollCycleProcessor:
         api: ApiClient,
         config: Config,
         spawner: AgentSpawner,
-        knowledge_factory: KnowledgeBaseFactory | None = None,
     ) -> None:
         self._api = api
         self._config = config
         self._spawner = spawner
-        self._knowledge_factory = knowledge_factory
         self._registry = build_registry()
         # Built eagerly — cheap, idle when ENABLE_CHAT_HANDLER is false.
         self._chat_handler = ChatHandler(api=api, config=config)
@@ -180,14 +177,6 @@ class PollCycleProcessor:
                 logger.info("Task '%s' [%s/%s]: no action needed", task.title, algo_name, ai_status)
                 continue
 
-            # Resolve knowledge base
-            knowledge: KnowledgeBase | None = None
-            if self._knowledge_factory and task.user_id:
-                try:
-                    knowledge = self._knowledge_factory.for_user(task.user_id)
-                except Exception:
-                    logger.warning("Failed to init knowledge base for user %s", task.user_id)
-
             ai_status = task.props.get("aiStatus", "?")
 
             # Orchestrator plans are subject to their own concurrent limit
@@ -199,7 +188,7 @@ class PollCycleProcessor:
                 continue
 
             logger.info("Task '%s' [%s/%s]: spawning agent", task.title, algo_name, ai_status)
-            await self._spawner.spawn(task, plan, algorithm, knowledge)
+            await self._spawner.spawn(task, plan, algorithm)
             actions += 1
 
         return actions

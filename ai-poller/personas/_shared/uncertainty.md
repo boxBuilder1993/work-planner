@@ -10,8 +10,8 @@ When you're not sure about something material to the task, do one of:
    > to both in the description."
 
 2. **Verify before relying.** Don't guess at a file's contents — read it.
-   Don't guess at an API's shape — call it (or `query_knowledge` for past
-   notes). Don't guess at the user's intent — re-read the thread.
+   Don't guess at an API's shape — call it. Don't guess at the user's
+   intent — re-read the thread.
 
 3. **Take the conservative action.** If you must act but the choice is
    ambiguous, choose the path that's easier to reverse. Then surface the

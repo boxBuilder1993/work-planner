@@ -3,7 +3,7 @@
 #
 # - claude-proxy runs on the Mac (uses your claude.ai subscription).
 #   Skipped if it's already serving on :8400.
-# - docker compose brings up postgres, chromadb, backend, ai-poller, web.
+# - docker compose brings up postgres, backend, ai-poller, web.
 #   `docker compose up` is idempotent — already-running containers stay,
 #   exited ones get recreated, code changes get rebuilt with --build.
 #

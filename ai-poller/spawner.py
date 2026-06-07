@@ -16,7 +16,6 @@ from algorithm import Algorithm, SpawnPlan, TaskContext
 from api_client import ApiClient
 from config import Config
 from debate import AgentRunner, DebateConfig
-from knowledge import KnowledgeBase
 from models import TaskEntity
 
 logger = logging.getLogger(__name__)
@@ -82,7 +81,6 @@ class AgentSpawner:
         task: TaskEntity,
         plan: SpawnPlan,
         algorithm: Algorithm,
-        knowledge: KnowledgeBase | None = None,
     ) -> None:
         if self.is_running(task.id):
             logger.warning("Agent already running for task %s, skipping", task.id)
@@ -124,7 +122,7 @@ class AgentSpawner:
         run = AgentRun(task_id=task.id, algorithm_name=algorithm.name, is_orchestrator=plan.is_orchestrator)
         self._active_runs[task.id] = run
         run.task_handle = asyncio.create_task(
-            self._run_agent(task, plan, algorithm, knowledge)
+            self._run_agent(task, plan, algorithm)
         )
 
     async def _run_agent(
@@ -132,7 +130,6 @@ class AgentSpawner:
         task: TaskEntity,
         plan: SpawnPlan,
         algorithm: Algorithm,
-        knowledge: KnowledgeBase | None = None,
     ) -> None:
         task_id = task.id
         try:
@@ -196,15 +193,6 @@ class AgentSpawner:
                                 self._api.update_task(child.id, props=props_update.child_props)
             except Exception:
                 logger.exception("Failed to run on_complete for task %s", task_id)
-
-            # Document in knowledge base
-            if knowledge and result_text:
-                try:
-                    knowledge.document_work(
-                        task_id=task_id, agent_id=task_id,
-                        work_type="agent_run", content=result_text[:2000])
-                except Exception:
-                    logger.warning("Failed to document work for task %s", task_id)
 
             logger.info("Agent run completed for task %s", task_id)
 

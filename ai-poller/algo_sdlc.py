@@ -126,7 +126,6 @@ After executing, assess whether more work remains:
 - If all work for this task is complete: call submit_proof with evidence.
 - If more actions are needed: do nothing — you'll propose the next one.
 
-Store decisions in the knowledge base via store_knowledge.
 
 Your task ID is: {task_id}\
 """
@@ -174,8 +173,6 @@ _WP = [
     "mcp__workplanner__get_task",
     "mcp__workplanner__get_subtasks",
     "mcp__workplanner__get_task_comments",
-    "mcp__workplanner__query_knowledge",
-    "mcp__workplanner__store_knowledge",
     "mcp__workplanner__search_tasks",
 ]
 
