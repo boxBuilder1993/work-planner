@@ -286,9 +286,10 @@ class TestMentionRegex(unittest.TestCase):
 
 class RealPersonaKnowledgeCardsTest(unittest.TestCase):
     """Phase C wiring: every working persona must include the knowledge-card
-    due-diligence fragment, run the fixer (so it can reply naturally), and
-    have a way to run `wp knowledge` — either run_command or the scoped Bash
-    grant. These load the actual on-disk persona files."""
+    due-diligence fragment, run the fixer (so it can reply naturally), and have
+    a way to run `wp knowledge` — via an unrestricted `Bash` tool (engineer/
+    reviewer) or a scoped `Bash(wp knowledge …)` grant. These load the actual
+    on-disk persona files."""
 
     PERSONAS = ["engineer", "manager", "planner", "reviewer", "default", "pm"]
 
@@ -312,17 +313,25 @@ class RealPersonaKnowledgeCardsTest(unittest.TestCase):
             )
 
     def test_each_persona_can_run_wp_knowledge(self) -> None:
-        # Either the run_command MCP tool (engineer/reviewer) or the scoped
-        # Bash grant (manager/planner/default) — every persona needs one path
-        # to execute `wp knowledge`.
+        # Unrestricted `Bash` (engineer/reviewer) or a scoped `Bash(wp knowledge …)`
+        # grant — every persona needs a path to execute `wp knowledge`.
         for name in self.PERSONAS:
             p = self._load(name)
-            has_run_command = "mcp__workplanner__run_command" in p.tools
+            has_general_bash = "Bash" in p.tools
             has_scoped_bash = any(t.startswith("Bash(wp knowledge") for t in p.tools)
             self.assertTrue(
-                has_run_command or has_scoped_bash,
-                f"{name} has no way to run wp knowledge (no run_command, no scoped Bash)",
+                has_general_bash or has_scoped_bash,
+                f"{name} has no way to run wp knowledge (no Bash, no scoped wp-knowledge grant)",
             )
+
+    def test_no_persona_uses_mcp(self) -> None:
+        # The whole AI layer is MCP-free so it runs on locked-down machines.
+        # This guards every shipped persona, not just the ones above.
+        from persona_registry import DEFAULT_PERSONAS_DIR
+        for path in sorted(DEFAULT_PERSONAS_DIR.glob("*.md")):
+            p = load_persona(path.stem)
+            mcp = [t for t in p.tools if t.startswith("mcp__")]
+            self.assertEqual(mcp, [], f"{path.stem} still has MCP tools: {mcp}")
 
     def test_max_turns_affords_lookups(self) -> None:
         # Personas that default to 20 were bumped to >= 40 so KB lookups fit.
