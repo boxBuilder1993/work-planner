@@ -202,7 +202,7 @@ func (s *Store) GetBreadcrumbs(ctx context.Context, userID, taskID string) ([]mo
 			SELECT id, user_id, parent_id, title, description, status, priority, due_date, task_date, planned_time, duration, ai_enabled, level, props, created_at, updated_at
 			FROM tasks WHERE id = $1 AND user_id = $2
 			UNION ALL
-			SELECT t.id, t.user_id, t.parent_id, t.title, t.description, t.status, t.priority, t.due_date, t.task_date, t.planned_time, t.duration, t.ai_enabled, t.level, t.created_at, t.updated_at
+			SELECT t.id, t.user_id, t.parent_id, t.title, t.description, t.status, t.priority, t.due_date, t.task_date, t.planned_time, t.duration, t.ai_enabled, t.level, t.props, t.created_at, t.updated_at
 			FROM tasks t JOIN chain c ON t.id = c.parent_id
 		)
 		SELECT * FROM chain ORDER BY created_at
@@ -211,7 +211,7 @@ func (s *Store) GetBreadcrumbs(ctx context.Context, userID, taskID string) ([]mo
 
 func (s *Store) ListExecutableTasks(ctx context.Context, userID string) ([]model.Task, error) {
 	return s.scanTasks(ctx, `
-		SELECT t.id, t.user_id, t.parent_id, t.title, t.description, t.status, t.priority, t.due_date, t.task_date, t.planned_time, t.duration, t.ai_enabled, t.level, t.created_at, t.updated_at
+		SELECT t.id, t.user_id, t.parent_id, t.title, t.description, t.status, t.priority, t.due_date, t.task_date, t.planned_time, t.duration, t.ai_enabled, t.level, t.props, t.created_at, t.updated_at
 		FROM tasks t
 		WHERE t.user_id = $1 AND t.status = 'PENDING'
 			AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = t.id)
@@ -521,7 +521,7 @@ func (s *Store) ListAllRepeatingTasksWithTemplates(ctx context.Context) ([]Repea
 	rows, err := s.pool.Query(ctx, `
 		SELECT
 			r.id, r.task_id, r.repetition_type, r.repetition_props, r.start_date, r.last_created_at, r.created_at, r.updated_at,
-			t.id, t.user_id, t.parent_id, t.title, t.description, t.status, t.priority, t.due_date, t.task_date, t.planned_time, t.duration, t.ai_enabled, t.level, t.created_at, t.updated_at
+			t.id, t.user_id, t.parent_id, t.title, t.description, t.status, t.priority, t.due_date, t.task_date, t.planned_time, t.duration, t.ai_enabled, t.level, t.props, t.created_at, t.updated_at
 		FROM repeating_tasks r
 		JOIN tasks t ON r.task_id = t.id
 	`)
