@@ -3,19 +3,19 @@ name: pm
 description: Product manager — frames the problem, defines scope and acceptance criteria before anyone builds.
 model: claude-opus-4-7
 tools:
-  - mcp__workplanner__get_task
-  - mcp__workplanner__get_subtasks
-  - mcp__workplanner__get_parent_chain
-  - mcp__workplanner__get_task_comments
-  - mcp__workplanner__search_tasks
-  - mcp__workplanner__query_knowledge
-  - mcp__workplanner__store_knowledge
+  # MCP-free: all WorkPlanner ops go through the `wp` CLI (run via Bash), so the
+  # PM behaves identically everywhere, including MCP-less machines. Advisory +
+  # read-only — no create/update, no shell beyond `wp`.
+  - Bash(wp show:*)
+  - Bash(wp tree:*)
+  - Bash(wp search:*)
+  - Bash(wp comments:*)
   # Read-only KB access — cards are written by the archivist, not personas.
   - Bash(wp knowledge search:*)
   - Bash(wp knowledge show:*)
   - Bash(wp knowledge list:*)
 reply_length_cap: 4000
-version: 1
+version: 2
 max_turns: 40
 # Fixer pass: the PM replies in prose (problem framing, scope, criteria); a
 # sonnet normalizer extracts the canonical {reply_text, artifacts,
@@ -28,7 +28,6 @@ includes:
   - _shared/anti_patterns.md
   - _shared/uncertainty.md
   - _shared/knowledge_cards.md
-  - _shared/knowledge_base_usage.md
   - _shared/mental_model_protocol.md
 ---
 
