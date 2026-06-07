@@ -78,6 +78,7 @@ func main() {
 	taskHandler := handler.NewTaskHandler(st)
 	commentHandler := handler.NewCommentHandler(st)
 	recurringHandler := handler.NewRecurringHandler(st)
+	knowledgeHandler := handler.NewKnowledgeHandler(st)
 	internalHandler := handler.NewInternalHandler(st)
 
 	// Build router.
@@ -122,6 +123,10 @@ func main() {
 	protectedMux.HandleFunc("/api/comments/", func(w http.ResponseWriter, r *http.Request) {
 		commentHandler.ServeDeleteHTTP(w, r)
 	})
+
+	// Knowledge-card routes (user-facing; cards are global, no per-user scoping).
+	protectedMux.Handle("/api/knowledge-cards", knowledgeHandler)
+	protectedMux.Handle("/api/knowledge-cards/", knowledgeHandler)
 
 	// Internal routes — require internal API key, no user scoping.
 	internalMux := http.NewServeMux()
