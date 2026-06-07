@@ -356,5 +356,26 @@ class PMPersonaTest(unittest.TestCase):
         self.assertNotIn("mcp__workplanner__run_command", p.tools)
 
 
+class PlannerCLITest(unittest.TestCase):
+    """The planner must work without MCP (e.g. a locked-down office machine
+    where custom MCP servers can't be loaded) — so all task + KB operations go
+    through the `wp` CLI via scoped Bash, and it has no mcp__ tools at all."""
+
+    def test_planner_is_mcp_free(self):
+        p = load_persona("planner")
+        mcp = [t for t in p.tools if t.startswith("mcp__")]
+        self.assertEqual(mcp, [], f"planner must be MCP-free for portability; got {mcp}")
+
+    def test_planner_does_tasks_via_cli(self):
+        p = load_persona("planner")
+        for needed in ("Bash(wp add:", "Bash(wp set:", "Bash(wp show:", "Bash(wp tree:"):
+            self.assertTrue(
+                any(t.startswith(needed) for t in p.tools),
+                f"planner missing CLI task grant {needed}*",
+            )
+        # And still reads knowledge cards via the CLI.
+        self.assertTrue(any(t.startswith("Bash(wp knowledge search:") for t in p.tools))
+
+
 if __name__ == "__main__":
     unittest.main()
