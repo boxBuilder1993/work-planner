@@ -1,0 +1,238 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--primary);
+  color: white;
+}
+
+.backButton {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  padding: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.topBarTitle {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  flex: 1;
+}
+
+.newButton {
+  background: rgba(255, 255, 255, 0.18);
+  border: none;
+  color: white;
+  font-weight: 600;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.content {
+  flex: 1;
+  padding: var(--spacing-lg);
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.search {
+  flex: 1;
+  min-width: 200px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--font-size-md);
+}
+
+.invalidToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--text-secondary);
+  text-align: center;
+  padding: var(--spacing-lg);
+}
+
+.error {
+  color: var(--danger, #c0392b);
+  font-size: var(--font-size-sm);
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.invalidCard {
+  opacity: 0.65;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.cardId {
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  color: var(--text);
+}
+
+.invalidBadge {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  background: var(--danger, #c0392b);
+  color: white;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.cardActions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.tag {
+  font-size: var(--font-size-xs);
+  background: var(--primary-light, rgba(0, 0, 0, 0.06));
+  color: var(--text-secondary);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.cardContent {
+  white-space: pre-wrap;
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  padding: 0;
+}
+
+.linkButtonDanger {
+  background: none;
+  border: none;
+  color: var(--danger, #c0392b);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  padding: 0;
+}
+
+.editor {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.editorHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.input,
+.textarea {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--text);
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  width: 100%;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.checkboxField {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.primaryButton {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.primaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

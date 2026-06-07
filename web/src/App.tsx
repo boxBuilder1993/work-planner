@@ -5,6 +5,7 @@ import SignIn from './components/SignIn';
 import TaskList from './components/TaskList';
 import TaskDetail from './components/TaskDetail';
 import Settings from './components/Settings';
+import KnowledgeCards from './components/KnowledgeCards';
 import styles from './components/AppLayout.module.css';
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -86,6 +87,14 @@ function AppRoutes() {
         element={
           <AuthGuard>
             <Settings />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/knowledge"
+        element={
+          <AuthGuard>
+            <KnowledgeCards />
           </AuthGuard>
         }
       />
