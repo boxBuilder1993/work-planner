@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import Markdown from './Markdown';
 import type { CommentEntity } from '../types';
 import { useTasks } from '../hooks/useTasks';
 import { formatDate } from '../utils';
@@ -159,9 +158,7 @@ function CommentNode({
             )}
           </div>
 
-          <div className={styles.commentText}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.text}</ReactMarkdown>
-          </div>
+          <Markdown>{comment.text}</Markdown>
 
           {/* Show proposal feedback if present */}
           {isProposal && comment.proposalFeedback && (
