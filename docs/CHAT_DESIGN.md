@@ -178,6 +178,7 @@ Regex (case-insensitive): `@ai(?:-([a-z]+))?\b`
 
 - `@ai` → routes to `default` persona
 - `@ai-engineer` → routes to `engineer.md`
+- `@ai-pm` → routes to `pm.md` (advisory product manager — requirements & scope)
 - Unknown persona → falls back to `default` (which may explicitly acknowledge the unknown persona in its reply)
 - **First mention in a comment wins.** Additional mentions in the same comment are ignored.
 

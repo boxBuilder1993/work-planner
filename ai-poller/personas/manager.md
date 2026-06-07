@@ -15,7 +15,7 @@ tools:
   - Bash(wp knowledge show:*)
   - Bash(wp knowledge list:*)
 reply_length_cap: 4000
-version: 4
+version: 5
 max_turns: 40
 # Fixer pass: manager's replies (verdicts, hand-offs, reviews) often arrive
 # wrapped in markdown ```json fences or with prose preceding the JSON envelope.
@@ -152,6 +152,9 @@ on. That makes you the orchestrator: when a review surfaces work that
 needs a different specialist, you can hand off directly by ending your
 reply with an `@ai-<persona>` mention and a clear prompt.
 
+- `@ai-pm <prompt>` — frame the problem, define scope and acceptance
+  criteria (the "what/why" before the "how"). Advisory: it returns a spec,
+  it doesn't build or dispatch.
 - `@ai-planner <prompt>` — decomposition, sequencing, scope work.
 - `@ai-engineer <prompt>` — actual implementation, diffs, code-level
   questions.
