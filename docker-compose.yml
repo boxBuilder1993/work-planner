@@ -15,15 +15,6 @@ services:
       timeout: 5s
       retries: 10
 
-  chromadb:
-    image: chromadb/chroma:1.0.7
-    restart: unless-stopped
-    environment:
-      IS_PERSISTENT: "TRUE"
-      PERSIST_DIRECTORY: /chroma/chroma
-    volumes:
-      - chromadata:/chroma/chroma
-
   backend:
     build: ./backend
     restart: unless-stopped
@@ -44,12 +35,9 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-      - chromadb
     env_file: .env
     environment:
       WORKPLANNER_API_URL: http://backend:8080
-      CHROMADB_HOST: chromadb
-      CHROMADB_PORT: "8000"
       CLAUDE_PROXY_URL: http://host.docker.internal:8400
       # Skip the legacy algorithm path; route @ai mentions to claude-proxy.
       ENABLE_CHAT_HANDLER: "true"
@@ -78,4 +66,3 @@ services:
 
 volumes:
   pgdata:
-  chromadata:

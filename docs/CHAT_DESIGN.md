@@ -160,7 +160,7 @@ last_updated_at: "<ISO timestamp>"
 
 **Merge semantics:** the poller performs a partial merge of `context_update` from AI output into the existing `ai_context`. **Top-level keys replace; arrays are replaced wholesale (no append).** To add to an array, the AI returns the full new array.
 
-`decisions`, `working_assumptions`, and `blockers` are intentionally NOT standardized in v1 — decisions go to the KB via `store_knowledge` (or are visible in the thread); blockers can be expressed as `open_questions`; working assumptions can surface inline in `reply_text` or as `open_questions` ("I'm assuming X — confirm?"). Promote to standardized keys later if usage demands.
+`decisions`, `working_assumptions`, and `blockers` are intentionally NOT standardized in v1 — decisions are visible in the thread (and durable ones become knowledge cards via the archivist); blockers can be expressed as `open_questions`; working assumptions can surface inline in `reply_text` or as `open_questions` ("I'm assuming X — confirm?"). Promote to standardized keys later if usage demands.
 
 ### `task.props.workspace_path`
 
@@ -353,8 +353,6 @@ tools:
   - get_parent_chain
   - get_task_comments
   - search_tasks
-  - query_knowledge
-  - store_knowledge
   - create_task
   - run_command
 reply_length_cap: 4000    # prompt-level guidance (not enforced by truncation)

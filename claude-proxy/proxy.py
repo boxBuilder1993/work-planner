@@ -171,15 +171,6 @@ def _runtime_is_degraded(runtime: str) -> bool:
     return bool(health and health.degraded)
 
 
-def _chromadb_env() -> dict[str, str]:
-    env: dict[str, str] = {}
-    for key in ("CHROMADB_HOST", "CHROMADB_PORT", "CHROMADB_USER_ID"):
-        value = os.environ.get(key)
-        if value:
-            env[key] = value
-    return env
-
-
 def _resolve_workspace_path(req: RunRequest) -> Path | None:
     """Return the per-task workspace dir, or None for legacy (no task_id)
     requests that should run in REPO_ROOT."""
@@ -202,7 +193,6 @@ def _workplanner_env(req: RunRequest) -> dict[str, str]:
         # Consumed by workplanner_server.py's get_my_work_item / default
         # task scope on list_work_items.
         env["WORK_ITEM_ID"] = req.work_item_id
-    env.update(_chromadb_env())
     return env
 
 
@@ -327,12 +317,8 @@ async def _prepare_codex_home(req: RunRequest) -> Path:
         "codex", "mcp", "add", "workplanner",
         "--env", f"WORKPLANNER_API_URL={WORKPLANNER_API_URL}",
         "--env", f"INTERNAL_API_KEY={INTERNAL_API_KEY}",
-    ]
-    for key, value in _chromadb_env().items():
-        workplanner_cmd.extend(["--env", f"{key}={value}"])
-    workplanner_cmd.extend([
         "--", "uv", "run", "--project", str(PROXY_DIR), str(PROXY_DIR / "workplanner_server.py"),
-    ])
+    ]
     code, stdout, stderr = await _run_subprocess(workplanner_cmd, env=env, cwd=PROXY_DIR)
     if code != 0:
         raise RuntimeError(f"codex mcp add workplanner failed: {(stderr or stdout).strip()}")

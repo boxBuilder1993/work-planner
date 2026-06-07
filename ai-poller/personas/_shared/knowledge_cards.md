@@ -67,8 +67,3 @@ A card tells you how things are *supposed* to work as of when it was written.
 For anything correctness-critical, confirm against the live code or system —
 the card orients you to where to look and what to expect, but the code is
 the truth.
-
-> Note: this is distinct from the ChromaDB scratchpad
-> (`query_knowledge` / `store_knowledge`), which is your own working memory
-> of past findings. **Knowledge cards are curated company truth**; search
-> them first.

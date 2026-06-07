@@ -229,7 +229,6 @@ class AgentRunner:
             "mcp__workplanner__get_task",
             "mcp__workplanner__get_subtasks",
             "mcp__workplanner__get_task_comments",
-            "mcp__workplanner__query_knowledge",
             "mcp__workplanner__search_tasks",
             "mcp__github__*",
             "Read", "Glob", "Grep",
@@ -297,7 +296,6 @@ class AgentRunner:
             "mcp__workplanner__add_comment",
             "mcp__workplanner__create_task",
             "mcp__workplanner__run_command",
-            "mcp__workplanner__store_knowledge",
             "mcp__algo__*",
             "mcp__git__*",
         ]

@@ -44,7 +44,6 @@ docker compose up --build
 |---------|-----|
 | Web app | http://localhost:3000 |
 | Backend API | http://localhost:8080 |
-| ChromaDB | http://localhost:8000 |
 
 ### 4. Sign in
 

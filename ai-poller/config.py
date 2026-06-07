@@ -1,7 +1,7 @@
 """Project configuration for the AI poller.
 
 Centralizes all settings: API connection, agent limits, workspace paths,
-and vector DB connection. Loaded from environment variables with sensible defaults.
+and polling. Loaded from environment variables with sensible defaults.
 """
 
 from __future__ import annotations
@@ -28,14 +28,6 @@ class WorkspaceConfig:
     repo_path: str = ""
     worktree_base: str = ".claude/worktrees"
     main_branch: str = "main"
-
-
-@dataclass(frozen=True)
-class VectorDBConfig:
-    """ChromaDB connection settings."""
-    host: str = "localhost"
-    port: int = 8000
-    collection: str = "workplanner_knowledge"
 
 
 @dataclass(frozen=True)
@@ -67,7 +59,6 @@ class Config:
     # Sub-configs
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
-    vector_db: VectorDBConfig = field(default_factory=VectorDBConfig)
 
     def validate(self) -> None:
         """Raise ValueError if required fields are missing.
@@ -129,10 +120,5 @@ def load_config(env_path: str | None = None) -> Config:
             repo_path=_env("REPO_PATH"),
             worktree_base=_env("WORKTREE_BASE", ".claude/worktrees"),
             main_branch=_env("MAIN_BRANCH", "main"),
-        ),
-        vector_db=VectorDBConfig(
-            host=_env("CHROMADB_HOST", "localhost"),
-            port=_int("CHROMADB_PORT", 8000),
-            collection=_env("CHROMADB_COLLECTION", "workplanner_knowledge"),
         ),
     )

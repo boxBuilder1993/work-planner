@@ -61,11 +61,7 @@ _COMPLETED_STATUSES = frozenset({"done", "complete", "proof_submitted"})
 # Prompts
 # ---------------------------------------------------------------------------
 
-_KNOWLEDGE_INSTRUCTION = """
-KNOWLEDGE BASE: You have access to a company knowledge base via query_knowledge and store_knowledge.
-- Before proposing: query_knowledge to check for past decisions and patterns on similar work.
-- After making decisions: store_knowledge to save your decisions for future reference.
-Use these throughout your work, not just once."""
+_KNOWLEDGE_INSTRUCTION = ""
 
 _PLANNER_PROMPT = """\
 You are the owner of task: "{title}"
@@ -158,7 +154,6 @@ Your work plan has been APPROVED. Execute it now:
 5. Commit and push the branch.
 6. Open a PR against main.
 7. Call submit_proof with the PR link and evidence (test output, files changed).
-8. Store implementation notes in the knowledge base via store_knowledge.
 
 If you get stuck, call request_clarification.
 
@@ -219,8 +214,6 @@ def _planning_tools() -> tuple[dict, list[str]]:
         "mcp__workplanner__get_task",
         "mcp__workplanner__get_subtasks",
         "mcp__workplanner__get_task_comments",
-        "mcp__workplanner__query_knowledge",
-        "mcp__workplanner__store_knowledge",
         "mcp__github__*",
         "Read", "Glob", "Grep", "Bash",
     ]
@@ -230,8 +223,6 @@ def _plan_execution_tools() -> tuple[dict, list[str]]:
     return {"algo": create_plan_execution_mcp()}, [
         "mcp__algo__*",
         "mcp__workplanner__create_task",
-        "mcp__workplanner__query_knowledge",
-        "mcp__workplanner__store_knowledge",
     ]
 
 
@@ -259,8 +250,6 @@ def _worker_execute_tools() -> tuple[dict, list[str]]:
         "mcp__algo__*",
         "mcp__workplanner__get_task",
         "mcp__workplanner__get_task_comments",
-        "mcp__workplanner__query_knowledge",
-        "mcp__workplanner__store_knowledge",
         "mcp__git__*",
         "mcp__github__*",
         "Read", "Write", "Edit", "Bash", "Glob", "Grep",
@@ -277,8 +266,6 @@ def _manager_tools() -> tuple[dict, list[str]]:
         "mcp__workplanner__get_task",
         "mcp__workplanner__get_subtasks",
         "mcp__workplanner__get_task_comments",
-        "mcp__workplanner__query_knowledge",
-        "mcp__workplanner__store_knowledge",
         "mcp__github__*",
     ]
 

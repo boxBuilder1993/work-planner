@@ -34,7 +34,6 @@ of the AI layer.
 | `ai-poller` | Railway, Python | Polls backend for `@ai` mentions, dispatches to proxy. |
 | `claude-proxy` | This Mac, FastAPI + uv | `http://localhost:8400`. Exposed via Cloudflare Tunnel at `https://claude-proxy.shravan-box-builder.net`. |
 | `frontend` (web) | Railway | React + Vite. |
-| `chromadb` | Railway | `chromadb-production-8d02.up.railway.app`, used as the per-user knowledge base. |
 | Android `app/` | Built via CI | Gradle / Kotlin. |
 | `mobile/` | Local-only for now | Expo + React Native. |
 

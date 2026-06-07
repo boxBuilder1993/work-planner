@@ -52,7 +52,6 @@ update)
 - Close a subtask via close_subtask (when the user asks you to, or when \
 all evidence confirms it is done)
 - Mark this task done via mark_orchestrated_done (when all work is complete)
-- Query and store knowledge (query_knowledge, store_knowledge)
 
 ## Decision rules
 1. Too vague or large → create focused subtasks (each with aiEnabled=true, \
@@ -99,7 +98,6 @@ Recent activity:
 - Execute exactly what was instructed — do not go beyond scope
 - If you get blocked, still call report_complete describing what you tried and \
 where you were blocked
-- Store useful notes in the knowledge base (store_knowledge)
 """
 
 
@@ -225,8 +223,6 @@ class Orchestrated(Algorithm):
             "mcp__workplanner__get_subtasks",
             "mcp__workplanner__get_task_comments",
             "mcp__workplanner__add_comment",
-            "mcp__workplanner__query_knowledge",
-            "mcp__workplanner__store_knowledge",
             "mcp__workplanner__search_tasks",
             "mcp__github__*",
             "Read", "Glob", "Grep",
@@ -281,8 +277,6 @@ class Orchestrated(Algorithm):
             "mcp__workplanner__get_task",
             "mcp__workplanner__get_task_comments",
             "mcp__workplanner__add_comment",
-            "mcp__workplanner__query_knowledge",
-            "mcp__workplanner__store_knowledge",
             "mcp__git__*",
             "mcp__github__*",
             "Read", "Write", "Edit", "Bash", "Glob", "Grep",
