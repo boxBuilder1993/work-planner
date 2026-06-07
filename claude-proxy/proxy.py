@@ -39,11 +39,37 @@ API_KEY = os.environ.get("CLAUDE_PROXY_KEY", "")
 WORKSPACE_BASE = Path(
     os.environ.get("WORKSPACE_BASE", str(Path.home() / ".workplanner" / "workspaces"))
 )
-# Backend URL + auth key used by MCP servers spawned on this host. The poller
-# also sends these in the request body, but its values reflect *its* network
-# view (Railway's `backend.railway.internal` etc.) which doesn't resolve from
-# the Mac. Proxy-side env wins so the MCP always talks to a reachable URL.
-WORKPLANNER_API_URL = os.environ.get("WORKPLANNER_API_URL", "")
+# Make the proxy self-sufficient regardless of how it was launched (`make dev`,
+# `make dev-proxy`, or a bare `uv run python proxy.py`): pull the backend URL +
+# key from the repo-root .env when they aren't already exported. Anything
+# already in the environment wins, so a prod-pointed proxy — which exports its
+# own WORKPLANNER_API_URL — is never overridden.
+def _load_repo_env(env_path: Path | None = None) -> None:
+    env_path = env_path or (REPO_ROOT / ".env")
+    if not env_path.exists():
+        return
+    try:
+        for raw in env_path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            if key in ("WORKPLANNER_API_URL", "INTERNAL_API_KEY") and key not in os.environ:
+                os.environ[key] = val.strip().strip('"').strip("'")
+    except OSError:
+        pass
+
+
+_load_repo_env()
+
+# Backend URL + auth key used by MCP servers / the `wp` CLI spawned on this
+# host. The poller also sends these in the request body, but its values reflect
+# *its* network view (Railway's `backend.railway.internal` etc.) which doesn't
+# resolve from the Mac. Proxy-side env wins so the MCP/CLI always talks to a
+# reachable URL. Defaults to the host-published local backend so a fresh
+# local/office checkout works without exporting anything.
+WORKPLANNER_API_URL = os.environ.get("WORKPLANNER_API_URL", "http://localhost:8080")
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
 JOB_TTL = 300
 RUN_TIMEOUT_SECONDS = int(os.environ.get("PROXY_RUN_TIMEOUT_SECONDS", "600"))
