@@ -41,10 +41,10 @@ services:
       CLAUDE_PROXY_URL: http://host.docker.internal:8400
       # Skip the legacy algorithm path; route @ai mentions to claude-proxy.
       ENABLE_CHAT_HANDLER: "true"
-      # Run the archivist locally too: every new comment is reviewed for
-      # knowledge-base upkeep (create/update/nothing). On by default for dev
-      # and for self-hosted local runs (e.g. a company laptop).
-      ENABLE_ARCHIVIST: "true"
+      # Run the archivist: every new comment is reviewed for knowledge-base
+      # upkeep (create/update/nothing). On by default; set ENABLE_ARCHIVIST=false
+      # in .env to turn it off without editing this file.
+      ENABLE_ARCHIVIST: "${ENABLE_ARCHIVIST:-true}"
       # Fast poll for local iteration.
       POLL_INTERVAL_SECONDS: "15"
       # The poller is root inside the container, so `~` expands to /root —
