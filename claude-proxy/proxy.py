@@ -125,6 +125,15 @@ class StatusResponse(BaseModel):
     metadata: dict = {}
 
 
+def _copy_request(req: RunRequest, update: dict) -> RunRequest:
+    """Clone a RunRequest with field overrides, working on both Pydantic v2
+    (`model_copy`) and v1 (`copy`). The proxy targets v2, but this keeps a
+    runtime-failover dispatch (and thus every persona, incl. the archivist)
+    alive even if the proxy is accidentally launched against a v1 environment."""
+    copier = getattr(req, "model_copy", None) or req.copy
+    return copier(update=update)
+
+
 @dataclass
 class RuntimeSuccess:
     runtime: str
@@ -583,7 +592,7 @@ class RuntimeRouter:
                     continue
                 selected_recommended.append((
                     runtime,
-                    req.model_copy(update={
+                    _copy_request(req, {
                         "preferred_runtime": name,
                         "model": candidate.get("model", req.model),
                         "fallback_runtimes": [],
