@@ -370,5 +370,34 @@ class ClaudeRuntimeChatDispatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outcome.result, "not json at all")
 
 
+class CopyRequestTests(unittest.TestCase):
+    """_copy_request clones a RunRequest with overrides on both Pydantic v2
+    (model_copy) and v1 (copy), so runtime-failover dispatch — and thus every
+    persona, incl. the archivist — survives even on a stray v1 environment."""
+
+    def test_clones_with_overrides_and_leaves_original(self):
+        req = proxy.RunRequest(prompt="x", model="m1")
+        new = proxy._copy_request(req, {"model": "m2", "preferred_runtime": "claude"})
+        self.assertEqual(new.model, "m2")
+        self.assertEqual(new.preferred_runtime, "claude")
+        self.assertEqual(req.model, "m1")  # original untouched
+
+    def test_falls_back_to_copy_when_no_model_copy(self):
+        # A Pydantic-v1-style object: has copy(update=...), no model_copy.
+        class V1Like:
+            def __init__(self, **kw):
+                self.__dict__.update(kw)
+
+            def copy(self, update=None):
+                d = dict(self.__dict__)
+                d.update(update or {})
+                return V1Like(**d)
+
+        obj = V1Like(model="m1")
+        self.assertFalse(hasattr(obj, "model_copy"))
+        out = proxy._copy_request(obj, {"model": "m2"})
+        self.assertEqual(out.model, "m2")
+
+
 if __name__ == "__main__":
     unittest.main()
