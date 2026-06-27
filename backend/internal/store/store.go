@@ -359,7 +359,7 @@ func (s *Store) ListCommentsNeedingAIReply(ctx context.Context) ([]model.Comment
 		SELECT c.id, c.task_id, c.parent_comment_id, c.text, c.comment_type, c.created_by, c.proposal_status, c.proposal_feedback, c.props, c.created_at, c.updated_at
 		FROM comments c
 		WHERE c.text ILIKE '%@ai%'
-		  AND (c.created_by NOT LIKE 'ai-%' OR c.created_by = 'ai-manager')
+		  AND (c.created_by NOT LIKE 'ai-%' OR c.created_by IN ('ai-manager', 'ai-driver'))
 		  AND (
 		    (c.props->>'ai-comment-status') IS NULL
 		    OR (c.props->>'ai-comment-status') = 'failed'
@@ -657,51 +657,61 @@ func (s *Store) GetTaskByID(ctx context.Context, taskID string) (*model.Task, er
 // triggering_comment_id may be nil for sweep-created WorkItems; in that case
 // we always insert (no idempotency check possible).
 func (s *Store) CreateWorkItemIdempotent(ctx context.Context, w *model.WorkItem) (*model.WorkItem, bool, error) {
-	// If a triggering comment is given, check first within a serializable
-	// transaction so concurrent inserts can't both succeed. The unique
-	// partial index is the second line of defense.
+	// Mention-triggered items dedupe on the triggering comment; sweep-created
+	// driver items have none and dedupe on an explicit idempotency_key. Either
+	// way we check-then-insert inside a serializable transaction so concurrent
+	// inserts can't both succeed (the unique partial indexes are the second
+	// line of defense). Items with neither key insert unconditionally.
 	if w.TriggeringCommentID != nil {
-		tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-		if err != nil {
-			return nil, false, err
-		}
-		defer tx.Rollback(ctx) //nolint:errcheck
+		return s.createWorkItemDeduped(ctx, w, "triggering_comment_id = $1", *w.TriggeringCommentID)
+	}
+	if w.IdempotencyKey != nil {
+		return s.createWorkItemDeduped(ctx, w, "idempotency_key = $1", *w.IdempotencyKey)
+	}
+	if err := insertWorkItemPool(ctx, s.pool, w); err != nil {
+		return nil, false, err
+	}
+	return w, true, nil
+}
 
-		var existing model.WorkItem
-		err = tx.QueryRow(ctx, `
-			SELECT id, task_id, triggering_comment_id, target_persona, prompt_context, output,
-			       status, retry_count, max_retries, attempts, last_error,
-			       created_at, updated_at, dispatched_at, completed_at, props
-			FROM work_items
-			WHERE triggering_comment_id = $1
-		`, *w.TriggeringCommentID).Scan(
-			&existing.ID, &existing.TaskID, &existing.TriggeringCommentID, &existing.TargetPersona,
-			&existing.PromptContext, &existing.Output,
-			&existing.Status, &existing.RetryCount, &existing.MaxRetries, &existing.Attempts, &existing.LastError,
-			&existing.CreatedAt, &existing.UpdatedAt, &existing.DispatchedAt, &existing.CompletedAt, &existing.Props,
-		)
-		if err == nil {
-			// Already exists — return existing, don't insert.
-			if err := tx.Commit(ctx); err != nil {
-				return nil, false, err
-			}
-			return &existing, false, nil
-		}
-		if err != pgx.ErrNoRows {
-			return nil, false, err
-		}
+// createWorkItemDeduped check-then-inserts under serializable isolation,
+// returning the existing row (created=false) if one already matches the unique
+// predicate. `whereClause` is a fixed library string ("triggering_comment_id =
+// $1" / "idempotency_key = $1"), never user input — no injection surface.
+func (s *Store) createWorkItemDeduped(ctx context.Context, w *model.WorkItem, whereClause string, arg any) (*model.WorkItem, bool, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
 
-		if err := insertWorkItemTx(ctx, tx, w); err != nil {
-			return nil, false, err
-		}
+	var existing model.WorkItem
+	err = tx.QueryRow(ctx, `
+		SELECT id, task_id, triggering_comment_id, target_persona, prompt_context, output,
+		       status, retry_count, max_retries, attempts, last_error,
+		       created_at, updated_at, dispatched_at, completed_at, props
+		FROM work_items
+		WHERE `+whereClause, arg).Scan(
+		&existing.ID, &existing.TaskID, &existing.TriggeringCommentID, &existing.TargetPersona,
+		&existing.PromptContext, &existing.Output,
+		&existing.Status, &existing.RetryCount, &existing.MaxRetries, &existing.Attempts, &existing.LastError,
+		&existing.CreatedAt, &existing.UpdatedAt, &existing.DispatchedAt, &existing.CompletedAt, &existing.Props,
+	)
+	if err == nil {
+		// Already exists — return existing, don't insert.
 		if err := tx.Commit(ctx); err != nil {
 			return nil, false, err
 		}
-		return w, true, nil
+		return &existing, false, nil
+	}
+	if err != pgx.ErrNoRows {
+		return nil, false, err
 	}
 
-	// No triggering comment → straight insert, no idempotency check.
-	if err := insertWorkItemPool(ctx, s.pool, w); err != nil {
+	if err := insertWorkItemTx(ctx, tx, w); err != nil {
+		return nil, false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, false, err
 	}
 	return w, true, nil
@@ -714,6 +724,7 @@ func insertWorkItemPool(ctx context.Context, pool *pgxpool.Pool, w *model.WorkIt
 		w.ID, w.TaskID, w.TriggeringCommentID, w.TargetPersona,
 		w.PromptContext, w.Output, w.Status, w.RetryCount, w.MaxRetries,
 		w.Attempts, w.LastError, w.CreatedAt, w.UpdatedAt, w.DispatchedAt, w.CompletedAt, w.Props,
+		w.IdempotencyKey,
 	)
 	return err
 }
@@ -723,6 +734,7 @@ func insertWorkItemTx(ctx context.Context, tx pgx.Tx, w *model.WorkItem) error {
 		w.ID, w.TaskID, w.TriggeringCommentID, w.TargetPersona,
 		w.PromptContext, w.Output, w.Status, w.RetryCount, w.MaxRetries,
 		w.Attempts, w.LastError, w.CreatedAt, w.UpdatedAt, w.DispatchedAt, w.CompletedAt, w.Props,
+		w.IdempotencyKey,
 	)
 	return err
 }
@@ -731,8 +743,9 @@ const insertWorkItemSQL = `
 	INSERT INTO work_items (
 		id, task_id, triggering_comment_id, target_persona,
 		prompt_context, output, status, retry_count, max_retries,
-		attempts, last_error, created_at, updated_at, dispatched_at, completed_at, props
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		attempts, last_error, created_at, updated_at, dispatched_at, completed_at, props,
+		idempotency_key
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 `
 
 // GetWorkItem fetches a WorkItem by ID. Returns (nil, nil) on not-found.
