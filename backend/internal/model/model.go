@@ -55,6 +55,9 @@ type WorkItem struct {
 	DispatchedAt        *int64          `json:"dispatchedAt"`
 	CompletedAt         *int64          `json:"completedAt"`
 	Props               json.RawMessage `json:"props"`
+	// IdempotencyKey dedupes sweep-created items that have no triggering
+	// comment (e.g. the driver heartbeat). NULL for mention-triggered items.
+	IdempotencyKey *string `json:"idempotencyKey,omitempty"`
 }
 
 // CreateWorkItemRequest is the body for POST /api/internal/work-items.
@@ -66,6 +69,9 @@ type CreateWorkItemRequest struct {
 	PromptContext       json.RawMessage `json:"promptContext,omitempty"`
 	MaxRetries          *int            `json:"maxRetries,omitempty"`
 	Props               json.RawMessage `json:"props,omitempty"`
+	// IdempotencyKey collapses repeated sweep enqueues (driver heartbeat) to
+	// one WorkItem per key. Omitted for mention-triggered items.
+	IdempotencyKey *string `json:"idempotencyKey,omitempty"`
 }
 
 // UpdateWorkItemRequest is the body for PATCH /api/internal/work-items/:id.

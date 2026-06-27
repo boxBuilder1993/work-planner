@@ -516,6 +516,7 @@ func (h *InternalHandler) CreateWorkItem(w http.ResponseWriter, r *http.Request)
 		CreatedAt:           now,
 		UpdatedAt:           now,
 		Props:               props,
+		IdempotencyKey:      req.IdempotencyKey,
 	}
 
 	result, created, err := h.store.CreateWorkItemIdempotent(r.Context(), wi)
