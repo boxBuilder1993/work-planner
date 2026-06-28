@@ -16,6 +16,9 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [depsFor, setDepsFor] = useState<string | null>(null);
+  const [deps, setDeps] = useState<planner.Dependency[]>([]);
+  const [depErr, setDepErr] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const [s, p] = await Promise.all([planner.getSchedule(), planner.listPeople()]);
@@ -35,7 +38,14 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
   const addTask = async (parentId: string | null) => {
     const title = window.prompt('Task title');
     if (!title) return;
-    await createTask({ title, parentId });
+    const created = await createTask({ title, parentId });
+    // Inherit the parent's assignee as the default for the new child.
+    if (parentId) {
+      const parentRow = rows.find((r) => r.taskId === parentId);
+      if (parentRow?.assigneeId) {
+        await planner.updateTaskPlanner(created.id, { assigneeId: parentRow.assigneeId });
+      }
+    }
     await reload();
   };
   const setEstimate = async (id: string, v: string) => {
@@ -53,6 +63,29 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
       return n;
     });
 
+  const titleOf = (id: string) => rows.find((r) => r.taskId === id)?.title ?? id.slice(0, 8);
+  const openDeps = async (taskId: string) => {
+    setDepsFor(taskId);
+    setDepErr(null);
+    setDeps(await planner.listDependencies(taskId));
+  };
+  const addDep = async (blockerId: string) => {
+    if (!depsFor || !blockerId) return;
+    try {
+      await planner.createDependency(depsFor, blockerId);
+      setDeps(await planner.listDependencies(depsFor));
+      setDepErr(null);
+      await reload();
+    } catch {
+      setDepErr('Could not add — that would create a cycle.');
+    }
+  };
+  const removeDep = async (id: string) => {
+    await planner.deleteDependency(id);
+    if (depsFor) setDeps(await planner.listDependencies(depsFor));
+    await reload();
+  };
+
   const renderRows = (parentId: string | null, depth: number): React.ReactNode[] => {
     const kids = byParent.get(parentId) || [];
     return kids.flatMap((r) => {
@@ -69,6 +102,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
             <span className={styles.taskLink} onClick={() => navigate(`/tasks/${r.taskId}`)}>{r.title}</span>
             <button className={styles.addBtn} title="Add subtask" onClick={() => addTask(r.taskId)}>+sub</button>
             <button className={styles.addBtn} title="Add sibling" onClick={() => addTask(r.parentId)}>+sib</button>
+            <button className={styles.addBtn} title="Dependencies" onClick={() => openDeps(r.taskId)}>&#9741; deps</button>
           </td>
           <td>
             {hasChildren ? (
@@ -110,6 +144,31 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
       </table>
       {topKids.length === 0 && (
         <p className={styles.muted}>{rootId ? 'No subtasks yet.' : 'No tasks yet. Add a project to begin.'}</p>
+      )}
+
+      {depsFor && (
+        <div className={styles.overlay} onClick={() => setDepsFor(null)}>
+          <div className={styles.popup} onClick={(e) => e.stopPropagation()}>
+            <h3>Blocked by — {titleOf(depsFor)}</h3>
+            {deps.length === 0 && <p className={styles.muted}>No dependencies yet.</p>}
+            {deps.map((d) => (
+              <div key={d.id} className={styles.depRow}>
+                <span>{titleOf(d.dependsOnId)}</span>
+                <button className={styles.danger} onClick={() => removeDep(d.id)}>&times;</button>
+              </div>
+            ))}
+            <div className={styles.formRow}>
+              <select className={styles.sel} value="" onChange={(e) => { void addDep(e.target.value); }}>
+                <option value="">+ add blocker…</option>
+                {rows
+                  .filter((r) => r.taskId !== depsFor && !deps.some((d) => d.dependsOnId === r.taskId))
+                  .map((r) => <option key={r.taskId} value={r.taskId}>{r.title}</option>)}
+              </select>
+            </div>
+            {depErr && <p className={styles.error}>{depErr}</p>}
+            <button className={styles.primary} onClick={() => setDepsFor(null)}>Done</button>
+          </div>
+        </div>
       )}
     </div>
   );

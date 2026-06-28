@@ -33,6 +33,10 @@
 .taskLink { cursor: pointer; }
 .taskLink:hover { color: var(--primary); text-decoration: underline; }
 .breakdown { margin-top: var(--spacing-lg); }
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.popup { background: var(--surface); color: var(--on-surface); padding: var(--spacing-lg); border-radius: var(--radius-lg); min-width: 320px; max-width: 480px; box-shadow: var(--shadow-lg); }
+.popup h3 { margin-bottom: var(--spacing-md); }
+.depRow { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-xs) 0; border-bottom: 1px solid var(--divider); }
 
 .table { width: 100%; border-collapse: collapse; font-size: var(--font-size-md); }
 .table th {
