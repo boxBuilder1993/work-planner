@@ -19,6 +19,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
   const [depsFor, setDepsFor] = useState<string | null>(null);
   const [deps, setDeps] = useState<planner.Dependency[]>([]);
   const [depErr, setDepErr] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ parentId: string | null; title: string; estimate: string; assigneeId: string } | null>(null);
 
   const reload = useCallback(async () => {
     const [s, p] = await Promise.all([planner.getSchedule(), planner.listPeople()]);
@@ -35,19 +36,42 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
     byParent.get(k)!.push(r);
   }
 
-  const addTask = async (parentId: string | null) => {
-    const title = window.prompt('Task title');
-    if (!title) return;
-    const created = await createTask({ title, parentId });
-    // Inherit the parent's assignee as the default for the new child.
-    if (parentId) {
-      const parentRow = rows.find((r) => r.taskId === parentId);
-      if (parentRow?.assigneeId) {
-        await planner.updateTaskPlanner(created.id, { assigneeId: parentRow.assigneeId });
-      }
-    }
+  // Begin an inline draft row under `parentId`, pre-filling the assignee from
+  // the parent (cascade default). Nothing hits the backend until Save.
+  const startDraft = (parentId: string | null) => {
+    const parentRow = parentId ? rows.find((r) => r.taskId === parentId) : undefined;
+    if (parentId) setCollapsed((prev) => { const n = new Set(prev); n.delete(parentId); return n; });
+    setDraft({ parentId, title: '', estimate: '', assigneeId: parentRow?.assigneeId ?? '' });
+  };
+  const saveDraft = async () => {
+    if (!draft || !draft.title.trim()) return;
+    const created = await createTask({ title: draft.title.trim(), parentId: draft.parentId });
+    if (draft.estimate !== '') await updateTask(created.id, { duration: Number(draft.estimate) });
+    if (draft.assigneeId) await planner.updateTaskPlanner(created.id, { assigneeId: draft.assigneeId });
+    setDraft(null);
     await reload();
   };
+  const draftRow = (depth: number): React.ReactNode => (
+    <tr key="__draft__" className={styles.draftRow}>
+      <td style={{ paddingLeft: 8 + depth * 18 }}>
+        <span className={styles.toggleSpacer} />
+        <input autoFocus className={styles.txt} placeholder="New task title" value={draft!.title}
+          onChange={(e) => setDraft({ ...draft!, title: e.target.value })}
+          onKeyDown={(e) => { if (e.key === 'Enter') void saveDraft(); if (e.key === 'Escape') setDraft(null); }} />
+        <button className={styles.saveBtn} onClick={() => void saveDraft()}>Save</button>
+        <button className={styles.addBtn} onClick={() => setDraft(null)}>Cancel</button>
+      </td>
+      <td><input className={styles.numIn} type="number" min="0" placeholder="h" value={draft!.estimate}
+        onChange={(e) => setDraft({ ...draft!, estimate: e.target.value })} /></td>
+      <td>
+        <select className={styles.sel} value={draft!.assigneeId} onChange={(e) => setDraft({ ...draft!, assigneeId: e.target.value })}>
+          <option value="">— unassigned —</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </td>
+      <td colSpan={3} />
+    </tr>
+  );
   const setEstimate = async (id: string, v: string) => {
     await updateTask(id, { duration: v === '' ? null : Number(v) });
     await reload();
@@ -88,7 +112,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
 
   const renderRows = (parentId: string | null, depth: number): React.ReactNode[] => {
     const kids = byParent.get(parentId) || [];
-    return kids.flatMap((r) => {
+    const out: React.ReactNode[] = kids.flatMap((r) => {
       const hasChildren = (byParent.get(r.taskId) || []).length > 0;
       const isCollapsed = collapsed.has(r.taskId);
       const row = (
@@ -100,8 +124,8 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
               <span className={styles.toggleSpacer} />
             )}
             <span className={styles.taskLink} onClick={() => navigate(`/tasks/${r.taskId}`)}>{r.title}</span>
-            <button className={styles.addBtn} title="Add subtask" onClick={() => addTask(r.taskId)}>+sub</button>
-            <button className={styles.addBtn} title="Add sibling" onClick={() => addTask(r.parentId)}>+sib</button>
+            <button className={styles.addBtn} title="Add subtask" onClick={() => startDraft(r.taskId)}>+sub</button>
+            <button className={styles.addBtn} title="Add sibling" onClick={() => startDraft(r.parentId)}>+sib</button>
             <button className={styles.addBtn} title="Dependencies" onClick={() => openDeps(r.taskId)}>&#9741; deps</button>
           </td>
           <td>
@@ -125,6 +149,8 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
       );
       return hasChildren && !isCollapsed ? [row, ...renderRows(r.taskId, depth + 1)] : [row];
     });
+    if (draft && draft.parentId === parentId) out.push(draftRow(depth));
+    return out;
   };
 
   if (loading) return <p className={styles.muted}>Loading…</p>;
@@ -133,7 +159,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
   const topKids = byParent.get(start) || [];
   return (
     <div>
-      <button className={styles.primary} onClick={() => addTask(start)}>
+      <button className={styles.primary} onClick={() => startDraft(start)}>
         + {rootId ? 'Subtask' : 'Project'}
       </button>
       <table className={styles.table}>

@@ -32,6 +32,11 @@
 .toggleSpacer { display: inline-block; width: 18px; }
 .taskLink { cursor: pointer; }
 .taskLink:hover { color: var(--primary); text-decoration: underline; }
+.draftRow { background: var(--primary-light); }
+.saveBtn {
+  background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm);
+  padding: 2px 10px; margin-left: var(--spacing-sm); font-size: var(--font-size-sm); cursor: pointer;
+}
 .breakdown { margin-top: var(--spacing-lg); }
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .popup { background: var(--surface); color: var(--on-surface); padding: var(--spacing-lg); border-radius: var(--radius-lg); min-width: 320px; max-width: 480px; box-shadow: var(--shadow-lg); }
