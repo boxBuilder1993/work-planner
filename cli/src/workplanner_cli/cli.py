@@ -631,9 +631,260 @@ def cmd_kn_rm(ctx: click.Context, card_id: str) -> None:
 
 # ─── Entry point ─────────────────────────────────────────────────────
 
-# The click group is `_cli_group`; `main` is the script entry point that
-# wraps it so ApiError surfaces nicely.
-_cli_group = main  # alias the group
+# The click group is `main` while commands register below; the script
+# entry-point wrapper is defined at the very end of this file (after all
+# planner commands) so it doesn't shadow the group during decoration.
+
+
+# ─── Planner: people ─────────────────────────────────────────────────
+
+
+def _resolve_person_id(client: Client, ref: str) -> str:
+    """Accept a UUID, an ID prefix, or an exact name."""
+    if UUID_RE.match(ref):
+        return ref
+    people = client.list_people()
+    matches = [p for p in people if p["id"].startswith(ref)]
+    if not matches:
+        matches = [p for p in people if p.get("name", "").lower() == ref.lower()]
+    if not matches:
+        raise click.ClickException(f"No person matches '{ref}'.")
+    if len(matches) > 1:
+        raise click.ClickException(f"'{ref}' is ambiguous.")
+    return matches[0]["id"]
+
+
+@main.group(name="person")
+def person_cmd() -> None:
+    """Manage the people pool (scheduling resources)."""
+
+
+@person_cmd.command("add")
+@click.argument("name")
+@click.option("--hours", "hours_per_day", type=float, default=None, help="Working hours/day (default 8).")
+@click.option("--email", default=None)
+@click.pass_context
+def person_add(ctx: click.Context, name: str, hours_per_day: float | None, email: str | None) -> None:
+    """Add a person."""
+    p = _get_client(ctx).create_person(name, hours_per_day, email)
+    render.info(f"✓ Added {p['id'][:8]} — {p['name']} ({p['hoursPerDay']}h/day)")
+
+
+@person_cmd.command("ls")
+@click.pass_context
+def person_ls(ctx: click.Context) -> None:
+    """List people."""
+    people = _get_client(ctx).list_people()
+    if not people:
+        render.warn("No people. Add one with `wp person add <name>`.")
+        return
+    for p in people:
+        flag = "" if p.get("active", True) else " [inactive]"
+        render.console.print(f"{p['id'][:8]}  {p['name']:<20} {p['hoursPerDay']}h/day{flag}")
+
+
+@person_cmd.command("rm")
+@click.argument("person_ref")
+@click.pass_context
+def person_rm(ctx: click.Context, person_ref: str) -> None:
+    """Remove a person."""
+    client = _get_client(ctx)
+    pid = _resolve_person_id(client, person_ref)
+    client.delete_person(pid)
+    render.info(f"✓ Removed person {pid[:8]}")
+
+
+@person_cmd.command("set-hours")
+@click.argument("person_ref")
+@click.argument("hours", type=float)
+@click.pass_context
+def person_set_hours(ctx: click.Context, person_ref: str, hours: float) -> None:
+    """Set a person's working hours/day."""
+    client = _get_client(ctx)
+    pid = _resolve_person_id(client, person_ref)
+    client.update_person(pid, {"hoursPerDay": hours})
+    render.info(f"✓ {pid[:8]} now {hours}h/day")
+
+
+@person_cmd.command("off")
+@click.argument("person_ref")
+@click.argument("start")
+@click.argument("end")
+@click.option("--hours", "hours_off", type=float, default=None, help="Hours off/day (omit = full day off).")
+@click.option("--note", default=None)
+@click.pass_context
+def person_off(ctx: click.Context, person_ref: str, start: str, end: str,
+               hours_off: float | None, note: str | None) -> None:
+    """Add time off: PERSON START END (YYYY-MM-DD, inclusive)."""
+    client = _get_client(ctx)
+    pid = _resolve_person_id(client, person_ref)
+    client.create_time_off(pid, start, end, hours_off, note)
+    kind = f"{hours_off}h/day" if hours_off else "full days"
+    render.info(f"✓ Time off {pid[:8]}: {start}..{end} ({kind})")
+
+
+# ─── Planner: calendar + holidays ────────────────────────────────────
+
+
+@main.group(name="calendar")
+def calendar_cmd() -> None:
+    """View/configure the shared calendar."""
+
+
+@calendar_cmd.command("show")
+@click.pass_context
+def calendar_show(ctx: click.Context) -> None:
+    """Show the calendar + holidays."""
+    client = _get_client(ctx)
+    c = client.get_calendar()
+    render.console.print(f"Calendar {c['id'][:8]}  weekend bitmask={c['weekendDays']} (Mon=1..Sun=64; Sat+Sun=96)")
+    hols = client.list_holidays(c["id"])
+    if hols:
+        render.console.print("Holidays:")
+        for h in hols:
+            render.console.print(f"  {h['day']}  {h.get('name') or ''}  ({h['id'][:8]})")
+
+
+@calendar_cmd.command("weekends")
+@click.argument("bitmask", type=int)
+@click.pass_context
+def calendar_weekends(ctx: click.Context, bitmask: int) -> None:
+    """Set weekend bitmask (Mon=1..Sun=64; Sat+Sun=96)."""
+    c = _get_client(ctx).upsert_calendar(bitmask)
+    render.info(f"✓ weekend_days = {c['weekendDays']}")
+
+
+@calendar_cmd.group("holiday")
+def holiday_cmd() -> None:
+    """Manage company holidays."""
+
+
+@holiday_cmd.command("add")
+@click.argument("day")
+@click.option("--name", default=None)
+@click.pass_context
+def holiday_add(ctx: click.Context, day: str, name: str | None) -> None:
+    """Add a holiday (YYYY-MM-DD)."""
+    client = _get_client(ctx)
+    c = client.get_calendar()
+    h = client.create_holiday(c["id"], day, name)
+    render.info(f"✓ Holiday {day} added ({h['id'][:8]})")
+
+
+@holiday_cmd.command("rm")
+@click.argument("holiday_id")
+@click.pass_context
+def holiday_rm(ctx: click.Context, holiday_id: str) -> None:
+    """Remove a holiday by id."""
+    _get_client(ctx).delete_holiday(holiday_id)
+    render.info(f"✓ Removed holiday {holiday_id[:8]}")
+
+
+# ─── Planner: dependencies ───────────────────────────────────────────
+
+
+@main.group(name="dep")
+def dep_cmd() -> None:
+    """Manage task dependencies (blocked-by)."""
+
+
+@dep_cmd.command("add")
+@click.argument("task_ref")
+@click.argument("blocker_ref")
+@click.pass_context
+def dep_add(ctx: click.Context, task_ref: str, blocker_ref: str) -> None:
+    """Make TASK blocked-by BLOCKER."""
+    client = _get_client(ctx)
+    tid = _resolve_task_id(client, task_ref)
+    bid = _resolve_task_id(client, blocker_ref)
+    try:
+        client.create_dependency(tid, bid)
+    except ApiError as e:
+        if e.status == 409:
+            raise click.ClickException("That dependency would create a cycle.")
+        raise
+    render.info(f"✓ {tid[:8]} blocked by {bid[:8]}")
+
+
+@dep_cmd.command("ls")
+@click.argument("task_ref")
+@click.pass_context
+def dep_ls(ctx: click.Context, task_ref: str) -> None:
+    """List a task's dependencies."""
+    client = _get_client(ctx)
+    tid = _resolve_task_id(client, task_ref)
+    deps = client.list_dependencies(tid)
+    if not deps:
+        render.console.print("(no dependencies)")
+        return
+    for d in deps:
+        render.console.print(f"  blocked by {d['dependsOnId'][:8]}  (dep {d['id'][:8]})")
+
+
+@dep_cmd.command("rm")
+@click.argument("dependency_id")
+@click.pass_context
+def dep_rm(ctx: click.Context, dependency_id: str) -> None:
+    """Remove a dependency by id."""
+    _get_client(ctx).delete_dependency(dependency_id)
+    render.info(f"✓ Removed dependency {dependency_id[:8]}")
+
+
+# ─── Planner: plan inputs + schedule ─────────────────────────────────
+
+
+@main.command("plan")
+@click.argument("task_ref")
+@click.option("--estimate", type=float, default=None, help="Estimate hours (sets duration).")
+@click.option("--assignee", default=None, help="Person ref; '' to clear.")
+@click.option("--buffer", "buffer_hours", type=float, default=None, help="Buffer hours (parent reserve).")
+@click.pass_context
+def cmd_plan(ctx: click.Context, task_ref: str, estimate: float | None,
+             assignee: str | None, buffer_hours: float | None) -> None:
+    """Set planner inputs on a task: --estimate / --assignee / --buffer."""
+    client = _get_client(ctx)
+    tid = _resolve_task_id(client, task_ref)
+    if estimate is not None:
+        client.update_task(tid, {"duration": estimate})
+    fields: dict[str, Any] = {}
+    if assignee is not None:
+        fields["assigneeId"] = "" if assignee == "" else _resolve_person_id(client, assignee)
+    if buffer_hours is not None:
+        fields["bufferHours"] = buffer_hours
+    if fields:
+        client.update_task_planner(tid, fields)
+    render.info(f"✓ Updated plan for {tid[:8]}")
+
+
+@main.command("schedule")
+@click.option("--start", default=None, help="Project start YYYY-MM-DD (default today).")
+@click.option("--csv", "as_csv", is_flag=True, help="Output CSV (Google-Sheets-import-ready).")
+@click.pass_context
+def cmd_schedule(ctx: click.Context, start: str | None, as_csv: bool) -> None:
+    """Generate and show the execution schedule."""
+    rows = _get_client(ctx).get_schedule(start)
+    if as_csv:
+        import csv
+        w = csv.writer(sys.stdout)
+        w.writerow(["task_id", "title", "assignee", "estimate_hours", "start", "end", "on_critical_path", "status"])
+        for r in rows:
+            w.writerow([r["taskId"], r["title"], r.get("assigneeName") or "",
+                        r.get("estimateHours") or "", r.get("start") or "", r.get("end") or "",
+                        r.get("onCriticalPath"), r.get("status")])
+        return
+    if not rows:
+        render.warn("Nothing to schedule. Add tasks with estimates + assignees.")
+        return
+    for r in rows:
+        star = "★" if r.get("onCriticalPath") else " "
+        sched = f"{r.get('start') or '—'} → {r.get('end') or '—'}"
+        who = r.get("assigneeName") or "-"
+        render.console.print(f"{star} {sched:<24} {who:<16} {r['title']}")
+
+
+# ─── Entry point (defined last so it doesn't shadow the group above) ──
+
+_cli_group = main  # the click.Group with all commands registered
 
 
 def main() -> None:  # type: ignore[no-redef]

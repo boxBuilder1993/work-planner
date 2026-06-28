@@ -209,3 +209,80 @@ class Client:
 
     def delete_knowledge_card(self, card_id: str) -> None:
         self._delete(f"/api/internal/knowledge-cards/{card_id}")
+
+    # ── Planner: people + time off ───────────────────────
+
+    def list_people(self) -> list[dict]:
+        return self._get("/api/internal/people")
+
+    def create_person(self, name: str, hours_per_day: float | None = None, email: str | None = None) -> dict:
+        body: dict[str, Any] = {"name": name}
+        if hours_per_day is not None:
+            body["hoursPerDay"] = hours_per_day
+        if email:
+            body["email"] = email
+        return self._post("/api/internal/people", body)
+
+    def update_person(self, person_id: str, fields: dict) -> dict:
+        return self._patch(f"/api/internal/people/{person_id}", fields)
+
+    def delete_person(self, person_id: str) -> None:
+        self._delete(f"/api/internal/people/{person_id}")
+
+    def create_time_off(self, person_id: str, start: str, end: str,
+                        hours_off: float | None = None, note: str | None = None) -> dict:
+        body: dict[str, Any] = {"startDay": start, "endDay": end}
+        if hours_off is not None:
+            body["hoursOff"] = hours_off
+        if note:
+            body["note"] = note
+        return self._post(f"/api/internal/people/{person_id}/time-off", body)
+
+    def list_time_off(self, person_id: str) -> list[dict]:
+        return self._get(f"/api/internal/people/{person_id}/time-off")
+
+    def delete_time_off(self, time_off_id: str) -> None:
+        self._delete(f"/api/internal/time-off/{time_off_id}")
+
+    # ── Planner: calendar + holidays ─────────────────────
+
+    def get_calendar(self) -> dict:
+        return self._get("/api/internal/calendar")
+
+    def upsert_calendar(self, weekend_days: int) -> dict:
+        return self._http_put("/api/internal/calendar", {"weekendDays": weekend_days})
+
+    def create_holiday(self, calendar_id: str, day: str, name: str | None = None) -> dict:
+        body: dict[str, Any] = {"day": day}
+        if name:
+            body["name"] = name
+        return self._post(f"/api/internal/calendar/{calendar_id}/holidays", body)
+
+    def list_holidays(self, calendar_id: str) -> list[dict]:
+        return self._get(f"/api/internal/calendar/{calendar_id}/holidays")
+
+    def delete_holiday(self, holiday_id: str) -> None:
+        self._delete(f"/api/internal/holidays/{holiday_id}")
+
+    # ── Planner: dependencies + scheduling ───────────────
+
+    def create_dependency(self, task_id: str, depends_on_id: str) -> dict:
+        return self._post(f"/api/internal/tasks/{task_id}/dependencies", {"dependsOnId": depends_on_id})
+
+    def list_dependencies(self, task_id: str) -> list[dict]:
+        return self._get(f"/api/internal/tasks/{task_id}/dependencies")
+
+    def delete_dependency(self, dependency_id: str) -> None:
+        self._delete(f"/api/internal/dependencies/{dependency_id}")
+
+    def update_task_planner(self, task_id: str, fields: dict) -> dict:
+        return self._patch(f"/api/internal/tasks/{task_id}/planner", fields)
+
+    def get_schedule(self, start: str | None = None) -> list[dict]:
+        params = {"start": start} if start else None
+        return self._get("/api/internal/schedule", params=params)
+
+    def _http_put(self, path: str, body: dict[str, Any]) -> Any:
+        r = self._http.put(path, json=body)
+        self._raise(r)
+        return r.json()
