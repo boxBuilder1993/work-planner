@@ -167,6 +167,17 @@ func main() {
 	internalMux.HandleFunc("/api/internal/knowledge-cards", func(w http.ResponseWriter, r *http.Request) {
 		internalHandler.ServeHTTP(w, r)
 	})
+	// Planner internal routes.
+	for _, p := range []string{
+		"/api/internal/people", "/api/internal/people/",
+		"/api/internal/calendar", "/api/internal/calendar/",
+		"/api/internal/holidays/", "/api/internal/time-off/",
+		"/api/internal/dependencies/", "/api/internal/schedule",
+	} {
+		internalMux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {
+			internalHandler.ServeHTTP(w, r)
+		})
+	}
 
 	// Apply auth middleware to protected routes.
 	authMw := middleware.AuthMiddleware(a, internalAPIKey)
