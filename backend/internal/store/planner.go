@@ -17,6 +17,9 @@ import (
 // ErrDependencyCycle is returned when adding a dependency would create a cycle.
 var ErrDependencyCycle = errors.New("dependency would create a cycle")
 
+// ErrReparentCycle is returned when re-parenting would make a task its own ancestor.
+var ErrReparentCycle = errors.New("re-parent would create a cycle")
+
 // ─── Calendar ────────────────────────────────────────────────────────────────
 
 // GetOrCreateCalendar returns the workspace's single shared calendar, creating
@@ -291,6 +294,34 @@ func (s *Store) UpdateTaskPlanner(ctx context.Context, taskID string, req *model
 		args = append(args, *req.BufferHours)
 		i++
 	}
+	if req.ParentID != nil {
+		if *req.ParentID == "" {
+			set = append(set, "parent_id = NULL")
+		} else {
+			if *req.ParentID == taskID {
+				return false, ErrReparentCycle
+			}
+			// Reject if taskID is an ancestor of the new parent (would loop).
+			var hit int
+			cerr := s.pool.QueryRow(ctx, `
+				WITH RECURSIVE anc(id) AS (
+					SELECT parent_id FROM tasks WHERE id = $1
+					UNION
+					SELECT t.parent_id FROM tasks t JOIN anc ON t.id = anc.id
+				)
+				SELECT 1 FROM anc WHERE id = $2 LIMIT 1
+			`, *req.ParentID, taskID).Scan(&hit)
+			if cerr == nil {
+				return false, ErrReparentCycle
+			}
+			if cerr != pgx.ErrNoRows {
+				return false, cerr
+			}
+			set = append(set, fmt.Sprintf("parent_id = $%d", i))
+			args = append(args, *req.ParentID)
+			i++
+		}
+	}
 	if len(set) == 0 {
 		return true, nil
 	}
@@ -331,7 +362,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 	}
 	taskRows, err := s.pool.Query(ctx, `
 		SELECT id, parent_id, title, status, assignee_id, duration, buffer_hours
-		FROM tasks WHERE user_id = $1 AND status != 'CLOSED'
+		FROM tasks WHERE user_id = $1
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -427,6 +458,9 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 	// 6. Build input + run engine.
 	in := planner.Input{StartDate: startDate, Persons: persons, TimeOff: timeOff, Calendar: planner.Calendar{WeekendDays: cal.WeekendDays, Holidays: holidays}}
 	for _, r := range rows {
+		if r.status == "CLOSED" {
+			continue // done work doesn't get scheduled or occupy capacity
+		}
 		t := planner.Task{ID: r.id, EstimateHours: deref(r.duration), BufferHours: deref(r.buffer), BlockedBy: blockedBy[r.id]}
 		if r.parentID != nil {
 			t.ParentID = *r.parentID
@@ -483,7 +517,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 		}
 		row := model.ScheduleRow{
 			TaskID: r.id, Title: r.title, ParentID: r.parentID, AssigneeID: r.assigneeID,
-			EstimateHours: est, Status: r.status,
+			EstimateHours: est, BufferHours: r.buffer, DependencyCount: len(blockedBy[r.id]), Status: r.status,
 			Start: sc.Start, End: sc.End, OnCriticalPath: sc.OnCriticalPath,
 		}
 		if r.assigneeID != nil {

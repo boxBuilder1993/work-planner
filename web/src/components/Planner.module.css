@@ -70,3 +70,14 @@
 .personRow { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-xs) 0; flex-wrap: wrap; }
 .dayChk { font-size: var(--font-size-sm); display: flex; align-items: center; gap: 2px; }
 .timeOff { display: inline-flex; align-items: center; gap: 4px; }
+
+/* tree UX batch */
+.treeToolbar { display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md); }
+.rootDrop { margin-left: auto; font-size: var(--font-size-sm); color: var(--on-surface-secondary); border: 1px dashed var(--divider); border-radius: var(--radius-sm); padding: 4px 8px; }
+.rowActions { opacity: 0; transition: opacity 0.1s; white-space: nowrap; }
+tr:hover .rowActions { opacity: 1; }
+.iconBtn { background: none; border: none; cursor: pointer; margin-left: 4px; font-size: var(--font-size-md); color: var(--on-surface-secondary); }
+.iconBtn:hover { color: var(--primary); }
+.depBadge { font-size: var(--font-size-sm); color: var(--warning); margin-left: 6px; }
+.done { text-decoration: line-through; color: var(--on-surface-secondary); }
+.statusSel { padding: 4px; border: 1px solid var(--divider); border-radius: var(--radius-sm); font-size: var(--font-size-sm); }

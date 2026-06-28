@@ -302,6 +302,10 @@ func (h *InternalHandler) UpdateTaskPlanner(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	ok, err := h.store.UpdateTaskPlanner(r.Context(), taskID, &req)
+	if errors.Is(err, store.ErrReparentCycle) {
+		writeError(w, http.StatusConflict, "re-parent would create a cycle")
+		return
+	}
 	if err != nil {
 		log.Printf("UpdateTaskPlanner: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to update task planner fields")

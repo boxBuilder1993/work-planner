@@ -99,6 +99,8 @@ type CreateDependencyRequest struct {
 type UpdateTaskPlannerRequest struct {
 	AssigneeID  *string  `json:"assigneeId,omitempty"`
 	BufferHours *float64 `json:"bufferHours,omitempty"`
+	// ParentID re-parents the task. "" → make it a root. Cycle-guarded.
+	ParentID *string `json:"parentId,omitempty"`
 }
 
 // ScheduleRow is one row of the generated execution schedule, enriched for the
@@ -109,9 +111,11 @@ type ScheduleRow struct {
 	ParentID       *string  `json:"parentId"`
 	AssigneeID     *string  `json:"assigneeId"`
 	AssigneeName   *string  `json:"assigneeName"`
-	EstimateHours  *float64 `json:"estimateHours"`
-	Status         string   `json:"status"`
-	Start          string   `json:"start"` // YYYY-MM-DD, empty if unscheduled
-	End            string   `json:"end"`
-	OnCriticalPath bool     `json:"onCriticalPath"`
+	EstimateHours   *float64 `json:"estimateHours"`
+	BufferHours     *float64 `json:"bufferHours"`
+	DependencyCount int      `json:"dependencyCount"`
+	Status          string   `json:"status"`
+	Start           string   `json:"start"` // YYYY-MM-DD, empty if unscheduled
+	End             string   `json:"end"`
+	OnCriticalPath  bool     `json:"onCriticalPath"`
 }

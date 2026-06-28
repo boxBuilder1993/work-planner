@@ -41,6 +41,8 @@ export interface ScheduleRow {
   assigneeId: string | null;
   assigneeName: string | null;
   estimateHours: number | null;
+  bufferHours: number | null;
+  dependencyCount: number;
   status: string;
   start: string;
   end: string;
@@ -72,7 +74,7 @@ export const listDependencies = (taskId: string) => apiFetch<Dependency[]>(`/api
 export const createDependency = (taskId: string, dependsOnId: string) =>
   apiPost<Dependency>(`/api/tasks/${taskId}/dependencies`, { dependsOnId });
 export const deleteDependency = (id: string) => apiDelete(`/api/dependencies/${id}`);
-export const updateTaskPlanner = (taskId: string, b: Partial<{ assigneeId: string; bufferHours: number }>) =>
+export const updateTaskPlanner = (taskId: string, b: Partial<{ assigneeId: string; bufferHours: number; parentId: string }>) =>
   apiPatch(`/api/tasks/${taskId}/planner`, b);
 export const getSchedule = (start?: string) =>
   apiFetch<ScheduleRow[]>(`/api/schedule${start ? `?start=${start}` : ''}`);
