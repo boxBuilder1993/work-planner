@@ -15,6 +15,16 @@ import (
 // mirroring the task endpoints. See docs/PLANNER_IMPLEMENTATION.md.
 
 const errDBPlanner = "database error"
+const errResolveUser = "userId required (could not resolve a sole user)"
+
+// resolveUserID uses the explicit id if given, else falls back to the sole user
+// (single-user deployments), mirroring task creation.
+func (h *InternalHandler) resolveUserID(r *http.Request, explicit string) (string, error) {
+	if explicit != "" {
+		return explicit, nil
+	}
+	return h.store.GetSoleUserID(r.Context())
+}
 
 // ─── People ──────────────────────────────────────────────────────────────────
 
@@ -24,15 +34,20 @@ func (h *InternalHandler) CreatePerson(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.UserID == "" || req.Name == "" {
-		writeError(w, http.StatusBadRequest, "userId and name are required")
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	userID, err := h.resolveUserID(r, req.UserID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errResolveUser)
 		return
 	}
 	hpd := 8.0
 	if req.HoursPerDay != nil {
 		hpd = *req.HoursPerDay
 	}
-	p, err := h.store.CreatePerson(r.Context(), req.UserID, req.Name, req.Email, hpd)
+	p, err := h.store.CreatePerson(r.Context(), userID, req.Name, req.Email, hpd)
 	if err != nil {
 		log.Printf("CreatePerson: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create person")
@@ -42,9 +57,9 @@ func (h *InternalHandler) CreatePerson(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *InternalHandler) ListPeople(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		writeError(w, http.StatusBadRequest, "user_id is required")
+	userID, err := h.resolveUserID(r, r.URL.Query().Get("user_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errResolveUser)
 		return
 	}
 	people, err := h.store.ListPeople(r.Context(), userID)
@@ -139,9 +154,9 @@ func (h *InternalHandler) DeleteTimeOff(w http.ResponseWriter, r *http.Request) 
 // ─── Calendar + holidays ─────────────────────────────────────────────────────
 
 func (h *InternalHandler) GetCalendar(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		writeError(w, http.StatusBadRequest, "user_id is required")
+	userID, err := h.resolveUserID(r, r.URL.Query().Get("user_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errResolveUser)
 		return
 	}
 	c, err := h.store.GetOrCreateCalendar(r.Context(), userID)
@@ -159,11 +174,12 @@ func (h *InternalHandler) UpsertCalendar(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.UserID == "" {
-		writeError(w, http.StatusBadRequest, "userId is required")
+	userID, err := h.resolveUserID(r, req.UserID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errResolveUser)
 		return
 	}
-	c, err := h.store.GetOrCreateCalendar(r.Context(), req.UserID)
+	c, err := h.store.GetOrCreateCalendar(r.Context(), userID)
 	if err != nil {
 		log.Printf("UpsertCalendar(get): %v", err)
 		writeError(w, http.StatusInternalServerError, errDBPlanner)
@@ -173,7 +189,7 @@ func (h *InternalHandler) UpsertCalendar(w http.ResponseWriter, r *http.Request)
 	if req.WeekendDays != nil {
 		wd = *req.WeekendDays
 	}
-	c, err = h.store.UpsertCalendar(r.Context(), req.UserID, wd)
+	c, err = h.store.UpsertCalendar(r.Context(), userID, wd)
 	if err != nil {
 		log.Printf("UpsertCalendar: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to update calendar")
@@ -301,9 +317,9 @@ func (h *InternalHandler) UpdateTaskPlanner(w http.ResponseWriter, r *http.Reque
 // GetSchedule recomputes the workspace schedule and returns enriched rows.
 // ?user_id=required &start=YYYY-MM-DD (defaults to today).
 func (h *InternalHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		writeError(w, http.StatusBadRequest, "user_id is required")
+	userID, err := h.resolveUserID(r, r.URL.Query().Get("user_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errResolveUser)
 		return
 	}
 	start := r.URL.Query().Get("start")
