@@ -1,0 +1,301 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { createTask, updateTask } from '../api/tasks';
+import * as planner from '../api/planner';
+import type { Person, Holiday, ScheduleRow } from '../api/planner';
+import styles from './Planner.module.css';
+
+type Tab = 'plan' | 'schedule' | 'team';
+
+const WEEKDAYS = [
+  { label: 'Mon', bit: 1 }, { label: 'Tue', bit: 2 }, { label: 'Wed', bit: 4 },
+  { label: 'Thu', bit: 8 }, { label: 'Fri', bit: 16 }, { label: 'Sat', bit: 32 }, { label: 'Sun', bit: 64 },
+];
+
+export default function Planner() {
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>('plan');
+  const [rows, setRows] = useState<ScheduleRow[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [s, p] = await Promise.all([planner.getSchedule(), planner.listPeople()]);
+      setRows(s);
+      setPeople(p);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void reload(); }, [reload]);
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.topBar}>
+        <button className={styles.back} onClick={() => navigate('/tasks')}>&larr;</button>
+        <span className={styles.title}>Planner</span>
+        <div className={styles.tabs}>
+          {(['plan', 'schedule', 'team'] as Tab[]).map((t) => (
+            <button key={t} className={`${styles.tab} ${tab === t ? styles.tabActive : ''}`} onClick={() => setTab(t)}>
+              {t === 'plan' ? 'Plan' : t === 'schedule' ? 'Schedule' : 'Team & Calendar'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error && <div className={styles.error}>{error}</div>}
+      {loading && <div className={styles.muted}>Loading…</div>}
+
+      {!loading && tab === 'plan' && <PlanTab rows={rows} people={people} reload={reload} />}
+      {!loading && tab === 'schedule' && <ScheduleTab rows={rows} />}
+      {!loading && tab === 'team' && <TeamTab people={people} reload={reload} />}
+    </div>
+  );
+}
+
+// ─── Plan tab: editable tree-table ───────────────────────────────────
+
+function PlanTab({ rows, people, reload }: { rows: ScheduleRow[]; people: Person[]; reload: () => Promise<void> }) {
+  const byParent = new Map<string | null, ScheduleRow[]>();
+  for (const r of rows) {
+    const k = r.parentId;
+    if (!byParent.has(k)) byParent.set(k, []);
+    byParent.get(k)!.push(r);
+  }
+
+  const addTask = async (parentId: string | null) => {
+    const title = window.prompt(parentId ? 'New subtask title' : 'New project title');
+    if (!title) return;
+    await createTask({ title, parentId });
+    await reload();
+  };
+
+  const setEstimate = async (id: string, val: string) => {
+    const n = val === '' ? null : Number(val);
+    await updateTask(id, { duration: n });
+    await reload();
+  };
+
+  const setAssignee = async (id: string, assigneeId: string) => {
+    await planner.updateTaskPlanner(id, { assigneeId });
+    await reload();
+  };
+
+  const renderRows = (parentId: string | null, depth: number): React.ReactNode[] => {
+    const kids = byParent.get(parentId) || [];
+    return kids.flatMap((r) => {
+      const hasChildren = (byParent.get(r.taskId) || []).length > 0;
+      return [
+        <tr key={r.taskId} className={r.onCriticalPath ? styles.critical : undefined}>
+          <td style={{ paddingLeft: 8 + depth * 18 }}>
+            {hasChildren ? '▸ ' : ''}{r.title}
+            <button className={styles.addBtn} title="Add subtask" onClick={() => addTask(r.taskId)}>+</button>
+          </td>
+          <td>
+            {hasChildren ? (
+              <span className={styles.muted}>{r.estimateHours ?? '—'}</span>
+            ) : (
+              <input
+                className={styles.numIn}
+                type="number"
+                min="0"
+                defaultValue={r.estimateHours ?? ''}
+                onBlur={(e) => setEstimate(r.taskId, e.target.value)}
+              />
+            )}
+          </td>
+          <td>
+            <select className={styles.sel} value={r.assigneeId ?? ''} onChange={(e) => setAssignee(r.taskId, e.target.value)}>
+              <option value="">— unassigned —</option>
+              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </td>
+          <td className={styles.date}>{r.start || '—'}</td>
+          <td className={styles.date}>{r.end || '—'}</td>
+          <td className={styles.cp}>{r.onCriticalPath ? '★' : ''}</td>
+        </tr>,
+        ...renderRows(r.taskId, depth + 1),
+      ];
+    });
+  };
+
+  return (
+    <div className={styles.body}>
+      <button className={styles.primary} onClick={() => addTask(null)}>+ Project</button>
+      <table className={styles.table}>
+        <thead>
+          <tr><th>Task</th><th>Est (h)</th><th>Assignee</th><th>Start</th><th>End</th><th>CP</th></tr>
+        </thead>
+        <tbody>{renderRows(null, 0)}</tbody>
+      </table>
+      {rows.length === 0 && <p className={styles.muted}>No tasks yet. Add a project to begin.</p>}
+    </div>
+  );
+}
+
+// ─── Schedule tab: per-person execution view + CSV ───────────────────
+
+function ScheduleTab({ rows }: { rows: ScheduleRow[] }) {
+  const scheduled = rows.filter((r) => r.start);
+  const byPerson = new Map<string, ScheduleRow[]>();
+  for (const r of scheduled) {
+    const k = r.assigneeName || '— unassigned —';
+    if (!byPerson.has(k)) byPerson.set(k, []);
+    byPerson.get(k)!.push(r);
+  }
+
+  const exportCsv = () => {
+    const header = ['task_id', 'title', 'assignee', 'estimate_hours', 'start', 'end', 'on_critical_path', 'status'];
+    const cell = (v: unknown) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [header.join(',')];
+    for (const r of rows) {
+      lines.push([r.taskId, r.title, r.assigneeName ?? '', r.estimateHours ?? '', r.start, r.end, r.onCriticalPath, r.status].map(cell).join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'schedule.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className={styles.body}>
+      <button className={styles.primary} onClick={exportCsv}>Export CSV</button>
+      {scheduled.length === 0 && <p className={styles.muted}>Nothing scheduled. Give tasks an estimate + assignee.</p>}
+      {[...byPerson.entries()].map(([person, prs]) => (
+        <div key={person} className={styles.lane}>
+          <h3 className={styles.laneTitle}>{person}</h3>
+          {prs.map((r) => (
+            <div key={r.taskId} className={`${styles.schedRow} ${r.onCriticalPath ? styles.critical : ''}`}>
+              <span className={styles.date}>{r.start} → {r.end}</span>
+              <span>{r.onCriticalPath ? '★ ' : ''}{r.title}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Team & Calendar tab ─────────────────────────────────────────────
+
+function TeamTab({ people, reload }: { people: Person[]; reload: () => Promise<void> }) {
+  const [name, setName] = useState('');
+  const [hours, setHours] = useState('8');
+  const [weekend, setWeekend] = useState(96);
+  const [calId, setCalId] = useState<string>('');
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [holDay, setHolDay] = useState('');
+  const [holName, setHolName] = useState('');
+
+  const loadCal = useCallback(async () => {
+    const c = await planner.getCalendar();
+    setWeekend(c.weekendDays);
+    setCalId(c.id);
+    setHolidays(await planner.listHolidays(c.id));
+  }, []);
+  useEffect(() => { void loadCal(); }, [loadCal]);
+
+  const addPerson = async () => {
+    if (!name.trim()) return;
+    await planner.createPerson({ name: name.trim(), hoursPerDay: Number(hours) || 8 });
+    setName('');
+    await reload();
+  };
+
+  const toggleWeekend = async (bit: number) => {
+    const next = weekend ^ bit;
+    setWeekend(next);
+    await planner.upsertCalendar(next);
+  };
+
+  const addHoliday = async () => {
+    if (!holDay || !calId) return;
+    await planner.createHoliday(calId, { day: holDay, name: holName || undefined });
+    setHolDay(''); setHolName('');
+    setHolidays(await planner.listHolidays(calId));
+  };
+
+  return (
+    <div className={styles.body}>
+      <section className={styles.section}>
+        <h3>People</h3>
+        <div className={styles.formRow}>
+          <input className={styles.txt} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={styles.numIn} type="number" min="0" value={hours} onChange={(e) => setHours(e.target.value)} title="Hours/day" />
+          <button className={styles.primary} onClick={addPerson}>Add person</button>
+        </div>
+        {people.map((p) => (
+          <div key={p.id} className={styles.personRow}>
+            <span>{p.name}</span>
+            <input
+              className={styles.numIn}
+              type="number"
+              min="0"
+              defaultValue={p.hoursPerDay}
+              onBlur={async (e) => { await planner.updatePerson(p.id, { hoursPerDay: Number(e.target.value) }); }}
+              title="Hours/day"
+            />
+            <span className={styles.muted}>h/day</span>
+            <TimeOffEditor personId={p.id} />
+            <button className={styles.danger} onClick={async () => { await planner.deletePerson(p.id); await reload(); }}>Remove</button>
+          </div>
+        ))}
+      </section>
+
+      <section className={styles.section}>
+        <h3>Calendar</h3>
+        <div className={styles.formRow}>
+          <span className={styles.muted}>Weekend / non-working days:</span>
+          {WEEKDAYS.map((d) => (
+            <label key={d.bit} className={styles.dayChk}>
+              <input type="checkbox" checked={(weekend & d.bit) !== 0} onChange={() => toggleWeekend(d.bit)} /> {d.label}
+            </label>
+          ))}
+        </div>
+        <div className={styles.formRow}>
+          <input className={styles.txt} type="date" value={holDay} onChange={(e) => setHolDay(e.target.value)} />
+          <input className={styles.txt} placeholder="Holiday name" value={holName} onChange={(e) => setHolName(e.target.value)} />
+          <button className={styles.primary} onClick={addHoliday}>Add holiday</button>
+        </div>
+        {holidays.map((h) => (
+          <div key={h.id} className={styles.personRow}>
+            <span>{h.day}</span><span className={styles.muted}>{h.name}</span>
+            <button className={styles.danger} onClick={async () => { await planner.deleteHoliday(h.id); setHolidays(await planner.listHolidays(calId)); }}>×</button>
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function TimeOffEditor({ personId }: { personId: string }) {
+  const [open, setOpen] = useState(false);
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [half, setHalf] = useState(false);
+  const add = async () => {
+    if (!start || !end) return;
+    await planner.createTimeOff(personId, { startDay: start, endDay: end, hoursOff: half ? 4 : undefined });
+    setStart(''); setEnd(''); setOpen(false);
+  };
+  if (!open) return <button className={styles.linkBtn} onClick={() => setOpen(true)}>+ time off</button>;
+  return (
+    <span className={styles.timeOff}>
+      <input className={styles.txt} type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+      <input className={styles.txt} type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+      <label className={styles.muted}><input type="checkbox" checked={half} onChange={(e) => setHalf(e.target.checked)} /> ½</label>
+      <button className={styles.primary} onClick={add}>Save</button>
+    </span>
+  );
+}
