@@ -9,6 +9,7 @@ import TaskItem from './TaskItem';
 import CommentSection from './CommentSection';
 import Markdown from './Markdown';
 import PriorityBadge from './PriorityBadge';
+import PlanTree from './PlanTree';
 import styles from './TaskDetail.module.css';
 
 /**
@@ -436,6 +437,14 @@ export default function TaskDetail() {
                 </div>
               </details>
             )}
+          </div>
+        )}
+
+        {/* Breakdown: this task viewed as a project (recursive plan tree) */}
+        {!isNew && existingTask && (
+          <div className={styles.subtasksSection}>
+            <span className={styles.subtasksTitle}>Breakdown (plan)</span>
+            <PlanTree rootId={existingTask.id} />
           </div>
         )}
 

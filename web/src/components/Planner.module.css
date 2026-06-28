@@ -25,9 +25,12 @@
 .danger { background: none; border: none; color: var(--error); font-size: var(--font-size-sm); }
 .linkBtn { background: none; border: none; color: var(--primary); font-size: var(--font-size-sm); }
 .addBtn {
-  background: none; border: none; color: var(--primary); font-weight: 700;
+  background: none; border: none; color: var(--primary); font-size: var(--font-size-sm);
   margin-left: var(--spacing-sm); cursor: pointer;
 }
+.toggle { background: none; border: none; cursor: pointer; color: var(--on-surface-secondary); width: 18px; padding: 0; }
+.toggleSpacer { display: inline-block; width: 18px; }
+.breakdown { margin-top: var(--spacing-lg); }
 
 .table { width: 100%; border-collapse: collapse; font-size: var(--font-size-md); }
 .table th {

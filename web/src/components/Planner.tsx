@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createTask, updateTask } from '../api/tasks';
 import * as planner from '../api/planner';
 import type { Person, Holiday, ScheduleRow } from '../api/planner';
+import PlanTree from './PlanTree';
 import styles from './Planner.module.css';
 
 type Tab = 'plan' | 'schedule' | 'team';
@@ -53,89 +53,9 @@ export default function Planner() {
       {error && <div className={styles.error}>{error}</div>}
       {loading && <div className={styles.muted}>Loading…</div>}
 
-      {!loading && tab === 'plan' && <PlanTab rows={rows} people={people} reload={reload} />}
+      {!loading && tab === 'plan' && <PlanTree />}
       {!loading && tab === 'schedule' && <ScheduleTab rows={rows} />}
       {!loading && tab === 'team' && <TeamTab people={people} reload={reload} />}
-    </div>
-  );
-}
-
-// ─── Plan tab: editable tree-table ───────────────────────────────────
-
-function PlanTab({ rows, people, reload }: { rows: ScheduleRow[]; people: Person[]; reload: () => Promise<void> }) {
-  const byParent = new Map<string | null, ScheduleRow[]>();
-  for (const r of rows) {
-    const k = r.parentId;
-    if (!byParent.has(k)) byParent.set(k, []);
-    byParent.get(k)!.push(r);
-  }
-
-  const addTask = async (parentId: string | null) => {
-    const title = window.prompt(parentId ? 'New subtask title' : 'New project title');
-    if (!title) return;
-    await createTask({ title, parentId });
-    await reload();
-  };
-
-  const setEstimate = async (id: string, val: string) => {
-    const n = val === '' ? null : Number(val);
-    await updateTask(id, { duration: n });
-    await reload();
-  };
-
-  const setAssignee = async (id: string, assigneeId: string) => {
-    await planner.updateTaskPlanner(id, { assigneeId });
-    await reload();
-  };
-
-  const renderRows = (parentId: string | null, depth: number): React.ReactNode[] => {
-    const kids = byParent.get(parentId) || [];
-    return kids.flatMap((r) => {
-      const hasChildren = (byParent.get(r.taskId) || []).length > 0;
-      return [
-        <tr key={r.taskId} className={r.onCriticalPath ? styles.critical : undefined}>
-          <td style={{ paddingLeft: 8 + depth * 18 }}>
-            {hasChildren ? '▸ ' : ''}{r.title}
-            <button className={styles.addBtn} title="Add subtask" onClick={() => addTask(r.taskId)}>+</button>
-          </td>
-          <td>
-            {hasChildren ? (
-              <span className={styles.muted}>{r.estimateHours ?? '—'}</span>
-            ) : (
-              <input
-                className={styles.numIn}
-                type="number"
-                min="0"
-                defaultValue={r.estimateHours ?? ''}
-                onBlur={(e) => setEstimate(r.taskId, e.target.value)}
-              />
-            )}
-          </td>
-          <td>
-            <select className={styles.sel} value={r.assigneeId ?? ''} onChange={(e) => setAssignee(r.taskId, e.target.value)}>
-              <option value="">— unassigned —</option>
-              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </td>
-          <td className={styles.date}>{r.start || '—'}</td>
-          <td className={styles.date}>{r.end || '—'}</td>
-          <td className={styles.cp}>{r.onCriticalPath ? '★' : ''}</td>
-        </tr>,
-        ...renderRows(r.taskId, depth + 1),
-      ];
-    });
-  };
-
-  return (
-    <div className={styles.body}>
-      <button className={styles.primary} onClick={() => addTask(null)}>+ Project</button>
-      <table className={styles.table}>
-        <thead>
-          <tr><th>Task</th><th>Est (h)</th><th>Assignee</th><th>Start</th><th>End</th><th>CP</th></tr>
-        </thead>
-        <tbody>{renderRows(null, 0)}</tbody>
-      </table>
-      {rows.length === 0 && <p className={styles.muted}>No tasks yet. Add a project to begin.</p>}
     </div>
   );
 }
