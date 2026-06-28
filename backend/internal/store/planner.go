@@ -294,6 +294,11 @@ func (s *Store) UpdateTaskPlanner(ctx context.Context, taskID string, req *model
 		args = append(args, *req.BufferHours)
 		i++
 	}
+	if req.PlannerPriority != nil {
+		set = append(set, fmt.Sprintf("props = jsonb_set(COALESCE(props, '{}'::jsonb), '{plannerPriority}', to_jsonb($%d::numeric))", i))
+		args = append(args, *req.PlannerPriority)
+		i++
+	}
 	if req.ParentID != nil {
 		if *req.ParentID == "" {
 			set = append(set, "parent_id = NULL")
@@ -359,10 +364,11 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 		assigneeID *string
 		duration   *float64
 		buffer     *float64
-		priority   int
+		priority   float64
 	}
 	taskRows, err := s.pool.Query(ctx, `
-		SELECT id, parent_id, title, status, assignee_id, duration, buffer_hours, priority
+		SELECT id, parent_id, title, status, assignee_id, duration, buffer_hours,
+		       COALESCE((props->>'plannerPriority')::numeric, 0) AS planner_priority
 		FROM tasks WHERE user_id = $1
 	`, userID)
 	if err != nil {

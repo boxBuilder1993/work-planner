@@ -75,7 +75,7 @@ export const listDependencies = (taskId: string) => apiFetch<Dependency[]>(`/api
 export const createDependency = (taskId: string, dependsOnId: string) =>
   apiPost<Dependency>(`/api/tasks/${taskId}/dependencies`, { dependsOnId });
 export const deleteDependency = (id: string) => apiDelete(`/api/dependencies/${id}`);
-export const updateTaskPlanner = (taskId: string, b: Partial<{ assigneeId: string; bufferHours: number; parentId: string }>) =>
+export const updateTaskPlanner = (taskId: string, b: Partial<{ assigneeId: string; bufferHours: number; parentId: string; plannerPriority: number }>) =>
   apiPatch(`/api/tasks/${taskId}/planner`, b);
 export const getSchedule = (start?: string) =>
   apiFetch<ScheduleRow[]>(`/api/schedule${start ? `?start=${start}` : ''}`);

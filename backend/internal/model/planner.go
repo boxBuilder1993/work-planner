@@ -101,6 +101,9 @@ type UpdateTaskPlannerRequest struct {
 	BufferHours *float64 `json:"bufferHours,omitempty"`
 	// ParentID re-parents the task. "" → make it a root. Cycle-guarded.
 	ParentID *string `json:"parentId,omitempty"`
+	// PlannerPriority is a fractional planner ranking stored in props
+	// (props.plannerPriority); the core int `priority` is left untouched.
+	PlannerPriority *float64 `json:"plannerPriority,omitempty"`
 }
 
 // ScheduleRow is one row of the generated execution schedule, enriched for the
@@ -114,7 +117,7 @@ type ScheduleRow struct {
 	EstimateHours   *float64 `json:"estimateHours"`
 	BufferHours     *float64 `json:"bufferHours"`
 	DependencyCount int      `json:"dependencyCount"`
-	Priority        int      `json:"priority"`
+	Priority        float64  `json:"priority"` // planner priority (props.plannerPriority); core int priority untouched
 	Status          string   `json:"status"`
 	Start           string   `json:"start"` // YYYY-MM-DD, empty if unscheduled
 	End             string   `json:"end"`
