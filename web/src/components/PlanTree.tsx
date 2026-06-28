@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createTask, updateTask } from '../api/tasks';
 import * as planner from '../api/planner';
 import type { Person, ScheduleRow } from '../api/planner';
@@ -10,6 +11,7 @@ import styles from './Planner.module.css';
  * task's subtree (rootId set → that task's descendants, e.g. on the task page).
  */
 export default function PlanTree({ rootId }: { rootId?: string }) {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<ScheduleRow[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -64,7 +66,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
             ) : (
               <span className={styles.toggleSpacer} />
             )}
-            {r.title}
+            <span className={styles.taskLink} onClick={() => navigate(`/tasks/${r.taskId}`)}>{r.title}</span>
             <button className={styles.addBtn} title="Add subtask" onClick={() => addTask(r.taskId)}>+sub</button>
             <button className={styles.addBtn} title="Add sibling" onClick={() => addTask(r.parentId)}>+sib</button>
           </td>

@@ -30,6 +30,8 @@
 }
 .toggle { background: none; border: none; cursor: pointer; color: var(--on-surface-secondary); width: 18px; padding: 0; }
 .toggleSpacer { display: inline-block; width: 18px; }
+.taskLink { cursor: pointer; }
+.taskLink:hover { color: var(--primary); text-decoration: underline; }
 .breakdown { margin-top: var(--spacing-lg); }
 
 .table { width: 100%; border-collapse: collapse; font-size: var(--font-size-md); }
