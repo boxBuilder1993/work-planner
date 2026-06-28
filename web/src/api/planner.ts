@@ -43,6 +43,7 @@ export interface ScheduleRow {
   estimateHours: number | null;
   bufferHours: number | null;
   dependencyCount: number;
+  priority: number;
   status: string;
   start: string;
   end: string;

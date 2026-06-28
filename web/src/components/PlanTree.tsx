@@ -48,6 +48,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
   const setBuffer = async (id: string, v: string) => { await planner.updateTaskPlanner(id, { bufferHours: v === '' ? 0 : Number(v) }); await reload(); };
   const setAssignee = async (id: string, a: string) => { await planner.updateTaskPlanner(id, { assigneeId: a }); await reload(); };
   const setStatus = async (id: string, s: string) => { await updateTask(id, { status: s }); await reload(); };
+  const setPriority = async (id: string, v: string) => { await updateTask(id, { priority: Number(v) }); await reload(); };
 
   const toggle = (id: string) => setCollapsed((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const collapseAll = () => setCollapsed(new Set(rows.filter((r) => hasKids(r.taskId)).map((r) => r.taskId)));
@@ -106,6 +107,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
       <td><input className={styles.numIn} type="number" min="0" placeholder="h" value={draft!.estimate}
         onChange={(e) => setDraft({ ...draft!, estimate: e.target.value })} /></td>
       <td />
+      <td />
       <td>
         <select className={styles.sel} value={draft!.assigneeId} onChange={(e) => setDraft({ ...draft!, assigneeId: e.target.value })}>
           <option value="">— unassigned —</option>
@@ -161,6 +163,12 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
               : null}
           </td>
           <td>
+            <select className={styles.statusSel} value={r.priority} onChange={(e) => setPriority(r.taskId, e.target.value)} title="Priority">
+              <option value={0}>—</option>
+              {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>P{n}</option>)}
+            </select>
+          </td>
+          <td>
             <select className={styles.sel} value={r.assigneeId ?? ''} onChange={(e) => setAssignee(r.taskId, e.target.value)}>
               <option value="">— unassigned —</option>
               {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -202,7 +210,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
       </div>
       <table className={styles.table}>
         <thead>
-          <tr><th>Task</th><th>Est</th><th>Buf</th><th>Assignee</th><th>Status</th><th>Start</th><th>End</th><th>CP</th></tr>
+          <tr><th>Task</th><th>Est</th><th>Buf</th><th>Pri</th><th>Assignee</th><th>Status</th><th>Start</th><th>End</th><th>CP</th></tr>
         </thead>
         <tbody>{renderRows(start, 0)}</tbody>
       </table>

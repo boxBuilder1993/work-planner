@@ -114,6 +114,7 @@ type ScheduleRow struct {
 	EstimateHours   *float64 `json:"estimateHours"`
 	BufferHours     *float64 `json:"bufferHours"`
 	DependencyCount int      `json:"dependencyCount"`
+	Priority        int      `json:"priority"`
 	Status          string   `json:"status"`
 	Start           string   `json:"start"` // YYYY-MM-DD, empty if unscheduled
 	End             string   `json:"end"`
