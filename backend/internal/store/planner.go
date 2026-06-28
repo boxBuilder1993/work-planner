@@ -450,13 +450,40 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 		}
 	}
 
-	// 8. Enriched rows.
+	// 8. Rolled-up estimate for parents = sum of descendant leaf estimates.
+	childIDs := map[string][]string{}
+	durByID := map[string]float64{}
+	for _, r := range rows {
+		if r.parentID != nil {
+			childIDs[*r.parentID] = append(childIDs[*r.parentID], r.id)
+		}
+		durByID[r.id] = deref(r.duration)
+	}
+	var rolled func(id string) float64
+	rolled = func(id string) float64 {
+		kids := childIDs[id]
+		if len(kids) == 0 {
+			return durByID[id]
+		}
+		var sum float64
+		for _, k := range kids {
+			sum += rolled(k)
+		}
+		return sum
+	}
+
+	// 9. Enriched rows.
 	out := make([]model.ScheduleRow, 0, len(rows))
 	for _, r := range rows {
 		sc := sched[r.id]
+		est := r.duration
+		if len(childIDs[r.id]) > 0 {
+			s := rolled(r.id)
+			est = &s
+		}
 		row := model.ScheduleRow{
 			TaskID: r.id, Title: r.title, ParentID: r.parentID, AssigneeID: r.assigneeID,
-			EstimateHours: r.duration, Status: r.status,
+			EstimateHours: est, Status: r.status,
 			Start: sc.Start, End: sc.End, OnCriticalPath: sc.OnCriticalPath,
 		}
 		if r.assigneeID != nil {
