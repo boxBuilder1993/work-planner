@@ -87,3 +87,32 @@ tr:hover .rowActions { opacity: 1; }
 .drop_after td { box-shadow: inset 0 -3px 0 0 var(--primary); }
 .drop_into { background: rgba(67, 160, 71, 0.14); outline: 2px dashed var(--success); outline-offset: -2px; }
 .drop_into td:first-child::after { content: ' ↳ nest'; color: var(--success); font-size: var(--font-size-sm); }
+
+/* input polish — clean, borderless-until-interacted with a soft focus ring */
+.numIn, .txt, .sel, .statusSel {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--on-surface);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.numIn:hover, .txt:hover, .sel:hover, .statusSel:hover { border-color: var(--divider); background: var(--surface); }
+.numIn:focus, .txt:focus, .sel:focus, .statusSel:focus {
+  outline: none; border-color: var(--primary); background: var(--surface);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.numIn { width: 60px; padding: 5px 6px; text-align: right; -moz-appearance: textfield; appearance: textfield; }
+.numIn::-webkit-outer-spin-button, .numIn::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.txt { padding: 6px 9px; }
+.sel { padding: 5px 6px; max-width: 170px; }
+.statusSel { padding: 5px 6px; font-size: var(--font-size-sm); }
+
+/* table feel */
+.table td { padding: 6px 8px; vertical-align: middle; }
+.table tbody tr { transition: background 0.1s ease; }
+.table tbody tr:hover { background: var(--background); }
+.primary { transition: background 0.12s ease, box-shadow 0.12s ease; }
+.primary:hover { background: var(--primary-dark); box-shadow: var(--shadow-sm); }
+.saveBtn { transition: background 0.12s ease; }
+.saveBtn:hover { background: var(--primary-dark); }
