@@ -25,6 +25,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
   const [depErr, setDepErr] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ parentId: string | null; title: string; estimate: string; assigneeId: string } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; mode: 'before' | 'after' | 'into' } | null>(null);
 
   const reload = useCallback(async () => {
     const [s, p] = await Promise.all([planner.getSchedule(), planner.listPeople()]);
@@ -87,11 +88,44 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
   };
   const removeDep = async (id: string) => { await planner.deleteDependency(id); if (depsFor) setDeps(await planner.listDependencies(depsFor)); await reload(); };
 
-  // ── drag to re-parent ──
-  const reparent = async (childId: string, parentId: string | null) => {
-    if (childId === parentId) return;
-    try { await planner.updateTaskPlanner(childId, { parentId: parentId ?? '' }); await reload(); }
+  // ── drag to re-parent + reorder ──
+  // Position in the row (top 30% = before, bottom 30% = after, middle = into).
+  const computeMode = (e: React.DragEvent): 'before' | 'after' | 'into' => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    return y < rect.height * 0.3 ? 'before' : y > rect.height * 0.7 ? 'after' : 'into';
+  };
+  const move = async (draggedId: string, parentId: string | null, position: number) => {
+    setDropTarget(null);
+    try { await planner.updateTaskPlanner(draggedId, { parentId: parentId ?? '', position }); await reload(); }
     catch { window.alert('Cannot move there — that would create a cycle.'); }
+  };
+  const onRowDrop = (e: React.DragEvent, target: ScheduleRow) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('text/plain');
+    const mode = computeMode(e);
+    setDropTarget(null);
+    if (!draggedId || draggedId === target.taskId) return;
+    if (mode === 'into') {
+      const kids = byParent.get(target.taskId) || [];
+      void move(draggedId, target.taskId, kids.length ? Math.max(...kids.map((k) => k.position)) + 1 : target.position);
+      return;
+    }
+    const sibs = byParent.get(target.parentId) || [];
+    const idx = sibs.findIndex((s) => s.taskId === target.taskId);
+    let pos: number;
+    if (mode === 'before') { const prev = sibs[idx - 1]; pos = prev ? (prev.position + target.position) / 2 : target.position - 1; }
+    else { const next = sibs[idx + 1]; pos = next ? (target.position + next.position) / 2 : target.position + 1; }
+    void move(draggedId, target.parentId, pos);
+  };
+  const onRootDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('text/plain');
+    setDropTarget(null);
+    if (!draggedId) return;
+    const rp = rootId ?? null;
+    const roots = byParent.get(rp) || [];
+    void move(draggedId, rp, roots.length ? Math.max(...roots.map((r) => r.position)) + 1 : 0);
   };
 
   const draftRow = (depth: number): React.ReactNode => (
@@ -125,11 +159,17 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
       const isCollapsed = collapsed.has(r.taskId);
       const done = r.status === 'CLOSED';
       const row = (
-        <tr key={r.taskId} className={r.onCriticalPath ? styles.critical : undefined}
+        <tr key={r.taskId}
+          className={[
+            r.onCriticalPath ? styles.critical : '',
+            dropTarget && dropTarget.id === r.taskId ? styles[`drop_${dropTarget.mode}`] : '',
+          ].filter(Boolean).join(' ')}
           draggable
           onDragStart={(e) => e.dataTransfer.setData('text/plain', r.taskId)}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => { const id = e.dataTransfer.getData('text/plain'); if (id) void reparent(id, r.taskId); }}>
+          onDragOver={(e) => { e.preventDefault(); setDropTarget({ id: r.taskId, mode: computeMode(e) }); }}
+          onDragLeave={() => setDropTarget((d) => (d?.id === r.taskId ? null : d))}
+          onDragEnd={() => setDropTarget(null)}
+          onDrop={(e) => onRowDrop(e, r)}>
           <td style={{ paddingLeft: 8 + depth * 18 }}>
             {parent ? (
               <button className={styles.toggle} onClick={() => toggle(r.taskId)}>{isCollapsed ? '▸' : '▾'}</button>
@@ -203,12 +243,23 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
         <span
           className={styles.rootDrop}
           onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => { const id = e.dataTransfer.getData('text/plain'); if (id) void reparent(id, start); }}
+          onDrop={onRootDrop}
+          title="Drop a task here to move it to the top level"
         >drop here to make top-level</span>
       </div>
       <table className={styles.table}>
         <thead>
-          <tr><th>Task</th><th>Est</th><th>Buf</th><th>Pri</th><th>Assignee</th><th>Status</th><th>Start</th><th>End</th><th>CP</th></tr>
+          <tr>
+            <th title="Click a title to open · double-click to rename · drag a row to move it (drop near top/bottom = reorder, drop onto a row = make it a child)">Task</th>
+            <th title="Estimate in hours (leaf tasks). Parents show the rolled-up sum.">Est</th>
+            <th title="Buffer / contingency hours added on a parent, on top of its children.">Buf</th>
+            <th title="Priority — your own fractional ranking (also the scheduler tie-break).">Pri</th>
+            <th title="Who does this task. New subtasks inherit the parent's assignee.">Assignee</th>
+            <th title="To do / In progress / Done. Done tasks stay visible but are excluded from scheduling.">Status</th>
+            <th title="Computed start date — from estimates, dependencies, and assignee availability.">Start</th>
+            <th title="Computed end date.">End</th>
+            <th title="★ = on the critical path: the chain that sets the project end date.">CP</th>
+          </tr>
         </thead>
         <tbody>{renderRows(start, 0)}</tbody>
       </table>

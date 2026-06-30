@@ -104,6 +104,8 @@ type UpdateTaskPlannerRequest struct {
 	// PlannerPriority is a fractional planner ranking stored in props
 	// (props.plannerPriority); the core int `priority` is left untouched.
 	PlannerPriority *float64 `json:"plannerPriority,omitempty"`
+	// Position is the fractional sibling-ordering key.
+	Position *float64 `json:"position,omitempty"`
 }
 
 // ScheduleRow is one row of the generated execution schedule, enriched for the
@@ -118,6 +120,7 @@ type ScheduleRow struct {
 	BufferHours     *float64 `json:"bufferHours"`
 	DependencyCount int      `json:"dependencyCount"`
 	Priority        float64  `json:"priority"` // planner priority (props.plannerPriority); core int priority untouched
+	Position        float64  `json:"position"` // sibling ordering (fractional)
 	Status          string   `json:"status"`
 	Start           string   `json:"start"` // YYYY-MM-DD, empty if unscheduled
 	End             string   `json:"end"`

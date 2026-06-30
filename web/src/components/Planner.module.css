@@ -81,3 +81,8 @@ tr:hover .rowActions { opacity: 1; }
 .depBadge { font-size: var(--font-size-sm); color: var(--warning); margin-left: 6px; }
 .done { text-decoration: line-through; color: var(--on-surface-secondary); }
 .statusSel { padding: 4px; border: 1px solid var(--divider); border-radius: var(--radius-sm); font-size: var(--font-size-sm); }
+
+/* drag drop indicators */
+.drop_into { outline: 2px solid var(--primary); outline-offset: -2px; }
+.drop_before td { box-shadow: inset 0 2px 0 0 var(--primary); }
+.drop_after td { box-shadow: inset 0 -2px 0 0 var(--primary); }
