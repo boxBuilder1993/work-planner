@@ -117,3 +117,15 @@ tr:hover .rowActions { opacity: 1; }
 .primary:hover { background: var(--primary-dark); box-shadow: var(--shadow-sm); }
 .saveBtn { transition: background 0.12s ease; }
 .saveBtn:hover { background: var(--primary-dark); }
+
+/* header tooltips — full name with a styled hover description */
+.tip { position: relative; cursor: help; border-bottom: 1px dotted var(--on-surface-secondary); }
+.tip:hover::after {
+  content: attr(data-tip);
+  position: absolute; left: 0; top: 100%; margin-top: 6px; z-index: 50;
+  background: var(--on-surface); color: var(--surface);
+  padding: 8px 11px; border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm); font-weight: 400; line-height: 1.4;
+  white-space: normal; width: max-content; max-width: 260px;
+  box-shadow: var(--shadow-md); pointer-events: none;
+}

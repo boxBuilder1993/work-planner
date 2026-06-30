@@ -250,15 +250,15 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
       <table className={styles.table}>
         <thead>
           <tr>
-            <th title="Click a title to open · double-click to rename · drag a row to move it (drop near top/bottom = reorder, drop onto a row = make it a child)">Task</th>
-            <th title="Estimate in hours (leaf tasks). Parents show the rolled-up sum.">Est</th>
-            <th title="Buffer / contingency hours added on a parent, on top of its children.">Buf</th>
-            <th title="Priority — your own fractional ranking (also the scheduler tie-break).">Pri</th>
-            <th title="Who does this task. New subtasks inherit the parent's assignee.">Assignee</th>
-            <th title="To do / In progress / Done. Done tasks stay visible but are excluded from scheduling.">Status</th>
-            <th title="Computed start date — from estimates, dependencies, and assignee availability.">Start</th>
-            <th title="Computed end date.">End</th>
-            <th title="★ = on the critical path: the chain that sets the project end date.">CP</th>
+            <th><span className={styles.tip} data-tip="Click a title to open · double-click to rename · drag a row to move it (drop near top/bottom = reorder, drop onto a row = make it a child).">Task</span></th>
+            <th><span className={styles.tip} data-tip="Estimate in hours, on leaf tasks. Parents show the rolled-up sum of their descendants.">Estimate</span></th>
+            <th><span className={styles.tip} data-tip="Buffer / contingency hours added on a parent task, on top of its children's total.">Buffer</span></th>
+            <th><span className={styles.tip} data-tip="Priority — your own fractional ranking (lower = higher), also used as the scheduler tie-break.">Priority</span></th>
+            <th><span className={styles.tip} data-tip="The person doing this task. New subtasks inherit the parent's assignee.">Assignee</span></th>
+            <th><span className={styles.tip} data-tip="To do / In progress / Done. Done tasks stay visible but are excluded from scheduling.">Status</span></th>
+            <th><span className={styles.tip} data-tip="Computed start date — derived from estimates, dependencies, and assignee availability.">Start</span></th>
+            <th><span className={styles.tip} data-tip="Computed end date.">End</span></th>
+            <th><span className={styles.tip} data-tip="★ marks the critical path: the chain of tasks that determines the project's end date.">Critical Path</span></th>
           </tr>
         </thead>
         <tbody>{renderRows(start, 0)}</tbody>
