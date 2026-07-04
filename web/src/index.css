@@ -149,19 +149,19 @@ body {
   flex-direction: column;
 }
 
-a {
-  color: var(--primary);
-  text-decoration: none;
-}
-
-button {
-  cursor: pointer;
-  font-family: inherit;
-}
-
-input, textarea, select {
-  font-family: inherit;
-  font-size: var(--font-size-md);
+@layer base {
+  a {
+    color: var(--primary);
+    text-decoration: none;
+  }
+  button {
+    cursor: pointer;
+    font-family: inherit;
+  }
+  input, textarea, select {
+    font-family: inherit;
+    font-size: var(--font-size-md);
+  }
 }
 
 .spinner {
