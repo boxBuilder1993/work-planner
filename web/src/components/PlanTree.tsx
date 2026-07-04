@@ -225,7 +225,10 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
           <td className={styles.cp}>{r.onCriticalPath ? '★' : ''}</td>
         </tr>
       );
-      return parent && !isCollapsed ? [row, ...renderRows(r.taskId, depth + 1)] : [row];
+      // Recurse to render children, OR to surface a pending draft child even on a
+      // currently-childless row (so the row-level ＋ works for the *first* subtask).
+      const showChildren = (parent || draft?.parentId === r.taskId) && !isCollapsed;
+      return showChildren ? [row, ...renderRows(r.taskId, depth + 1)] : [row];
     });
     if (draft && draft.parentId === parentId) out.push(draftRow(depth));
     return out;
