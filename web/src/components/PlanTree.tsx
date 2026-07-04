@@ -184,7 +184,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
                 onKeyDown={(e) => { if (e.key === 'Enter') void saveRename(); if (e.key === 'Escape') setRenaming(null); }} />
             ) : (
               <span className={`${styles.taskLink} ${done ? styles.done : ''}`}
-                onClick={() => navigate(`/tasks/${r.taskId}`)}
+                onClick={() => navigate(`/projects/${r.taskId}`)}
                 onDoubleClick={() => setRenaming({ id: r.taskId, title: r.title })}
                 title="click: open · double-click: rename">{r.title}</span>
             )}
