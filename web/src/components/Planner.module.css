@@ -50,7 +50,9 @@
   color: var(--on-surface-secondary); font-size: var(--font-size-sm);
 }
 .table td { padding: var(--spacing-xs) var(--spacing-sm); border-bottom: 1px solid var(--divider); }
-.critical { background: rgba(229, 57, 53, 0.06); }
+.critical { background: rgba(229, 57, 53, 0.08); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .critical { background: rgba(239, 83, 80, 0.20); } }
+:root[data-theme="dark"] .critical { background: rgba(239, 83, 80, 0.20); }
 .cp { color: var(--priority-1); text-align: center; }
 .date { color: var(--on-surface-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 

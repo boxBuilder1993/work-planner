@@ -53,7 +53,7 @@ export default function Planner() {
       {error && <div className={styles.error}>{error}</div>}
       {loading && <div className={styles.muted}>Loading…</div>}
 
-      {!loading && tab === 'plan' && <PlanTree />}
+      {!loading && tab === 'plan' && <div className={styles.body}><PlanTree /></div>}
       {!loading && tab === 'schedule' && <ScheduleTab rows={rows} />}
       {!loading && tab === 'team' && <TeamTab people={people} reload={reload} />}
     </div>
