@@ -134,3 +134,11 @@ tr:hover .rowActions { opacity: 1; }
   white-space: normal; width: max-content; max-width: 260px;
   box-shadow: var(--shadow-md); pointer-events: none;
 }
+
+/* review pass: breakdown scroll + time-off chips */
+.tableWrap { overflow-x: auto; }
+.table { min-width: 840px; }
+.timeOffWrap { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.timeOffChip { display: inline-flex; align-items: center; gap: 4px; background: var(--background); border: 1px solid var(--divider); border-radius: 999px; padding: 2px 8px; font-size: var(--font-size-sm); }
+.chipX { background: none; border: none; color: var(--on-surface-secondary); cursor: pointer; padding: 0; line-height: 1; }
+.chipX:hover { color: var(--error); }

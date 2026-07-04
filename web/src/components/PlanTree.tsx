@@ -249,6 +249,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
           >drop here to make top-level</span>
         )}
       </div>
+      <div className={styles.tableWrap}>
       <table className={styles.table}>
         <thead>
           <tr>
@@ -265,6 +266,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
         </thead>
         <tbody>{renderRows(start, 0)}</tbody>
       </table>
+      </div>
       {topKids.length === 0 && (
         <p className={styles.muted}>{rootId ? 'No subtasks yet.' : 'No tasks yet. Add a project to begin.'}</p>
       )}

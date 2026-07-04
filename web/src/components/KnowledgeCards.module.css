@@ -44,12 +44,19 @@
 .content {
   flex: 1;
   padding: var(--spacing-lg);
-  max-width: 720px;
+  max-width: 1120px;
   margin: 0 auto;
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: var(--spacing-md);
+  align-items: start;
 }
 
 .searchRow {

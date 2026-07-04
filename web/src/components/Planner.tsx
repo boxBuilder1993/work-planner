@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as planner from '../api/planner';
-import type { Person, Holiday, ScheduleRow } from '../api/planner';
+import type { Person, Holiday, ScheduleRow, TimeOffEntry } from '../api/planner';
 import PlanTree from './PlanTree';
 import styles from './Planner.module.css';
 
@@ -232,22 +232,38 @@ function TeamTab({ people, reload }: { people: Person[]; reload: () => Promise<v
 }
 
 function TimeOffEditor({ personId }: { personId: string }) {
+  const [entries, setEntries] = useState<TimeOffEntry[]>([]);
   const [open, setOpen] = useState(false);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [half, setHalf] = useState(false);
+  const load = useCallback(async () => { setEntries(await planner.listTimeOff(personId)); }, [personId]);
+  useEffect(() => { void load(); }, [load]);
   const add = async () => {
     if (!start || !end) return;
     await planner.createTimeOff(personId, { startDay: start, endDay: end, hoursOff: half ? 4 : undefined });
-    setStart(''); setEnd(''); setOpen(false);
+    setStart(''); setEnd(''); setHalf(false); setOpen(false);
+    await load();
   };
-  if (!open) return <button className={styles.linkBtn} onClick={() => setOpen(true)}>+ time off</button>;
+  const del = async (id: string) => { await planner.deleteTimeOff(id); await load(); };
   return (
-    <span className={styles.timeOff}>
-      <input className={styles.txt} type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-      <input className={styles.txt} type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
-      <label className={styles.muted}><input type="checkbox" checked={half} onChange={(e) => setHalf(e.target.checked)} /> ½</label>
-      <button className={styles.primary} onClick={add}>Save</button>
+    <span className={styles.timeOffWrap}>
+      {entries.map((e) => (
+        <span key={e.id} className={styles.timeOffChip}>
+          {e.startDay}{e.endDay !== e.startDay ? `→${e.endDay}` : ''}{e.hoursOff ? ` ·${e.hoursOff}h` : ''}
+          <button className={styles.chipX} onClick={() => del(e.id)} title="Remove">×</button>
+        </span>
+      ))}
+      {open ? (
+        <span className={styles.timeOff}>
+          <input className={styles.txt} type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+          <input className={styles.txt} type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <label className={styles.muted}><input type="checkbox" checked={half} onChange={(e) => setHalf(e.target.checked)} /> ½</label>
+          <button className={styles.primary} onClick={add}>Save</button>
+        </span>
+      ) : (
+        <button className={styles.linkBtn} onClick={() => setOpen(true)}>+ time off</button>
+      )}
     </span>
   );
 }

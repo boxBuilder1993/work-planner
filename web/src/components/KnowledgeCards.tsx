@@ -101,14 +101,16 @@ export default function KnowledgeCards() {
             {query ? 'No cards match your search.' : 'No cards yet — create one.'}
           </p>
         ) : (
-          cards.map((c) => (
-            <CardView
-              key={c.id}
-              card={c}
-              onEdit={() => setEditor({ mode: 'edit', card: c })}
-              onDeleted={load}
-            />
-          ))
+          <div className={styles.cardGrid}>
+            {cards.map((c) => (
+              <CardView
+                key={c.id}
+                card={c}
+                onEdit={() => setEditor({ mode: 'edit', card: c })}
+                onDeleted={load}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
