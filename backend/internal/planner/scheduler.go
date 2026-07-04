@@ -205,13 +205,20 @@ func Schedule(in Input) (map[string]Scheduled, error) {
 	// Roll up parents (deepest first) + apply buffers.
 	rollUpParents(in.Tasks, byID, hasChildren, startDate, endDate, in)
 
-	// Write rolled-up parent dates into the result.
+	// Write rolled-up parent dates into the result — only when the parent
+	// actually had scheduled descendants (else leave it unscheduled, not a
+	// zero-value 0001-01-01 date).
 	for _, t := range in.Tasks {
-		if hasChildren[t.ID] {
-			res[t.ID] = Scheduled{
-				Start: startDate[t.ID].Format(dateFmt),
-				End:   endDate[t.ID].Format(dateFmt),
-			}
+		if !hasChildren[t.ID] {
+			continue
+		}
+		s, ok := startDate[t.ID]
+		if !ok {
+			continue
+		}
+		res[t.ID] = Scheduled{
+			Start: s.Format(dateFmt),
+			End:   endDate[t.ID].Format(dateFmt),
 		}
 	}
 
