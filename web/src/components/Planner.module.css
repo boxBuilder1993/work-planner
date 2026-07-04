@@ -60,14 +60,17 @@
 .txt { padding: 6px; border: 1px solid var(--divider); border-radius: var(--radius-sm); }
 .sel { padding: 4px; border: 1px solid var(--divider); border-radius: var(--radius-sm); max-width: 160px; }
 
-.lane { margin-bottom: var(--spacing-lg); }
+.lane { margin-bottom: var(--spacing-lg); background: var(--surface); border: 1px solid var(--divider); border-radius: var(--radius-lg); padding: var(--spacing-md) var(--spacing-lg); }
 .laneTitle { font-size: var(--font-size-lg); margin-bottom: var(--spacing-sm); }
 .schedRow {
-  display: flex; gap: var(--spacing-md); padding: var(--spacing-xs) var(--spacing-sm);
+  display: flex; align-items: center; gap: var(--spacing-md); padding: var(--spacing-xs) 0;
   border-bottom: 1px solid var(--divider);
 }
+.schedRow:last-child { border-bottom: none; }
+.schedTitle { flex: 1; }
+.schedStatus { color: var(--on-surface-secondary); font-size: var(--font-size-sm); min-width: 84px; text-align: right; }
 
-.section { margin-bottom: var(--spacing-xl); }
+.section { margin-bottom: var(--spacing-lg); background: var(--surface); border: 1px solid var(--divider); border-radius: var(--radius-lg); padding: var(--spacing-lg); }
 .section h3 { margin-bottom: var(--spacing-md); }
 .formRow { display: flex; align-items: center; gap: var(--spacing-sm); flex-wrap: wrap; margin-bottom: var(--spacing-md); }
 .personRow { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-xs) 0; flex-wrap: wrap; }

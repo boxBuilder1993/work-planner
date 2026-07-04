@@ -63,7 +63,8 @@ export default function Planner() {
 // ─── Schedule tab: per-person execution view + CSV ───────────────────
 
 function ScheduleTab({ rows }: { rows: ScheduleRow[] }) {
-  const scheduled = rows.filter((r) => r.start);
+  const parentIds = new Set(rows.map((r) => r.parentId).filter(Boolean) as string[]);
+  const scheduled = rows.filter((r) => r.start && !parentIds.has(r.taskId));
   const byPerson = new Map<string, ScheduleRow[]>();
   for (const r of scheduled) {
     const k = r.assigneeName || '— unassigned —';
@@ -117,17 +118,23 @@ function ScheduleTab({ rows }: { rows: ScheduleRow[] }) {
     <div className={styles.body}>
       <button className={styles.primary} onClick={exportCsv}>Export plan snapshot (CSV)</button>
       {scheduled.length === 0 && <p className={styles.muted}>Nothing scheduled. Give tasks an estimate + assignee.</p>}
-      {[...byPerson.entries()].map(([person, prs]) => (
-        <div key={person} className={styles.lane}>
-          <h3 className={styles.laneTitle}>{person}</h3>
-          {prs.map((r) => (
-            <div key={r.taskId} className={`${styles.schedRow} ${r.onCriticalPath ? styles.critical : ''}`}>
-              <span className={styles.date}>{r.start} → {r.end}</span>
-              <span>{r.onCriticalPath ? '★ ' : ''}{r.title}</span>
-            </div>
-          ))}
-        </div>
-      ))}
+      {[...byPerson.entries()].map(([person, prs]) => {
+        const total = prs.reduce((s, r) => s + (r.estimateHours || 0), 0);
+        const label = (s: string) => (s === 'CLOSED' ? 'Done' : s === 'IN_PROGRESS' ? 'In progress' : 'To do');
+        return (
+          <div key={person} className={styles.lane}>
+            <h3 className={styles.laneTitle}>{person} <span className={styles.muted}>· {prs.length} task{prs.length !== 1 ? 's' : ''} · {total}h</span></h3>
+            {prs.map((r) => (
+              <div key={r.taskId} className={`${styles.schedRow} ${r.onCriticalPath ? styles.critical : ''}`}>
+                <span className={styles.date}>{r.start} → {r.end}</span>
+                <span className={styles.schedTitle}>{r.onCriticalPath ? '★ ' : ''}{r.title}</span>
+                <span className={styles.muted}>{r.estimateHours ? `${r.estimateHours}h` : ''}</span>
+                <span className={styles.schedStatus}>{label(r.status)}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

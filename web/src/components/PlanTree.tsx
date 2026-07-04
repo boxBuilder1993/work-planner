@@ -240,12 +240,14 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
         <button className={styles.primary} onClick={() => startDraft(start)}>+ {rootId ? 'Subtask' : 'Project'}</button>
         <button className={styles.addBtn} onClick={collapseAll}>Collapse all</button>
         <button className={styles.addBtn} onClick={expandAll}>Expand all</button>
-        <span
-          className={styles.rootDrop}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={onRootDrop}
-          title="Drop a task here to move it to the top level"
-        >drop here to make top-level</span>
+        {!rootId && (
+          <span
+            className={styles.rootDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={onRootDrop}
+            title="Drop a task here to move it to the top level"
+          >drop here to make top-level</span>
+        )}
       </div>
       <table className={styles.table}>
         <thead>
