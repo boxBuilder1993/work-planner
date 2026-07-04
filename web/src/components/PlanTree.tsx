@@ -33,6 +33,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
     setPeople(p);
     setLoading(false);
   }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount
   useEffect(() => { void reload(); }, [reload]);
   useEffect(() => { localStorage.setItem(collapseKey, JSON.stringify([...collapsed])); }, [collapsed, collapseKey]);
 
@@ -51,7 +52,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
   const setStatus = async (id: string, s: string) => { await updateTask(id, { status: s }); await reload(); };
   const setPriority = async (id: string, v: string) => { await planner.updateTaskPlanner(id, { plannerPriority: Number(v) }); await reload(); };
 
-  const toggle = (id: string) => setCollapsed((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const collapseAll = () => setCollapsed(new Set(rows.filter((r) => hasKids(r.taskId)).map((r) => r.taskId)));
   const expandAll = () => setCollapsed(new Set());
 

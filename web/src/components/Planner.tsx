@@ -156,6 +156,7 @@ function TeamTab({ people, reload }: { people: Person[]; reload: () => Promise<v
     setCalId(c.id);
     setHolidays(await planner.listHolidays(c.id));
   }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount
   useEffect(() => { void loadCal(); }, [loadCal]);
 
   const addPerson = async () => {
@@ -238,6 +239,7 @@ function TimeOffEditor({ personId }: { personId: string }) {
   const [end, setEnd] = useState('');
   const [half, setHalf] = useState(false);
   const load = useCallback(async () => { setEntries(await planner.listTimeOff(personId)); }, [personId]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount
   useEffect(() => { void load(); }, [load]);
   const add = async () => {
     if (!start || !end) return;

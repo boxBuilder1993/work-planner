@@ -105,6 +105,7 @@ export default function TaskDetail() {
 
   // Reset state when route changes (e.g., create→view, or parent→new child)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset on route change
     setError(null);
     if (taskId) {
       // Viewing/editing existing task
