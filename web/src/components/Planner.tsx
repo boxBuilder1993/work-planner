@@ -71,26 +71,51 @@ function ScheduleTab({ rows }: { rows: ScheduleRow[] }) {
     byPerson.get(k)!.push(r);
   }
 
+  // Full-plan snapshot: the whole tree in order, all fields, + a summary.
   const exportCsv = () => {
-    const header = ['task_id', 'title', 'assignee', 'estimate_hours', 'start', 'end', 'on_critical_path', 'status'];
     const cell = (v: unknown) => {
       const s = v === null || v === undefined ? '' : String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const lines = [header.join(',')];
-    for (const r of rows) {
-      lines.push([r.taskId, r.title, r.assigneeName ?? '', r.estimateHours ?? '', r.start, r.end, r.onCriticalPath, r.status].map(cell).join(','));
-    }
+    const byParent = new Map<string | null, ScheduleRow[]>();
+    for (const r of rows) { const k = r.parentId; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k)!.push(r); }
+    const titleById = new Map(rows.map((r) => [r.taskId, r.title]));
+    const isLeaf = (id: string) => (byParent.get(id) || []).length === 0;
+    const fmtDue = (ms: number | null) => (ms ? new Date(ms).toISOString().slice(0, 10) : '');
+
+    const header = ['Level', 'Task', 'Status', 'Assignee', 'Estimate (h)', 'Buffer (h)', 'Priority', 'Blocked By', 'Start', 'End', 'Critical Path', 'Due Date'];
+    const lines: string[] = [header.join(',')];
+    const walk = (parentId: string | null, level: number) => {
+      for (const r of byParent.get(parentId) || []) {
+        const blockers = (r.blockedBy || []).map((id) => titleById.get(id) || id).join('; ');
+        lines.push([
+          level, '  '.repeat(level) + r.title, r.status, r.assigneeName ?? '',
+          r.estimateHours ?? '', r.bufferHours ?? '', r.priority || '', blockers,
+          r.start, r.end, r.onCriticalPath ? 'yes' : '', fmtDue(r.dueDate),
+        ].map(cell).join(','));
+        walk(r.taskId, level + 1);
+      }
+    };
+    walk(null, 0);
+
+    const ends = rows.map((r) => r.end).filter(Boolean).sort();
+    const totalEffort = rows.filter((r) => isLeaf(r.taskId)).reduce((s, r) => s + (r.estimateHours || 0), 0);
+    const today = new Date().toISOString().slice(0, 10);
+    lines.push('');
+    lines.push([`Snapshot taken ${today}`].map(cell).join(','));
+    lines.push(['Project end date', '', '', '', '', '', '', '', '', ends[ends.length - 1] || ''].map(cell).join(','));
+    lines.push(['Total effort (h)', '', '', '', totalEffort].map(cell).join(','));
+
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'schedule.csv'; a.click();
+    a.href = url; a.download = `plan-snapshot-${today}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className={styles.body}>
-      <button className={styles.primary} onClick={exportCsv}>Export CSV</button>
+      <button className={styles.primary} onClick={exportCsv}>Export plan snapshot (CSV)</button>
       {scheduled.length === 0 && <p className={styles.muted}>Nothing scheduled. Give tasks an estimate + assignee.</p>}
       {[...byPerson.entries()].map(([person, prs]) => (
         <div key={person} className={styles.lane}>

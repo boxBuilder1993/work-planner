@@ -49,6 +49,8 @@ export interface ScheduleRow {
   start: string;
   end: string;
   onCriticalPath: boolean;
+  blockedBy: string[];
+  dueDate: number | null;
 }
 
 // People + time off

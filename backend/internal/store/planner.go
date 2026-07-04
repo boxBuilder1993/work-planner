@@ -371,11 +371,12 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 		buffer     *float64
 		priority   float64
 		position   float64
+		dueDate    *int64
 	}
 	taskRows, err := s.pool.Query(ctx, `
 		SELECT id, parent_id, title, status, assignee_id, duration, buffer_hours,
 		       COALESCE((props->>'plannerPriority')::numeric, 0) AS planner_priority,
-		       COALESCE(position, created_at) AS position
+		       COALESCE(position, created_at) AS position, due_date
 		FROM tasks WHERE user_id = $1
 		ORDER BY COALESCE(position, created_at)
 	`, userID)
@@ -385,7 +386,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 	var rows []row
 	for taskRows.Next() {
 		var r row
-		if err := taskRows.Scan(&r.id, &r.parentID, &r.title, &r.status, &r.assigneeID, &r.duration, &r.buffer, &r.priority, &r.position); err != nil {
+		if err := taskRows.Scan(&r.id, &r.parentID, &r.title, &r.status, &r.assigneeID, &r.duration, &r.buffer, &r.priority, &r.position, &r.dueDate); err != nil {
 			taskRows.Close()
 			return nil, err
 		}

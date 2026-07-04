@@ -125,4 +125,6 @@ type ScheduleRow struct {
 	Start           string   `json:"start"` // YYYY-MM-DD, empty if unscheduled
 	End             string   `json:"end"`
 	OnCriticalPath  bool     `json:"onCriticalPath"`
+	BlockedBy       []string `json:"blockedBy"` // blocker task IDs
+	DueDate         *int64   `json:"dueDate"`   // epoch ms, optional
 }
