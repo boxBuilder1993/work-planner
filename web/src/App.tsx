@@ -6,6 +6,7 @@ import AppShell from './components/AppShell';
 import Home from './components/Home';
 import ProjectView from './components/ProjectView';
 import Schedule from './components/Schedule';
+import Team from './components/Team';
 import TaskList from './components/TaskList';
 import TaskDetail from './components/TaskDetail';
 import Settings from './components/Settings';
@@ -58,7 +59,7 @@ function AppRoutes() {
       <Route path="/" element={<AuthGuard><Home /></AuthGuard>} />
       <Route path="/projects/:taskId" element={<AuthGuard><ProjectView /></AuthGuard>} />
       <Route path="/schedule" element={<AuthGuard><Schedule /></AuthGuard>} />
-      <Route path="/team" element={<AuthGuard><Soon title="Team & Calendar" /></AuthGuard>} />
+      <Route path="/team" element={<AuthGuard><Team /></AuthGuard>} />
       <Route path="/search" element={<AuthGuard><Soon title="Search" /></AuthGuard>} />
       <Route path="/tasks" element={<AuthGuard><TaskList /></AuthGuard>} />
       <Route path="/tasks/new" element={<AuthGuard><TaskDetail /></AuthGuard>} />
