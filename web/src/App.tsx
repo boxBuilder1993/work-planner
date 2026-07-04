@@ -4,6 +4,7 @@ import { TasksProvider } from './hooks/useTasks';
 import SignIn from './components/SignIn';
 import AppShell from './components/AppShell';
 import Home from './components/Home';
+import ProjectView from './components/ProjectView';
 import TaskList from './components/TaskList';
 import TaskDetail from './components/TaskDetail';
 import Settings from './components/Settings';
@@ -54,6 +55,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/auth" element={<AuthRedirect />} />
       <Route path="/" element={<AuthGuard><Home /></AuthGuard>} />
+      <Route path="/projects/:taskId" element={<AuthGuard><ProjectView /></AuthGuard>} />
       <Route path="/schedule" element={<AuthGuard><Soon title="Schedule" /></AuthGuard>} />
       <Route path="/team" element={<AuthGuard><Soon title="Team & Calendar" /></AuthGuard>} />
       <Route path="/search" element={<AuthGuard><Soon title="Search" /></AuthGuard>} />

@@ -104,7 +104,7 @@ export default function Home() {
               {projects.map(({ row, total, done, team, eta, health: h }) => (
                 <button
                   key={row.taskId}
-                  onClick={() => navigate(`/tasks/${row.taskId}`)}
+                  onClick={() => navigate(`/projects/${row.taskId}`)}
                   className="grid w-full grid-cols-[1.6fr_130px_110px_130px_130px] items-center gap-4 border-b px-[18px] py-4 text-left last:border-b-0 hover:bg-muted"
                 >
                   <div>

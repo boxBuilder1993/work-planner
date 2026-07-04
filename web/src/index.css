@@ -47,9 +47,9 @@
   --priority-5: #1E88E5;
 
   /* Light theme (default) */
-  --primary: #1976D2;
-  --primary-dark: #1565C0;
-  --primary-light: #BBDEFB;
+  --primary: #18181b;
+  --primary-dark: #000000;
+  --primary-light: #e4e4e7;
   --surface: #FFFFFF;
   --background: #F5F5F5;
   --on-surface: #212121;
@@ -66,9 +66,9 @@
  * The :not([data-theme]) gate prevents the system override from leaking
  * through when the user explicitly chose "light". */
 :root[data-theme="dark"] {
-  --primary: #64B5F6;
-  --primary-dark: #1976D2;
-  --primary-light: #1565C0;
+  --primary: #fafafa;
+  --primary-dark: #ffffff;
+  --primary-light: #3f3f46;
   --surface: #1E1E1E;
   --background: #121212;
   --on-surface: #E6E6E6;
