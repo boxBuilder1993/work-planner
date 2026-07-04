@@ -80,6 +80,7 @@ func main() {
 	recurringHandler := handler.NewRecurringHandler(st)
 	knowledgeHandler := handler.NewKnowledgeHandler(st)
 	internalHandler := handler.NewInternalHandler(st)
+	plannerHandler := handler.NewPlannerHandler(st)
 
 	// Build router.
 	mux := http.NewServeMux()
@@ -109,6 +110,8 @@ func main() {
 			commentHandler.ServeHTTP(w, r)
 		case strings.HasSuffix(path, "/recurring"):
 			recurringHandler.ServeHTTP(w, r)
+		case strings.HasSuffix(path, "/dependencies"), strings.HasSuffix(path, "/planner"):
+			plannerHandler.ServeHTTP(w, r)
 		default:
 			taskHandler.ServeHTTP(w, r)
 		}
@@ -127,6 +130,16 @@ func main() {
 	// Knowledge-card routes (user-facing; cards are global, no per-user scoping).
 	protectedMux.Handle("/api/knowledge-cards", knowledgeHandler)
 	protectedMux.Handle("/api/knowledge-cards/", knowledgeHandler)
+
+	// Planner (user-facing / JWT) routes.
+	protectedMux.Handle("/api/people", plannerHandler)
+	protectedMux.Handle("/api/people/", plannerHandler)
+	protectedMux.Handle("/api/calendar", plannerHandler)
+	protectedMux.Handle("/api/calendar/", plannerHandler)
+	protectedMux.Handle("/api/holidays/", plannerHandler)
+	protectedMux.Handle("/api/time-off/", plannerHandler)
+	protectedMux.Handle("/api/dependencies/", plannerHandler)
+	protectedMux.Handle("/api/schedule", plannerHandler)
 
 	// Internal routes — require internal API key, no user scoping.
 	internalMux := http.NewServeMux()
@@ -154,6 +167,17 @@ func main() {
 	internalMux.HandleFunc("/api/internal/knowledge-cards", func(w http.ResponseWriter, r *http.Request) {
 		internalHandler.ServeHTTP(w, r)
 	})
+	// Planner internal routes.
+	for _, p := range []string{
+		"/api/internal/people", "/api/internal/people/",
+		"/api/internal/calendar", "/api/internal/calendar/",
+		"/api/internal/holidays/", "/api/internal/time-off/",
+		"/api/internal/dependencies/", "/api/internal/schedule",
+	} {
+		internalMux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {
+			internalHandler.ServeHTTP(w, r)
+		})
+	}
 
 	// Apply auth middleware to protected routes.
 	authMw := middleware.AuthMiddleware(a, internalAPIKey)

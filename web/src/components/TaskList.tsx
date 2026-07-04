@@ -54,6 +54,13 @@ export default function TaskList() {
         <span className={styles.topBarTitle}>WorkPlanner</span>
         <button
           className={styles.settingsButton}
+          onClick={() => navigate('/planner')}
+          aria-label="Planner"
+        >
+          &#128197;
+        </button>
+        <button
+          className={styles.settingsButton}
           onClick={() => navigate('/knowledge')}
           aria-label="Knowledge cards"
         >

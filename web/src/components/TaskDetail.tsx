@@ -5,10 +5,11 @@ import { useTasks } from '../hooks/useTasks';
 import { formatDate, formatDateTime, isOverdue } from '../utils';
 import BreadcrumbBar from './BreadcrumbBar';
 import TaskForm from './TaskForm';
-import TaskItem from './TaskItem';
+import TaskAssignee from './TaskAssignee';
 import CommentSection from './CommentSection';
 import Markdown from './Markdown';
 import PriorityBadge from './PriorityBadge';
+import PlanTree from './PlanTree';
 import styles from './TaskDetail.module.css';
 
 /**
@@ -104,6 +105,7 @@ export default function TaskDetail() {
 
   // Reset state when route changes (e.g., create→view, or parent→new child)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset on route change
     setError(null);
     if (taskId) {
       // Viewing/editing existing task
@@ -169,8 +171,6 @@ export default function TaskDetail() {
   }, [taskId, refreshTask, getBreadcrumbs, refreshChildren, fetchRepeatingTask]);
 
   const children = existingTask ? getChildTasks(existingTask.id) : [];
-  const openChildren = children.filter((c) => c.status !== 'CLOSED');
-  const closedChildren = children.filter((c) => c.status === 'CLOSED');
 
   const handleSave = async () => {
     if (!editedTask.title.trim()) {
@@ -401,41 +401,14 @@ export default function TaskDetail() {
           </div>
         ) : null}
 
-        {/* Sub-tasks section */}
+        {/* Assignee — set directly on this task */}
+        {!isNew && existingTask && <TaskAssignee taskId={existingTask.id} />}
+
+        {/* Breakdown: this task viewed as a project (recursive plan tree) */}
         {!isNew && existingTask && (
           <div className={styles.subtasksSection}>
-            <div className={styles.subtasksHeader}>
-              <span className={styles.subtasksTitle}>
-                Sub-tasks ({openChildren.length} open)
-              </span>
-              {existingTask.status === 'PENDING' && (
-                <button
-                  className={styles.addChildButton}
-                  onClick={() =>
-                    navigate(`/tasks/new?parentId=${existingTask.id}`)
-                  }
-                >
-                  + Add Child
-                </button>
-              )}
-            </div>
-            <div className={styles.subtaskList}>
-              {openChildren.map((child) => (
-                <TaskItem key={child.id} task={child} showDescription />
-              ))}
-            </div>
-            {closedChildren.length > 0 && (
-              <details className={styles.closedSubtasksSection}>
-                <summary className={styles.closedSubtasksTitle}>
-                  Completed ({closedChildren.length})
-                </summary>
-                <div className={styles.subtaskList}>
-                  {closedChildren.map((child) => (
-                    <TaskItem key={child.id} task={child} showDescription />
-                  ))}
-                </div>
-              </details>
-            )}
+            <span className={styles.subtasksTitle}>Breakdown (plan)</span>
+            <PlanTree rootId={existingTask.id} />
           </div>
         )}
 

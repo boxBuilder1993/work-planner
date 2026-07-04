@@ -957,6 +957,48 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/knowledge-cards/") && strings.Count(path, "/") == 4:
 		h.DeleteKnowledgeCard(w, r)
 
+	// ─── Planner: people + time off ──────────────────────────────────────
+	case r.Method == http.MethodPost && path == "/api/internal/people":
+		h.CreatePerson(w, r)
+	case r.Method == http.MethodGet && path == "/api/internal/people":
+		h.ListPeople(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/internal/people/") && strings.HasSuffix(path, "/time-off"):
+		h.ListTimeOff(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/internal/people/") && strings.HasSuffix(path, "/time-off"):
+		h.CreateTimeOff(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/people/") && strings.Count(path, "/") == 4:
+		h.UpdatePerson(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/people/") && strings.Count(path, "/") == 4:
+		h.DeletePerson(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/time-off/"):
+		h.DeleteTimeOff(w, r)
+
+	// ─── Planner: calendar + holidays ────────────────────────────────────
+	case r.Method == http.MethodGet && path == "/api/internal/calendar":
+		h.GetCalendar(w, r)
+	case r.Method == http.MethodPut && path == "/api/internal/calendar":
+		h.UpsertCalendar(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/internal/calendar/") && strings.HasSuffix(path, "/holidays"):
+		h.ListHolidays(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/internal/calendar/") && strings.HasSuffix(path, "/holidays"):
+		h.CreateHoliday(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/holidays/"):
+		h.DeleteHoliday(w, r)
+
+	// ─── Planner: task dependencies ──────────────────────────────────────
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/internal/tasks/") && strings.HasSuffix(path, "/dependencies"):
+		h.ListDependencies(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/internal/tasks/") && strings.HasSuffix(path, "/dependencies"):
+		h.CreateDependency(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/dependencies/"):
+		h.DeleteDependency(w, r)
+
+	// ─── Planner: task planner fields + schedule ─────────────────────────
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/internal/tasks/") && strings.HasSuffix(path, "/planner"):
+		h.UpdateTaskPlanner(w, r)
+	case r.Method == http.MethodGet && path == "/api/internal/schedule":
+		h.GetSchedule(w, r)
+
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
