@@ -1,3 +1,40 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* shadcn/ui dark variant follows our theme system (explicit data-theme). */
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+/* Bridge shadcn's semantic color + radius tokens onto the existing palette, so
+   the app's dark mode (data-theme / prefers-color-scheme) automatically drives
+   shadcn components — no second theme mechanism. `inline` keeps the runtime
+   var() references intact so they flip with the theme. */
+@theme inline {
+  --color-background: var(--surface);
+  --color-foreground: var(--on-surface);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--on-surface);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--on-surface);
+  --color-primary: var(--primary);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--background);
+  --color-secondary-foreground: var(--on-surface);
+  --color-muted: var(--background);
+  --color-muted-foreground: var(--on-surface-secondary);
+  --color-accent: var(--primary-light);
+  --color-accent-foreground: var(--on-surface);
+  --color-destructive: var(--error);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--divider);
+  --color-input: var(--divider);
+  --color-ring: var(--primary);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
 :root {
   /* Priority colors (stable across themes) */
   --priority-1: #E53935;
