@@ -20,7 +20,7 @@ function initials(name?: string | null): string {
 }
 function fmtDate(d: string): string {
   if (!d) return '—';
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 export default function Home() {

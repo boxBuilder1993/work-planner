@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import PlanTree from './PlanTree';
+import ScheduleGrid from './ScheduleGrid';
 import { getTask } from '../api/tasks';
 import type { TaskEntity } from '../types';
 
@@ -35,7 +36,7 @@ export default function ProjectView() {
           {taskId && <PlanTree rootId={taskId} />}
         </TabsContent>
         <TabsContent value="schedule" className="p-7 pt-5">
-          <p className="text-sm text-muted-foreground">Schedule grid for this project — coming next.</p>
+          {taskId && <ScheduleGrid rootId={taskId} />}
         </TabsContent>
       </Tabs>
     </div>
