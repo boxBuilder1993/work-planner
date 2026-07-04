@@ -1,35 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import PlanTree from './PlanTree';
 import ScheduleGrid from './ScheduleGrid';
-import { getTask } from '../api/tasks';
+import TaskDetailsPanel from './TaskDetailsPanel';
+import { getBreadcrumbs } from '../api/tasks';
 import type { TaskEntity } from '../types';
+
+const tabCls =
+  'rounded-none border-b-2 border-transparent px-3 py-3 text-[14px] font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none';
 
 export default function ProjectView() {
   const { taskId } = useParams<{ taskId: string }>();
-  const [task, setTask] = useState<TaskEntity | null>(null);
+  const [trail, setTrail] = useState<TaskEntity[]>([]);
 
   useEffect(() => {
     if (!taskId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount
-    getTask(taskId).then(setTask).catch(() => {});
+    getBreadcrumbs(taskId).then(setTrail).catch(() => setTrail([]));
   }, [taskId]);
 
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center gap-3 border-b px-7 py-4">
-        <div className="text-[13.5px] text-muted-foreground">
+        <div className="flex flex-wrap items-center text-[13.5px] text-muted-foreground">
           <Link to="/" className="hover:text-foreground">Projects</Link>
-          <span className="mx-1.5">/</span>
-          <span className="font-semibold text-foreground">{task?.title ?? '…'}</span>
+          {trail.map((t, i) => (
+            <Fragment key={t.id}>
+              <span className="mx-1.5">/</span>
+              {i === trail.length - 1 ? (
+                <span className="font-semibold text-foreground">{t.title}</span>
+              ) : (
+                <Link to={`/projects/${t.id}`} className="hover:text-foreground">{t.title}</Link>
+              )}
+            </Fragment>
+          ))}
+          {trail.length === 0 && <><span className="mx-1.5">/</span><span className="text-foreground">…</span></>}
         </div>
       </header>
       <Tabs defaultValue="plan" className="flex flex-1 flex-col gap-0">
         <div className="border-b px-7">
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
-            <TabsTrigger value="plan" className="rounded-none border-b-2 border-transparent px-3 py-3 data-[state=active]:border-foreground data-[state=active]:shadow-none">Plan</TabsTrigger>
-            <TabsTrigger value="schedule" className="rounded-none border-b-2 border-transparent px-3 py-3 data-[state=active]:border-foreground data-[state=active]:shadow-none">Schedule</TabsTrigger>
+            <TabsTrigger value="plan" className={tabCls}>Plan</TabsTrigger>
+            <TabsTrigger value="schedule" className={tabCls}>Schedule</TabsTrigger>
+            <TabsTrigger value="details" className={tabCls}>Details</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="plan" className="p-7 pt-5">
@@ -37,6 +50,9 @@ export default function ProjectView() {
         </TabsContent>
         <TabsContent value="schedule" className="p-7 pt-5">
           {taskId && <ScheduleGrid rootId={taskId} />}
+        </TabsContent>
+        <TabsContent value="details" className="p-7 pt-5">
+          {taskId && <TaskDetailsPanel taskId={taskId} />}
         </TabsContent>
       </Tabs>
     </div>
