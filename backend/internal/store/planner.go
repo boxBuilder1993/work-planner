@@ -477,7 +477,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 		if r.status == "CLOSED" {
 			continue // done work doesn't get scheduled or occupy capacity
 		}
-		t := planner.Task{ID: r.id, EstimateHours: deref(r.duration), BufferHours: deref(r.buffer), BlockedBy: blockedBy[r.id]}
+		t := planner.Task{ID: r.id, EstimateHours: deref(r.duration), BufferHours: deref(r.buffer), BlockedBy: blockedBy[r.id], Priority: r.priority, Position: r.position}
 		if r.parentID != nil {
 			t.ParentID = *r.parentID
 		}

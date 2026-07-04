@@ -130,6 +130,100 @@ func TestParentRollupWithBuffer(t *testing.T) {
 	}
 }
 
+func TestIntraDayPacking(t *testing.T) {
+	res := run(t, Input{
+		StartDate: "2026-07-06",
+		Tasks: []Task{
+			{ID: "a", AssigneeID: "p", EstimateHours: 4},
+			{ID: "b", AssigneeID: "p", EstimateHours: 4},
+		},
+		Persons:  map[string]Person{"p": p8("p")},
+		Calendar: Calendar{WeekendDays: 96},
+	})
+	// Two independent 4h tasks pack into one 8h day for the same person.
+	if res["a"].Start != "2026-07-06" || res["a"].End != "2026-07-06" {
+		t.Errorf("a want Mon..Mon, got %+v", res["a"])
+	}
+	if res["b"].Start != "2026-07-06" || res["b"].End != "2026-07-06" {
+		t.Errorf("b should pack into the same Mon (intra-day), got %+v", res["b"])
+	}
+}
+
+func TestIntraDayOverflow(t *testing.T) {
+	res := run(t, Input{
+		StartDate: "2026-07-06",
+		Tasks: []Task{
+			{ID: "a", AssigneeID: "p", EstimateHours: 6},
+			{ID: "b", AssigneeID: "p", EstimateHours: 4},
+		},
+		Persons:  map[string]Person{"p": p8("p")},
+		Calendar: Calendar{WeekendDays: 96},
+	})
+	// a takes Mon 6h; b fills Mon's last 2h then spills 2h into Tue.
+	if res["a"].End != "2026-07-06" {
+		t.Errorf("a want end Mon, got %+v", res["a"])
+	}
+	if res["b"].Start != "2026-07-06" || res["b"].End != "2026-07-07" {
+		t.Errorf("b want Mon..Tue (2h Mon + 2h Tue), got %+v", res["b"])
+	}
+}
+
+func TestPriorityWinsContention(t *testing.T) {
+	res := run(t, Input{
+		StartDate: "2026-07-06",
+		Tasks: []Task{
+			{ID: "lo", AssigneeID: "p", EstimateHours: 8, Priority: 5},
+			{ID: "hi", AssigneeID: "p", EstimateHours: 8, Priority: 1},
+		},
+		Persons:  map[string]Person{"p": p8("p")},
+		Calendar: Calendar{WeekendDays: 96},
+	})
+	// Despite input order, hi (lower value = higher priority) grabs Monday.
+	if res["hi"].Start != "2026-07-06" {
+		t.Errorf("hi should schedule first (Mon), got %+v", res["hi"])
+	}
+	if res["lo"].Start != "2026-07-07" {
+		t.Errorf("lo should be pushed to Tue, got %+v", res["lo"])
+	}
+}
+
+func TestUnsetPrioritySortsLast(t *testing.T) {
+	res := run(t, Input{
+		StartDate: "2026-07-06",
+		Tasks: []Task{
+			{ID: "unset", AssigneeID: "p", EstimateHours: 8},              // priority 0 → last
+			{ID: "ranked", AssigneeID: "p", EstimateHours: 8, Priority: 2}, // explicit → first
+		},
+		Persons:  map[string]Person{"p": p8("p")},
+		Calendar: Calendar{WeekendDays: 96},
+	})
+	if res["ranked"].Start != "2026-07-06" {
+		t.Errorf("ranked (priority 2) should schedule before unset (0), got %+v", res["ranked"])
+	}
+	if res["unset"].Start != "2026-07-07" {
+		t.Errorf("unset priority should sort last, got %+v", res["unset"])
+	}
+}
+
+func TestPriorityRespectsDependencies(t *testing.T) {
+	res := run(t, Input{
+		StartDate: "2026-07-06",
+		Tasks: []Task{
+			{ID: "blocker", AssigneeID: "p", EstimateHours: 8, Priority: 9},
+			{ID: "urgent", AssigneeID: "p", EstimateHours: 8, Priority: 1, BlockedBy: []string{"blocker"}},
+		},
+		Persons:  map[string]Person{"p": p8("p")},
+		Calendar: Calendar{WeekendDays: 96},
+	})
+	// urgent is higher priority but blocked → precedence still wins over priority.
+	if res["blocker"].Start != "2026-07-06" {
+		t.Errorf("blocker should run first (dependency), got %+v", res["blocker"])
+	}
+	if res["urgent"].Start != "2026-07-07" {
+		t.Errorf("urgent must wait for its blocker despite priority, got %+v", res["urgent"])
+	}
+}
+
 func TestCycleRejected(t *testing.T) {
 	_, err := Schedule(Input{
 		StartDate: "2026-07-06",

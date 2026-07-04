@@ -117,7 +117,10 @@ export default function ScheduleGrid({ rootId }: { rootId?: string }) {
                         ) : (
                           tasks.map((t) => (
                             <div key={t.taskId} className={cn('my-0.5 rounded-md border border-l-[3px] bg-muted px-2 py-1 text-[12px]', t.onCriticalPath ? 'border-l-destructive' : 'border-l-muted-foreground/40')}>
-                              <div className="font-medium">{t.title}</div>
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className="font-medium">{t.title}</span>
+                                {t.estimateHours != null && <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground">{t.estimateHours}h</span>}
+                              </div>
                               <div className="text-[10.5px] text-muted-foreground">{model.rootTitle(t.taskId)}</div>
                             </div>
                           ))
