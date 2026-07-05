@@ -35,7 +35,18 @@ export function DescriptionSection({ taskId }: { taskId: string }) {
 
   return (
     <section>
-      <h2 className={`mb-2 ${sectionTitle}`}>Description</h2>
+      <div className="mb-2 flex items-center gap-2">
+        <h2 className={sectionTitle}>Description</h2>
+        <a
+          href="https://www.markdownguide.org/basic-syntax/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11.5px] font-normal text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+          title="Markdown formatting reference (opens in a new tab)"
+        >
+          Markdown supported ↗
+        </a>
+      </div>
       {editing ? (
         <Textarea
           autoFocus
