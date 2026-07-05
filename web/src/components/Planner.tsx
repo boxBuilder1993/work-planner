@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import * as planner from '../api/planner';
 import type { Person, Holiday, ScheduleRow, TimeOffEntry } from '../api/planner';
 import PlanTree from './PlanTree';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft } from 'lucide-react';
 import styles from './Planner.module.css';
 
 type Tab = 'plan' | 'schedule' | 'team';
@@ -37,23 +40,25 @@ export default function Planner() {
   useEffect(() => { void reload(); }, [reload]);
 
   return (
-    <div className={styles.page}>
-      <div className={styles.topBar}>
-        <button className={styles.back} onClick={() => navigate('/tasks')}>&larr;</button>
-        <span className={styles.title}>Planner</span>
-        <div className={styles.tabs}>
-          {(['plan', 'schedule', 'team'] as Tab[]).map((t) => (
-            <button key={t} className={`${styles.tab} ${tab === t ? styles.tabActive : ''}`} onClick={() => setTab(t)}>
-              {t === 'plan' ? 'Plan' : t === 'schedule' ? 'Schedule' : 'Team & Calendar'}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background/95 px-4 py-2.5 backdrop-blur">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/tasks')} aria-label="Back">
+          <ArrowLeft className="size-5" />
+        </Button>
+        <h1 className="text-lg font-semibold tracking-tight">Planner</h1>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="ml-auto">
+          <TabsList>
+            <TabsTrigger value="plan">Plan</TabsTrigger>
+            <TabsTrigger value="schedule">Schedule</TabsTrigger>
+            <TabsTrigger value="team">Team &amp; Calendar</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </header>
 
-      {error && <div className={styles.error}>{error}</div>}
-      {loading && <div className={styles.muted}>Loading…</div>}
+      {error && <div className="px-6 py-3 text-sm text-destructive">{error}</div>}
+      {loading && <div className="px-6 py-3 text-sm text-muted-foreground">Loading…</div>}
 
-      {!loading && tab === 'plan' && <div className={styles.body}><PlanTree /></div>}
+      {!loading && tab === 'plan' && <div className="p-6"><PlanTree /></div>}
       {!loading && tab === 'schedule' && <ScheduleTab rows={rows} />}
       {!loading && tab === 'team' && <TeamTab people={people} reload={reload} />}
     </div>

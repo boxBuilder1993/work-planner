@@ -6,14 +6,21 @@
 //   - Manager inputs: estimate hours, assignee, dependencies, parent buffer.
 //   - Engine computes scheduled start/end + critical path from those plus a
 //     shared calendar (weekends + holidays) and per-person time off.
-//   - v1 simplifications (documented): day granularity with whole-day task
-//     occupancy per assignee (no intra-day packing); finish-to-start deps;
-//     dependency-based critical path.
+//   - Placement: a priority-driven, resource-constrained ready-list. Among
+//     tasks whose dependencies are resolved, the most important (lowest
+//     Priority, then Position) grabs its assignee's next free slot.
+//   - Hour-native: each person has a per-day hour budget; independent tasks
+//     pack intra-day (two 4h tasks share one 8h day) and spill across days,
+//     honouring weekends, holidays, and time off.
+//   - Simplifications (documented): dependencies are finish-to-start at *day*
+//     granularity (a successor starts the day after its blocker ends, not the
+//     same afternoon); critical path is dependency-based, not resource-aware.
 package planner
 
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -45,6 +52,12 @@ type Task struct {
 	EstimateHours float64
 	BufferHours   float64  // applied on nodes with children
 	BlockedBy     []string // task IDs this task depends on
+	// Priority drives resource contention: when several ready tasks compete for
+	// the same person, the lowest Priority value wins (lower = more important,
+	// Jira-style). 0 means "unset" and sorts last. Position (the manual tree
+	// order) is the deterministic tie-break.
+	Priority float64
+	Position float64
 }
 
 type Input struct {
@@ -103,37 +116,65 @@ func (in Input) availableHours(personID string, day time.Time) float64 {
 	return base
 }
 
-// scheduleLeaf places `hours` of effort for `personID` no earlier than
-// `earliest`, consuming whole working days. Returns (start, end) dates.
-func (in Input) scheduleLeaf(personID string, earliest time.Time, hours float64) (time.Time, time.Time, error) {
-	// Advance to the first working day on/after `earliest`.
-	cur := earliest
-	days := 0
-	for in.availableHours(personID, cur) <= 0 {
-		cur = cur.AddDate(0, 0, 1)
-		if days++; days > maxScheduleDays {
-			return time.Time{}, time.Time{}, fmt.Errorf("no working days for person %q", personID)
-		}
+// clock is a person's position on their working timeline: the current day and
+// how many hours they've already committed on that day. It lets independent
+// tasks pack intra-day (two 4h tasks on one 8h day) instead of each burning a
+// whole day.
+type clock struct {
+	day  time.Time
+	used float64
+}
+
+// remainingToday returns the person's still-free hours on the clock's day.
+func (in Input) remainingToday(personID string, clk clock) float64 {
+	return in.availableHours(personID, clk.day) - clk.used
+}
+
+// advanceToCapacity moves the clock forward to the next day (from `earliest`
+// onward) on which the person has any free hours.
+func (in Input) advanceToCapacity(personID string, clk clock, earliest time.Time) (clock, error) {
+	if clk.day.Before(earliest) {
+		clk = clock{day: earliest}
 	}
-	start := cur
-	if hours <= 0 {
-		return start, start, nil // zero-effort: single day
+	for i := 0; in.remainingToday(personID, clk) <= 1e-9; i++ {
+		if i > maxScheduleDays {
+			return clock{}, fmt.Errorf("no working capacity for person %q", personID)
+		}
+		clk = clock{day: clk.day.AddDate(0, 0, 1)}
+	}
+	return clk, nil
+}
+
+// place schedules `hours` of effort for `personID`, resuming from the person's
+// `clk` but no earlier than `earliest` (a dependency-derived day). It packs
+// hour-by-hour across working days and returns the task's start/end dates plus
+// the person's advanced clock.
+func (in Input) place(personID string, clk clock, earliest time.Time, hours float64) (time.Time, time.Time, clock, error) {
+	clk, err := in.advanceToCapacity(personID, clk, earliest)
+	if err != nil {
+		return time.Time{}, time.Time{}, clock{}, err
+	}
+	start := clk.day
+	if hours <= 1e-9 {
+		return start, start, clk, nil // zero-effort milestone: no capacity consumed
 	}
 	remaining := hours
-	end := cur
-	for {
-		ah := in.availableHours(personID, cur)
-		if ah > 0 {
-			remaining -= ah
-			end = cur
+	end := clk.day
+	for i := 0; ; i++ {
+		if i > maxScheduleDays {
+			return time.Time{}, time.Time{}, clock{}, fmt.Errorf("schedule did not converge for person %q", personID)
+		}
+		free := in.remainingToday(personID, clk)
+		if free > 1e-9 {
+			take := math.Min(free, remaining)
+			clk.used += take
+			remaining -= take
+			end = clk.day
 			if remaining <= 1e-9 {
-				return start, end, nil
+				return start, end, clk, nil
 			}
 		}
-		cur = cur.AddDate(0, 0, 1)
-		if days++; days > maxScheduleDays {
-			return time.Time{}, time.Time{}, fmt.Errorf("schedule did not converge for person %q", personID)
-		}
+		clk = clock{day: clk.day.AddDate(0, 0, 1)}
 	}
 }
 
@@ -156,50 +197,19 @@ func Schedule(in Input) (map[string]Scheduled, error) {
 	}
 	isLeaf := func(id string) bool { return !hasChildren[id] }
 
-	// Topologically order leaves by their (leaf) dependencies.
-	order, err := topoSortLeaves(in.Tasks, isLeaf)
-	if err != nil {
+	// topoSortLeaves is kept purely for cycle detection; the actual placement
+	// order is decided by the priority-driven ready-list below.
+	if _, err := topoSortLeaves(in.Tasks, isLeaf); err != nil {
 		return nil, err
 	}
 
 	res := make(map[string]Scheduled, len(in.Tasks))
 	endDate := make(map[string]time.Time)
 	startDate := make(map[string]time.Time)
-	cursor := make(map[string]time.Time) // assignee -> next free working day
+	cursor := make(map[string]clock) // assignee -> position on their timeline
 
-	for _, id := range order {
-		t := byID[id]
-		// Skip leaves that can't be scheduled (no assignee, or unknown
-		// person) — they stay unscheduled rather than failing the whole run.
-		if t.AssigneeID == "" {
-			continue
-		}
-		if _, ok := in.Persons[t.AssigneeID]; !ok {
-			continue
-		}
-		earliest := projectStart
-		for _, dep := range t.BlockedBy {
-			if de, ok := endDate[dep]; ok {
-				// finish-to-start: successor starts the day after the blocker ends
-				if next := de.AddDate(0, 0, 1); next.After(earliest) {
-					earliest = next
-				}
-			}
-		}
-		if t.AssigneeID != "" {
-			if c, ok := cursor[t.AssigneeID]; ok && c.After(earliest) {
-				earliest = c
-			}
-		}
-		s, e, err := in.scheduleLeaf(t.AssigneeID, earliest, t.EstimateHours)
-		if err != nil {
-			return nil, err
-		}
-		startDate[id], endDate[id] = s, e
-		if t.AssigneeID != "" {
-			cursor[t.AssigneeID] = e.AddDate(0, 0, 1) // whole-day occupancy
-		}
-		res[id] = Scheduled{Start: s.Format(dateFmt), End: e.Format(dateFmt)}
+	if err := in.scheduleLeaves(byID, isLeaf, projectStart, startDate, endDate, cursor, res); err != nil {
+		return nil, err
 	}
 
 	// Roll up parents (deepest first) + apply buffers.
@@ -224,6 +234,91 @@ func Schedule(in Input) (map[string]Scheduled, error) {
 
 	markCriticalPath(in.Tasks, byID, hasChildren, startDate, endDate, res)
 	return res, nil
+}
+
+// scheduleLeaves places every leaf using a priority-driven, resource-constrained
+// ready-list: repeatedly, among leaves whose dependencies are all resolved, it
+// picks the most important one (lowest Priority, then Position, then input order)
+// and gives it its assignee's next free slot. This is what makes higher-priority
+// work win contention for a shared person.
+func (in Input) scheduleLeaves(
+	byID map[string]Task, isLeaf func(string) bool, projectStart time.Time,
+	startDate, endDate map[string]time.Time, cursor map[string]clock, res map[string]Scheduled,
+) error {
+	var leaves []Task
+	leafSet := map[string]bool{}
+	for _, t := range in.Tasks {
+		if isLeaf(t.ID) {
+			leaves = append(leaves, t)
+			leafSet[t.ID] = true
+		}
+	}
+	idx := map[string]int{}
+	for i, t := range leaves {
+		idx[t.ID] = i
+	}
+	resolved := map[string]bool{} // leaf processed (scheduled or skipped)
+	ready := func(t Task) bool {
+		for _, dep := range t.BlockedBy {
+			if leafSet[dep] && !resolved[dep] {
+				return false
+			}
+		}
+		return true
+	}
+	prioKey := func(t Task) float64 {
+		if t.Priority == 0 {
+			return math.Inf(1) // unset → lowest priority
+		}
+		return t.Priority
+	}
+	better := func(a, b Task) bool { // should a be scheduled before b?
+		if ka, kb := prioKey(a), prioKey(b); ka != kb {
+			return ka < kb
+		}
+		if a.Position != b.Position {
+			return a.Position < b.Position
+		}
+		return idx[a.ID] < idx[b.ID]
+	}
+
+	for range leaves {
+		var pick *Task
+		for i := range leaves {
+			if t := leaves[i]; !resolved[t.ID] && ready(t) && (pick == nil || better(t, *pick)) {
+				pick = &leaves[i]
+			}
+		}
+		if pick == nil {
+			break // no ready task (cycle already rejected upstream) — stop safely
+		}
+		t := *pick
+		resolved[t.ID] = true
+		// Unschedulable leaves (no/unknown assignee) resolve without dates so
+		// their successors can still proceed.
+		if t.AssigneeID == "" {
+			continue
+		}
+		if _, ok := in.Persons[t.AssigneeID]; !ok {
+			continue
+		}
+		earliest := projectStart
+		for _, dep := range t.BlockedBy {
+			if de, ok := endDate[dep]; ok {
+				if next := de.AddDate(0, 0, 1); next.After(earliest) { // finish-to-start (day granularity)
+					earliest = next
+				}
+			}
+		}
+		s, e, clk, err := in.place(t.AssigneeID, cursor[t.AssigneeID], earliest, t.EstimateHours)
+		if err != nil {
+			return err
+		}
+		startDate[t.ID], endDate[t.ID] = s, e
+		cursor[t.AssigneeID] = clk
+		res[t.ID] = Scheduled{Start: s.Format(dateFmt), End: e.Format(dateFmt)}
+	}
+	return nil
 }
 
 // topoSortLeaves returns leaf task IDs in dependency order (blockers first).

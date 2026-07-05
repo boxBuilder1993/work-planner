@@ -184,7 +184,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
                 onKeyDown={(e) => { if (e.key === 'Enter') void saveRename(); if (e.key === 'Escape') setRenaming(null); }} />
             ) : (
               <span className={`${styles.taskLink} ${done ? styles.done : ''}`}
-                onClick={() => navigate(`/tasks/${r.taskId}`)}
+                onClick={() => navigate(`/projects/${r.taskId}`)}
                 onDoubleClick={() => setRenaming({ id: r.taskId, title: r.title })}
                 title="click: open · double-click: rename">{r.title}</span>
             )}
@@ -225,7 +225,10 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
           <td className={styles.cp}>{r.onCriticalPath ? '★' : ''}</td>
         </tr>
       );
-      return parent && !isCollapsed ? [row, ...renderRows(r.taskId, depth + 1)] : [row];
+      // Recurse to render children, OR to surface a pending draft child even on a
+      // currently-childless row (so the row-level ＋ works for the *first* subtask).
+      const showChildren = (parent || draft?.parentId === r.taskId) && !isCollapsed;
+      return showChildren ? [row, ...renderRows(r.taskId, depth + 1)] : [row];
     });
     if (draft && draft.parentId === parentId) out.push(draftRow(depth));
     return out;
