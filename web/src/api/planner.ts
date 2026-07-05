@@ -52,6 +52,7 @@ export interface ScheduleRow {
   blockedBy: string[];
   dueDate: number | null;
   jiraUrl: string | null;
+  segments: { day: string; hours: number }[];
 }
 
 // People + time off

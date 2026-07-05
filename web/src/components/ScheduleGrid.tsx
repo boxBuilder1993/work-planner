@@ -6,6 +6,7 @@ import { exportPlan } from '../lib/planExport';
 import { cn } from '@/lib/utils';
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
+const fmtH = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const fmtRow = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 function weekendBit(d: string, mask: number) {
   const js = new Date(d + 'T00:00:00Z').getUTCDay(); // Sun=0..Sat=6
@@ -61,8 +62,20 @@ export default function ScheduleGrid({ rootId }: { rootId?: string }) {
       const end = ends[ends.length - 1];
       for (let i = 0; d <= end && i < 400; i++) { dates.push(d); d = addDays(d, 1); }
     }
-    const cellTasks = (person: string, date: string) =>
-      leaves.filter((l) => (l.assigneeName || 'Unassigned') === person && l.start <= date && date <= l.end);
+    // Place tasks by their per-day segments (exact hours), not the whole span —
+    // so a chip only appears on days it actually consumes hours, with that day's
+    // allocation.
+    const cell = new Map<string, Map<string, { task: ScheduleRow; hours: number }[]>>();
+    for (const l of leaves) {
+      const person = l.assigneeName || 'Unassigned';
+      for (const seg of l.segments || []) {
+        if (!cell.has(person)) cell.set(person, new Map());
+        const m = cell.get(person)!;
+        if (!m.has(seg.day)) m.set(seg.day, []);
+        m.get(seg.day)!.push({ task: l, hours: seg.hours });
+      }
+    }
+    const cellTasks = (person: string, date: string) => cell.get(person)?.get(date) ?? [];
     return { people, dates, cellTasks, rootTitle };
   }, [rows, rootId]);
 
@@ -126,20 +139,25 @@ export default function ScheduleGrid({ rootId }: { rootId?: string }) {
                         {wknd && tasks.length === 0 ? (
                           <span className="text-[11.5px] text-muted-foreground/70">weekend</span>
                         ) : (
-                          tasks.map((t) => (
-                            <button
-                              key={t.taskId}
-                              onClick={() => navigate(`/projects/${t.taskId}`)}
-                              title="Open task"
-                              className={cn('my-0.5 block w-full rounded-md border border-l-[3px] bg-muted px-2 py-1 text-left text-[12px] transition-colors hover:bg-accent', t.onCriticalPath ? 'border-l-destructive' : 'border-l-muted-foreground/40')}
-                            >
-                              <div className="flex items-baseline justify-between gap-2">
-                                <span className="font-medium">{t.title}</span>
-                                {t.estimateHours != null && <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground">{t.estimateHours}h</span>}
-                              </div>
-                              <div className="text-[10.5px] text-muted-foreground">{model.rootTitle(t.taskId)}</div>
-                            </button>
-                          ))
+                          tasks.map(({ task: t, hours }) => {
+                            const multiDay = (t.segments?.length ?? 1) > 1;
+                            return (
+                              <button
+                                key={t.taskId}
+                                onClick={() => navigate(`/projects/${t.taskId}`)}
+                                title="Open task"
+                                className={cn('my-0.5 block w-full rounded-md border border-l-[3px] bg-muted px-2 py-1 text-left text-[12px] transition-colors hover:bg-accent', t.onCriticalPath ? 'border-l-destructive' : 'border-l-muted-foreground/40')}
+                              >
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="font-medium">{t.title}</span>
+                                  <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground">
+                                    {fmtH(hours)}h{multiDay && t.estimateHours != null && <span className="opacity-70"> · of {fmtH(t.estimateHours)}h</span>}
+                                  </span>
+                                </div>
+                                <div className="text-[10.5px] text-muted-foreground">{model.rootTitle(t.taskId)}</div>
+                              </button>
+                            );
+                          })
                         )}
                       </td>
                     );
