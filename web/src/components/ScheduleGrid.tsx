@@ -62,7 +62,12 @@ export default function ScheduleGrid({ rootId }: { rootId?: string }) {
     return { people, dates, cellTasks, rootTitle };
   }, [rows, rootId]);
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (loading) return (
+    <div className="space-y-2">
+      <div className="h-9 w-full animate-pulse rounded-md bg-muted" />
+      {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-11 w-full animate-pulse rounded-md bg-muted/50" />)}
+    </div>
+  );
   if (model.people.length === 0) return <p className="text-sm text-muted-foreground">Nothing scheduled yet — give tasks an estimate and an assignee.</p>;
 
   const mask = cal?.weekendDays ?? 96;

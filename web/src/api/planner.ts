@@ -80,5 +80,17 @@ export const createDependency = (taskId: string, dependsOnId: string) =>
 export const deleteDependency = (id: string) => apiDelete(`/api/dependencies/${id}`);
 export const updateTaskPlanner = (taskId: string, b: Partial<{ assigneeId: string; bufferHours: number; parentId: string; plannerPriority: number; position: number }>) =>
   apiPatch(`/api/tasks/${taskId}/planner`, b);
-export const getSchedule = (start?: string) =>
-  apiFetch<ScheduleRow[]>(`/api/schedule${start ? `?start=${start}` : ''}`);
+// Coalesce concurrent unscoped schedule fetches: the Plan tab mounts several
+// components (properties box, tree) that each need the schedule, and each call
+// triggers a full backend reschedule. Sharing one in-flight request avoids the
+// duplicate recompute + loading flash. Only dedupes simultaneous calls — a later
+// call (e.g. after an edit) still fetches fresh.
+let scheduleInFlight: Promise<ScheduleRow[]> | null = null;
+export const getSchedule = (start?: string): Promise<ScheduleRow[]> => {
+  if (start) return apiFetch<ScheduleRow[]>(`/api/schedule?start=${start}`);
+  if (!scheduleInFlight) {
+    scheduleInFlight = apiFetch<ScheduleRow[]>('/api/schedule');
+    void scheduleInFlight.finally(() => { scheduleInFlight = null; });
+  }
+  return scheduleInFlight;
+};

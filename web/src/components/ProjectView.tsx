@@ -43,10 +43,10 @@ export default function ProjectView() {
             <TabsTrigger value="schedule" className={tabCls}>Schedule</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="plan" className="p-7 pt-5">
+        <TabsContent value="plan" className="p-7 pt-5 duration-200 animate-in fade-in-0 slide-in-from-bottom-1">
           {taskId && <TaskPlan taskId={taskId} />}
         </TabsContent>
-        <TabsContent value="schedule" className="p-7 pt-5">
+        <TabsContent value="schedule" className="p-7 pt-5 duration-200 animate-in fade-in-0 slide-in-from-bottom-1">
           {taskId && <ScheduleGrid rootId={taskId} />}
         </TabsContent>
       </Tabs>
