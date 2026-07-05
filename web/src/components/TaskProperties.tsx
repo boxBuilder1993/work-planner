@@ -31,7 +31,18 @@ export default function TaskProperties({ taskId }: { taskId: string }) {
   const isLeaf = !rows.some((r) => r.parentId === taskId);
   const byId = new Map(rows.map((r) => [r.taskId, r]));
 
-  if (loading || !row) return <div className="rounded-xl border p-4 text-sm text-muted-foreground">Loading…</div>;
+  if (loading || !row) return (
+    <div className="rounded-xl border p-4">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i}>
+            <div className="mb-1.5 h-2.5 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-full animate-pulse rounded-md bg-muted/50" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   const setAssignee = (v: string) => planner.updateTaskPlanner(taskId, { assigneeId: v }).then(load);
   const setStatus = (v: string) => updateTask(taskId, { status: v }).then(load);
