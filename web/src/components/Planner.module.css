@@ -134,6 +134,8 @@ tr:hover .rowActions { opacity: 1; }
   white-space: normal; width: max-content; max-width: 260px;
   box-shadow: var(--shadow-md); pointer-events: none;
 }
+/* Right-edge headers: open the tooltip leftward so it isn't clipped. */
+.tipRight:hover::after { left: auto; right: 0; }
 
 /* review pass: breakdown scroll + time-off chips */
 .tableWrap { overflow-x: auto; }
