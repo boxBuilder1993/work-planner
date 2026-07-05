@@ -304,6 +304,15 @@ func (s *Store) UpdateTaskPlanner(ctx context.Context, taskID string, req *model
 		args = append(args, *req.Position)
 		i++
 	}
+	if req.JiraURL != nil {
+		if *req.JiraURL == "" {
+			set = append(set, "props = COALESCE(props, '{}'::jsonb) - 'jiraUrl'")
+		} else {
+			set = append(set, fmt.Sprintf("props = jsonb_set(COALESCE(props, '{}'::jsonb), '{jiraUrl}', to_jsonb($%d::text))", i))
+			args = append(args, *req.JiraURL)
+			i++
+		}
+	}
 	if req.ParentID != nil {
 		if *req.ParentID == "" {
 			set = append(set, "parent_id = NULL")
@@ -372,11 +381,13 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 		priority   float64
 		position   float64
 		dueDate    *int64
+		jiraURL    *string
 	}
 	taskRows, err := s.pool.Query(ctx, `
 		SELECT id, parent_id, title, status, assignee_id, duration, buffer_hours,
 		       COALESCE((props->>'plannerPriority')::numeric, 0) AS planner_priority,
-		       COALESCE(position, created_at) AS position, due_date
+		       COALESCE(position, created_at) AS position, due_date,
+		       props->>'jiraUrl' AS jira_url
 		FROM tasks WHERE user_id = $1
 		ORDER BY COALESCE(position, created_at)
 	`, userID)
@@ -386,7 +397,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 	var rows []row
 	for taskRows.Next() {
 		var r row
-		if err := taskRows.Scan(&r.id, &r.parentID, &r.title, &r.status, &r.assigneeID, &r.duration, &r.buffer, &r.priority, &r.position, &r.dueDate); err != nil {
+		if err := taskRows.Scan(&r.id, &r.parentID, &r.title, &r.status, &r.assigneeID, &r.duration, &r.buffer, &r.priority, &r.position, &r.dueDate, &r.jiraURL); err != nil {
 			taskRows.Close()
 			return nil, err
 		}
@@ -534,7 +545,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 		row := model.ScheduleRow{
 			TaskID: r.id, Title: r.title, ParentID: r.parentID, AssigneeID: r.assigneeID,
 			EstimateHours: est, BufferHours: r.buffer, DependencyCount: len(blockedBy[r.id]), Priority: r.priority, Position: r.position, Status: r.status,
-			Start: sc.Start, End: sc.End, OnCriticalPath: sc.OnCriticalPath, DueDate: r.dueDate,
+			Start: sc.Start, End: sc.End, OnCriticalPath: sc.OnCriticalPath, DueDate: r.dueDate, JiraURL: r.jiraURL,
 		}
 		if r.assigneeID != nil {
 			if n, ok := names[*r.assigneeID]; ok {

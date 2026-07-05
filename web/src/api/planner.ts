@@ -51,6 +51,7 @@ export interface ScheduleRow {
   onCriticalPath: boolean;
   blockedBy: string[];
   dueDate: number | null;
+  jiraUrl: string | null;
 }
 
 // People + time off
@@ -78,7 +79,7 @@ export const listDependencies = (taskId: string) => apiFetch<Dependency[]>(`/api
 export const createDependency = (taskId: string, dependsOnId: string) =>
   apiPost<Dependency>(`/api/tasks/${taskId}/dependencies`, { dependsOnId });
 export const deleteDependency = (id: string) => apiDelete(`/api/dependencies/${id}`);
-export const updateTaskPlanner = (taskId: string, b: Partial<{ assigneeId: string; bufferHours: number; parentId: string; plannerPriority: number; position: number }>) =>
+export const updateTaskPlanner = (taskId: string, b: Partial<{ assigneeId: string; bufferHours: number; parentId: string; plannerPriority: number; position: number; jiraUrl: string }>) =>
   apiPatch(`/api/tasks/${taskId}/planner`, b);
 // Coalesce concurrent unscoped schedule fetches: the Plan tab mounts several
 // components (properties box, tree) that each need the schedule, and each call

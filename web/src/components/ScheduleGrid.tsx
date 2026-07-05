@@ -77,12 +77,12 @@ export default function ScheduleGrid({ rootId }: { rootId?: string }) {
 
   const exportCsv = () => {
     const cell = (v: unknown) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const lines = ['Assignee,Task,Project,Start,End,Estimate (h),Critical Path'];
+    const lines = ['Assignee,Task,Project,Start,End,Estimate (h),Critical Path,Jira URL'];
     for (const p of model.people) {
       const seen = new Set<string>();
       for (const d of model.dates) for (const t of model.cellTasks(p, d)) {
         if (seen.has(t.taskId)) continue; seen.add(t.taskId);
-        lines.push([p, t.title, model.rootTitle(t.taskId), t.start, t.end, t.estimateHours ?? '', t.onCriticalPath ? 'yes' : ''].map(cell).join(','));
+        lines.push([p, t.title, model.rootTitle(t.taskId), t.start, t.end, t.estimateHours ?? '', t.onCriticalPath ? 'yes' : '', t.jiraUrl ?? ''].map(cell).join(','));
       }
     }
     const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
