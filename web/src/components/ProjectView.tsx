@@ -6,8 +6,12 @@ import TaskPlan from './TaskPlan';
 import { getBreadcrumbs } from '../api/tasks';
 import type { TaskEntity } from '../types';
 
+// Clean underline tab (no box): neutralize shadcn's default active fill/border/
+// rounding and use only a bottom border as the selected indicator.
 const tabCls =
-  'rounded-none border-b-2 border-transparent px-3 py-3 text-[14px] font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none';
+  'flex-none rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-2 py-3 text-[14px] font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground ' +
+  'data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none ' +
+  'dark:data-[state=active]:border-foreground dark:data-[state=active]:bg-transparent';
 
 export default function ProjectView() {
   const { taskId } = useParams<{ taskId: string }>();
