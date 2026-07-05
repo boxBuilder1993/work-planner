@@ -53,7 +53,8 @@ export default function Home() {
     return 'on-track';
   };
 
-  const roots = byParent.get(null) || [];
+  // Projects home shows only open projects — a closed (done) project drops off.
+  const roots = (byParent.get(null) || []).filter((p) => p.status !== 'CLOSED');
   const projects = roots.map((p) => {
     const leaves = collectLeaves(p.taskId);
     const team = [...new Set(leaves.map((l) => l.assigneeName).filter(Boolean))] as string[];
