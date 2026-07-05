@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { listChildren } from '../api/tasks';
 import type { TaskEntity } from '../types';
 import PlanTree from './PlanTree';
+import TaskProperties from './TaskProperties';
 import { DescriptionSection, CommentsSection } from './TaskDetailsPanel';
 import { cn } from '@/lib/utils';
 import { ChevronRight } from 'lucide-react';
@@ -14,6 +15,7 @@ import { ChevronRight } from 'lucide-react';
 export default function TaskPlan({ taskId }: { taskId: string }) {
   return (
     <div className="max-w-4xl space-y-9">
+      <TaskProperties key={taskId} taskId={taskId} />
       <DescriptionSection taskId={taskId} />
       <SubtasksSection taskId={taskId} />
       <CommentsSection taskId={taskId} />
