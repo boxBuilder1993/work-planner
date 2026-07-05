@@ -534,7 +534,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 		row := model.ScheduleRow{
 			TaskID: r.id, Title: r.title, ParentID: r.parentID, AssigneeID: r.assigneeID,
 			EstimateHours: est, BufferHours: r.buffer, DependencyCount: len(blockedBy[r.id]), Priority: r.priority, Position: r.position, Status: r.status,
-			Start: sc.Start, End: sc.End, OnCriticalPath: sc.OnCriticalPath,
+			Start: sc.Start, End: sc.End, OnCriticalPath: sc.OnCriticalPath, DueDate: r.dueDate,
 		}
 		if r.assigneeID != nil {
 			if n, ok := names[*r.assigneeID]; ok {
