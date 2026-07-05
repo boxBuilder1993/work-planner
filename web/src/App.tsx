@@ -8,11 +8,9 @@ import ProjectView from './components/ProjectView';
 import Schedule from './components/Schedule';
 import Team from './components/Team';
 import Search from './components/Search';
-import TaskList from './components/TaskList';
 import TaskDetail from './components/TaskDetail';
 import Settings from './components/Settings';
 import KnowledgeCards from './components/KnowledgeCards';
-import Planner from './components/Planner';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -53,12 +51,13 @@ function AppRoutes() {
       <Route path="/schedule" element={<AuthGuard><Schedule /></AuthGuard>} />
       <Route path="/team" element={<AuthGuard><Team /></AuthGuard>} />
       <Route path="/search" element={<AuthGuard><Search /></AuthGuard>} />
-      <Route path="/tasks" element={<AuthGuard><TaskList /></AuthGuard>} />
+      {/* Legacy task list retired — Home (projects) + Search replace it. */}
+      <Route path="/tasks" element={<Navigate to="/" replace />} />
+      <Route path="/planner" element={<Navigate to="/" replace />} />
       <Route path="/tasks/new" element={<AuthGuard><TaskDetail /></AuthGuard>} />
       <Route path="/tasks/:taskId" element={<AuthGuard><TaskDetail /></AuthGuard>} />
       <Route path="/settings" element={<AuthGuard><Settings /></AuthGuard>} />
       <Route path="/knowledge" element={<AuthGuard><KnowledgeCards /></AuthGuard>} />
-      <Route path="/planner" element={<AuthGuard><Planner /></AuthGuard>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
