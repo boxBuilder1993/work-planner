@@ -224,6 +224,36 @@ func TestPriorityRespectsDependencies(t *testing.T) {
 	}
 }
 
+func TestCrossProjectResourceContention(t *testing.T) {
+	// Two separate projects (top-level parent tasks), each with one leaf assigned
+	// to the SAME person. Scheduling is portfolio-wide, so the shared person must
+	// serialize the two leaves across projects rather than run them in parallel.
+	res := run(t, Input{
+		StartDate: "2026-07-06",
+		Tasks: []Task{
+			{ID: "P1", EstimateHours: 0},                                // project 1
+			{ID: "x", ParentID: "P1", AssigneeID: "p", EstimateHours: 8}, // its only task
+			{ID: "P2", EstimateHours: 0},                                // project 2
+			{ID: "y", ParentID: "P2", AssigneeID: "p", EstimateHours: 8}, // its only task
+		},
+		Persons:  map[string]Person{"p": p8("p")},
+		Calendar: Calendar{WeekendDays: 96},
+	})
+	if res["x"].Start == res["y"].Start {
+		t.Errorf("shared person across projects must serialize, not overlap; x=%+v y=%+v", res["x"], res["y"])
+	}
+	if res["x"].Start != "2026-07-06" || res["y"].Start != "2026-07-07" {
+		t.Errorf("want x Mon then y Tue (portfolio contention); got x=%+v y=%+v", res["x"], res["y"])
+	}
+	// Each project rolls up to its own leaf's dates.
+	if res["P1"].Start != "2026-07-06" || res["P1"].End != "2026-07-06" {
+		t.Errorf("P1 rollup wrong: %+v", res["P1"])
+	}
+	if res["P2"].Start != "2026-07-07" || res["P2"].End != "2026-07-07" {
+		t.Errorf("P2 rollup wrong: %+v", res["P2"])
+	}
+}
+
 func TestCycleRejected(t *testing.T) {
 	_, err := Schedule(Input{
 		StartDate: "2026-07-06",
