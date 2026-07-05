@@ -35,15 +35,18 @@
   margin: 0.15em 0;
 }
 
+/* Translucent gray so code/pre/table fills contrast on BOTH light and dark
+   backgrounds (var(--surface) matched the container and vanished in dark mode). */
 .markdown code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.875em;
-  background: var(--surface, #f5f5f5);
+  background: rgba(128, 128, 128, 0.18);
   padding: 0.15em 0.35em;
   border-radius: 3px;
 }
 .markdown pre {
-  background: var(--surface, #f5f5f5);
+  background: rgba(128, 128, 128, 0.14);
+  border: 1px solid var(--divider);
   border-radius: var(--radius-md);
   padding: 0.75em 1em;
   overflow-x: auto;
@@ -89,7 +92,7 @@
   text-align: left;
 }
 .markdown th {
-  background: var(--surface, #f5f5f5);
+  background: rgba(128, 128, 128, 0.14);
   font-weight: 600;
 }
 
