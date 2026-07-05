@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as planner from '../api/planner';
 import type { ScheduleRow, CalendarObj, Holiday } from '../api/planner';
+import { exportPlan } from '../lib/planExport';
 import { cn } from '@/lib/utils';
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -24,6 +25,7 @@ export default function ScheduleGrid({ rootId }: { rootId?: string }) {
   const [cal, setCal] = useState<CalendarObj | null>(null);
   const [holidays, setHolidays] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount
@@ -75,25 +77,27 @@ export default function ScheduleGrid({ rootId }: { rootId?: string }) {
   const mask = cal?.weekendDays ?? 96;
   const today = todayStr();
 
-  const exportCsv = () => {
-    const cell = (v: unknown) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const lines = ['Assignee,Task,Project,Start,End,Estimate (h),Critical Path,Jira URL'];
-    for (const p of model.people) {
-      const seen = new Set<string>();
-      for (const d of model.dates) for (const t of model.cellTasks(p, d)) {
-        if (seen.has(t.taskId)) continue; seen.add(t.taskId);
-        lines.push([p, t.title, model.rootTitle(t.taskId), t.start, t.end, t.estimateHours ?? '', t.onCriticalPath ? 'yes' : '', t.jiraUrl ?? ''].map(cell).join(','));
-      }
+  const exportExcel = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const ppl = await planner.listPeople();
+      const timeOff: Record<string, planner.TimeOffEntry[]> = {};
+      await Promise.all(ppl.map(async (p) => { timeOff[p.id] = await planner.listTimeOff(p.id); }));
+      exportPlan(
+        { rows, people: ppl, timeOff, weekendMask: cal?.weekendDays ?? 96, holidays },
+        `plan-${today}.xlsx`,
+      );
+    } finally {
+      setExporting(false);
     }
-    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
-    const a = document.createElement('a'); a.href = url; a.download = `schedule-${today}.csv`; a.click(); URL.revokeObjectURL(url);
   };
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-end">
-        <button onClick={exportCsv} className="inline-flex h-[34px] items-center gap-1.5 rounded-md border px-3 text-[13px] font-medium hover:bg-muted">
-          ↓ Export CSV
+        <button onClick={exportExcel} disabled={exporting} className="inline-flex h-[34px] items-center gap-1.5 rounded-md border px-3 text-[13px] font-medium hover:bg-muted disabled:opacity-50">
+          {exporting ? 'Preparing…' : '↓ Export plan (Excel)'}
         </button>
       </div>
       <div className="overflow-auto rounded-xl border">
