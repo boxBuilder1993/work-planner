@@ -3,7 +3,37 @@ import { useNavigate } from 'react-router-dom';
 import { createTask, updateTask } from '../api/tasks';
 import * as planner from '../api/planner';
 import type { Person, ScheduleRow } from '../api/planner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import styles from './Planner.module.css';
+
+// Radix Select forbids an empty-string item value, so "unassigned" uses a sentinel.
+const UNASSIGNED = '__unassigned__';
+const triggerCls = 'h-7 w-full min-w-[112px] px-2 text-[13px]';
+
+function AssigneeSelect({ value, people, onChange }: { value: string; people: Person[]; onChange: (v: string) => void }) {
+  return (
+    <Select value={value || UNASSIGNED} onValueChange={(v) => onChange(v === UNASSIGNED ? '' : v)}>
+      <SelectTrigger className={triggerCls}><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value={UNASSIGNED}>— unassigned —</SelectItem>
+        {people.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function StatusSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className={triggerCls}><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="PENDING">To do</SelectItem>
+        <SelectItem value="IN_PROGRESS">In progress</SelectItem>
+        <SelectItem value="CLOSED">Done</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
 
 /**
  * Editable WBS tree-table. A "project" is just a task, so the same tree renders
@@ -144,10 +174,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
       <td />
       <td />
       <td>
-        <select className={styles.sel} value={draft!.assigneeId} onChange={(e) => setDraft({ ...draft!, assigneeId: e.target.value })}>
-          <option value="">— unassigned —</option>
-          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <AssigneeSelect value={draft!.assigneeId} people={people} onChange={(v) => setDraft({ ...draft!, assigneeId: v })} />
       </td>
       <td colSpan={4} />
     </tr>
@@ -208,17 +235,10 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
               onBlur={(e) => setPriority(r.taskId, e.target.value)} title="Priority (fractional)" />
           </td>
           <td>
-            <select className={styles.sel} value={r.assigneeId ?? ''} onChange={(e) => setAssignee(r.taskId, e.target.value)}>
-              <option value="">— unassigned —</option>
-              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <AssigneeSelect value={r.assigneeId ?? ''} people={people} onChange={(v) => setAssignee(r.taskId, v)} />
           </td>
           <td>
-            <select className={styles.statusSel} value={r.status} onChange={(e) => setStatus(r.taskId, e.target.value)}>
-              <option value="PENDING">To do</option>
-              <option value="IN_PROGRESS">In progress</option>
-              <option value="CLOSED">Done</option>
-            </select>
+            <StatusSelect value={r.status} onChange={(v) => setStatus(r.taskId, v)} />
           </td>
           <td className={styles.date}>{r.start || '—'}</td>
           <td className={styles.date}>{r.end || '—'}</td>
@@ -287,11 +307,13 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
               </div>
             ))}
             <div className={styles.formRow}>
-              <select className={styles.sel} value="" onChange={(e) => { void addDep(e.target.value); }}>
-                <option value="">+ add blocker…</option>
-                {rows.filter((r) => r.taskId !== depsFor && !deps.some((d) => d.dependsOnId === r.taskId))
-                  .map((r) => <option key={r.taskId} value={r.taskId}>{r.title}</option>)}
-              </select>
+              <Select value="" onValueChange={(v) => { void addDep(v); }}>
+                <SelectTrigger className="h-8 w-full text-[13px]"><SelectValue placeholder="+ add blocker…" /></SelectTrigger>
+                <SelectContent>
+                  {rows.filter((r) => r.taskId !== depsFor && !deps.some((d) => d.dependsOnId === r.taskId))
+                    .map((r) => <SelectItem key={r.taskId} value={r.taskId}>{r.title}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             {depErr && <p className={styles.error}>{depErr}</p>}
             <button className={styles.primary} onClick={() => setDepsFor(null)}>Done</button>
