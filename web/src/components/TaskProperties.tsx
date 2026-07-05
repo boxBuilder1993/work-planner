@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import * as planner from '../api/planner';
 import type { ScheduleRow, Person, Dependency } from '../api/planner';
 import { updateTask } from '../api/tasks';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import StatusSelect from './StatusSelect';
 import AssigneeSelect from './AssigneeSelect';
+import BlockerPicker from './BlockerPicker';
 import { X } from 'lucide-react';
 
 const inputCls = 'h-8 w-full rounded-md border bg-background px-2 text-[13px] tabular-nums outline-none focus:border-foreground';
@@ -57,7 +57,15 @@ export default function TaskProperties({ taskId }: { taskId: string }) {
   };
   const removeDep = (id: string) => planner.deleteDependency(id).then(load);
 
-  const candidates = rows.filter((r) => r.taskId !== taskId && !deps.some((d) => d.dependsOnId === r.taskId));
+  const rootTitle = (id: string): string => {
+    let r = byId.get(id);
+    let last = r?.title ?? '';
+    while (r && r.parentId) { const p = byId.get(r.parentId); if (!p) break; last = p.title; r = p; }
+    return last;
+  };
+  const blockerOptions = rows
+    .filter((r) => r.taskId !== taskId && !deps.some((d) => d.dependsOnId === r.taskId))
+    .map((c) => { const root = rootTitle(c.taskId); return { id: c.taskId, title: c.title, context: root !== c.title ? root : undefined }; });
 
   return (
     <div className="rounded-xl border p-4">
@@ -88,15 +96,7 @@ export default function TaskProperties({ taskId }: { taskId: string }) {
               <button onClick={() => removeDep(d.id)} className="text-muted-foreground hover:text-destructive" title="Remove"><X className="size-3" /></button>
             </span>
           ))}
-          <div className="w-[190px]">
-            <Select value="" onValueChange={addDep}>
-              <SelectTrigger className="h-7 text-[12px]"><SelectValue placeholder="+ add blocker…" /></SelectTrigger>
-              <SelectContent>
-                {candidates.length === 0 && <div className="px-2 py-1.5 text-[12px] text-muted-foreground">No other tasks</div>}
-                {candidates.map((r) => <SelectItem key={r.taskId} value={r.taskId}>{r.title}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          <BlockerPicker options={blockerOptions} onSelect={addDep} />
         </div>
         {depErr && <p className="mt-1.5 text-[12px] text-destructive">{depErr}</p>}
       </div>
