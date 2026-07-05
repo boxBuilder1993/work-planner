@@ -460,15 +460,14 @@ Minimal project config (not agent config):
     "build_command": "make build",
     "max_tasks_per_agent": 3,
     "max_agents": 20,
-    "github_token": "ghp_...",
-    "vector_db": {
-        "host": "chromadb.railway.internal",
-        "port": 8000,
-        "auth_token": "...",
-        "collection": "workplanner-knowledge"
-    }
+    "github_token": "ghp_..."
 }
 ```
+
+> **Note:** an earlier design used a ChromaDB vector store for the knowledge base.
+> That was dropped — the knowledge base is now Postgres full-text search
+> (`knowledge_cards`), accessed via the backend / `wp knowledge`. See
+> [docs/KNOWLEDGE_CARDS_DESIGN.md](../docs/KNOWLEDGE_CARDS_DESIGN.md).
 
 ---
 
@@ -480,5 +479,5 @@ Minimal project config (not agent config):
 | `hierarchy.py` (new) | Agent spawning, prompt generation, role detection, poll cycle orchestration |
 | `task_tools.py` | Universal + manager tools (propose, approve, deny, escalate, etc.) + knowledge base tools (document_work, query_knowledge) |
 | `processor.py` | Updated orchestration with hierarchy-aware poll cycle |
-| `config.py` (new) | Project configuration (repo, workspace, commands, agent limits, vector DB connection) |
-| `knowledge.py` (new) | ChromaDB client wrapper, document/query helpers |
+| `config.py` (new) | Project configuration (repo, workspace, commands, agent limits) |
+| ~~`knowledge.py`~~ | *Dropped — knowledge base is Postgres full-text search, not a ChromaDB vector store.* |
