@@ -31,9 +31,15 @@
   margin: 0.4em 0;
   padding-left: 1.5em;
 }
+/* Explicit markers — the global reset otherwise leaves lists unmarked. */
+.markdown ul { list-style: disc; }
+.markdown ol { list-style: decimal; }
 .markdown li {
   margin: 0.15em 0;
 }
+/* GFM task lists show a checkbox instead of a bullet. */
+.markdown li:has(> input[type="checkbox"]) { list-style: none; }
+.markdown li > input[type="checkbox"] { margin-right: 0.4em; }
 
 /* Translucent gray so code/pre/table fills contrast on BOTH light and dark
    backgrounds (var(--surface) matched the container and vanished in dark mode). */

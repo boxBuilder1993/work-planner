@@ -81,9 +81,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --primary: #64B5F6;
-    --primary-dark: #1976D2;
-    --primary-light: #1565C0;
+    /* Monochrome accent, matching the explicit [data-theme="dark"] block. */
+    --primary: #fafafa;
+    --primary-dark: #ffffff;
+    --primary-light: #3f3f46;
     --surface: #1E1E1E;
     --background: #121212;
     --on-surface: #E6E6E6;

@@ -132,7 +132,7 @@ export function CommentsSection({ taskId }: { taskId: string }) {
                 <Trash2 className="size-3.5" />
               </button>
             </div>
-            <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{c.text}</p>
+            <div className="text-[14px] leading-relaxed"><Markdown>{c.text}</Markdown></div>
           </div>
         ))}
       </div>
