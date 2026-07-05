@@ -284,8 +284,8 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
             <th><span className={styles.tip} data-tip="The person doing this task. New subtasks inherit the parent's assignee.">Assignee</span></th>
             <th><span className={styles.tip} data-tip="To do / In progress / Done. Done tasks stay visible but are excluded from scheduling.">Status</span></th>
             <th><span className={styles.tip} data-tip="Computed start date — derived from estimates, dependencies, and assignee availability.">Start</span></th>
-            <th><span className={styles.tip} data-tip="Computed end date.">End</span></th>
-            <th><span className={styles.tip} data-tip="★ marks the critical path: the chain of tasks that determines the project's end date.">Critical Path</span></th>
+            <th><span className={`${styles.tip} ${styles.tipRight}`} data-tip="Computed end date.">End</span></th>
+            <th><span className={`${styles.tip} ${styles.tipRight}`} data-tip="★ marks the critical path: the chain of tasks that determines the project's end date.">Critical Path</span></th>
           </tr>
         </thead>
         <tbody>{renderRows(start, 0)}</tbody>
