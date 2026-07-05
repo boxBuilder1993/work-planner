@@ -3,8 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import ScheduleGrid from './ScheduleGrid';
 import TaskPlan from './TaskPlan';
-import StatusSelect from './StatusSelect';
-import { getBreadcrumbs, updateTask } from '../api/tasks';
+import { getBreadcrumbs } from '../api/tasks';
 import type { TaskEntity } from '../types';
 
 const tabCls =
@@ -18,13 +17,6 @@ export default function ProjectView() {
     if (!taskId) return;
     getBreadcrumbs(taskId).then(setTrail).catch(() => setTrail([]));
   }, [taskId]);
-
-  const current = trail[trail.length - 1];
-  const setStatus = async (status: string) => {
-    if (!taskId) return;
-    const updated = await updateTask(taskId, { status });
-    setTrail((t) => t.map((x) => (x.id === taskId ? { ...x, status: updated.status } : x)));
-  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -43,13 +35,6 @@ export default function ProjectView() {
           ))}
           {trail.length === 0 && <><span className="mx-1.5">/</span><span className="text-foreground">…</span></>}
         </div>
-        <div className="flex-1" />
-        {current && (
-          <div className="flex items-center gap-2">
-            <span className="text-[12.5px] text-muted-foreground">Status</span>
-            <StatusSelect value={current.status} onChange={setStatus} />
-          </div>
-        )}
       </header>
       <Tabs defaultValue="plan" className="flex flex-1 flex-col gap-0">
         <div className="border-b px-7">
