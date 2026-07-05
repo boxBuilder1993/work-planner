@@ -1,9 +1,8 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import PlanTree from './PlanTree';
 import ScheduleGrid from './ScheduleGrid';
-import TaskDetailsPanel from './TaskDetailsPanel';
+import TaskPlan from './TaskPlan';
 import { getBreadcrumbs } from '../api/tasks';
 import type { TaskEntity } from '../types';
 
@@ -42,17 +41,13 @@ export default function ProjectView() {
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="plan" className={tabCls}>Plan</TabsTrigger>
             <TabsTrigger value="schedule" className={tabCls}>Schedule</TabsTrigger>
-            <TabsTrigger value="details" className={tabCls}>Details</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="plan" className="p-7 pt-5">
-          {taskId && <PlanTree rootId={taskId} />}
+          {taskId && <TaskPlan taskId={taskId} />}
         </TabsContent>
         <TabsContent value="schedule" className="p-7 pt-5">
           {taskId && <ScheduleGrid rootId={taskId} />}
-        </TabsContent>
-        <TabsContent value="details" className="p-7 pt-5">
-          {taskId && <TaskDetailsPanel taskId={taskId} />}
         </TabsContent>
       </Tabs>
     </div>
