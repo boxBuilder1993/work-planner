@@ -546,6 +546,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 			TaskID: r.id, Title: r.title, ParentID: r.parentID, AssigneeID: r.assigneeID,
 			EstimateHours: est, BufferHours: r.buffer, DependencyCount: len(blockedBy[r.id]), Priority: r.priority, Position: r.position, Status: r.status,
 			Start: sc.Start, End: sc.End, OnCriticalPath: sc.OnCriticalPath, DueDate: r.dueDate, JiraURL: r.jiraURL,
+			BlockedBy: blockedBy[r.id],
 		}
 		if r.assigneeID != nil {
 			if n, ok := names[*r.assigneeID]; ok {
