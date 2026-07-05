@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Markdown from './Markdown';
 import {
   type KnowledgeCard,
@@ -18,7 +17,6 @@ type EditorState =
   | { mode: 'edit'; card: KnowledgeCard };
 
 export default function KnowledgeCards() {
-  const navigate = useNavigate();
   const [cards, setCards] = useState<KnowledgeCard[]>([]);
   const [query, setQuery] = useState('');
   const [includeInvalid, setIncludeInvalid] = useState(false);
@@ -50,15 +48,16 @@ export default function KnowledgeCards() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.topBar}>
-        <button className={styles.backButton} onClick={() => navigate(-1)} aria-label="Back">
-          &larr;
+      <header className="flex items-center gap-3 border-b px-7 py-4">
+        <h1 className="text-[19px] font-semibold tracking-tight">Knowledge</h1>
+        <div className="flex-1" />
+        <button
+          onClick={() => setEditor({ mode: 'new' })}
+          className="inline-flex h-[34px] items-center rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground"
+        >
+          + New card
         </button>
-        <span className={styles.topBarTitle}>Knowledge Cards</span>
-        <button className={styles.newButton} onClick={() => setEditor({ mode: 'new' })}>
-          + New
-        </button>
-      </div>
+      </header>
 
       <div className={styles.content}>
         <div className={styles.searchRow}>

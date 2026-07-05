@@ -25,12 +25,9 @@ export default function Settings() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.topBar}>
-        <button className={styles.backButton} onClick={() => navigate(-1)}>
-          &larr;
-        </button>
-        <span className={styles.topBarTitle}>Settings</span>
-      </div>
+      <header className="flex items-center gap-3 border-b px-7 py-4">
+        <h1 className="text-[19px] font-semibold tracking-tight">Settings</h1>
+      </header>
 
       <div className={styles.content}>
         {/* Account card */}
@@ -67,8 +64,11 @@ export default function Settings() {
         </div>
 
         {/* Sign Out */}
-        <button className={styles.signOutButton} onClick={handleSignOut}>
-          Sign Out
+        <button
+          onClick={handleSignOut}
+          className="inline-flex h-10 items-center justify-center rounded-lg border px-4 text-[14px] font-medium text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
+        >
+          Sign out
         </button>
       </div>
     </div>
