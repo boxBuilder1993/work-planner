@@ -106,6 +106,9 @@ type UpdateTaskPlannerRequest struct {
 	PlannerPriority *float64 `json:"plannerPriority,omitempty"`
 	// Position is the fractional sibling-ordering key.
 	Position *float64 `json:"position,omitempty"`
+	// JiraURL is a free-form link to the task's Jira ticket, stored in
+	// props.jiraUrl. "" clears it.
+	JiraURL *string `json:"jiraUrl,omitempty"`
 }
 
 // ScheduleRow is one row of the generated execution schedule, enriched for the
@@ -127,4 +130,5 @@ type ScheduleRow struct {
 	OnCriticalPath  bool     `json:"onCriticalPath"`
 	BlockedBy       []string `json:"blockedBy"` // blocker task IDs
 	DueDate         *int64   `json:"dueDate"`   // epoch ms, optional
+	JiraURL         *string  `json:"jiraUrl"`   // free-form Jira link (props.jiraUrl)
 }

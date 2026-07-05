@@ -50,6 +50,7 @@ export default function TaskProperties({ taskId }: { taskId: string }) {
   const setEstimate = (v: string) => updateTask(taskId, { duration: v === '' ? null : Number(v) }).then(load);
   const setPriority = (v: string) => planner.updateTaskPlanner(taskId, { plannerPriority: v === '' ? 0 : Number(v) }).then(load);
   const setBuffer = (v: string) => planner.updateTaskPlanner(taskId, { bufferHours: v === '' ? 0 : Number(v) }).then(load);
+  const setJira = (v: string) => planner.updateTaskPlanner(taskId, { jiraUrl: v.trim() }).then(load);
   const addDep = async (blockerId: string) => {
     if (!blockerId) return;
     try { await planner.createDependency(taskId, blockerId); setDepErr(null); await load(); }
@@ -84,6 +85,14 @@ export default function TaskProperties({ taskId }: { taskId: string }) {
         </Field>
         <Field label="Priority"><input type="number" step="0.1" defaultValue={row.priority || ''} onBlur={(e) => setPriority(e.target.value)} className={inputCls} placeholder="—" title="Lower = higher priority; blank = unset" /></Field>
         {!isLeaf && <Field label="Buffer (h)"><input type="number" min="0" defaultValue={row.bufferHours ?? ''} onBlur={(e) => setBuffer(e.target.value)} className={inputCls} placeholder="0" /></Field>}
+      </div>
+
+      <div className="mt-4">
+        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Jira</div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1"><input type="url" defaultValue={row.jiraUrl ?? ''} onBlur={(e) => setJira(e.target.value)} placeholder="https://your-org.atlassian.net/browse/ABC-123" className={inputCls} /></div>
+          {row.jiraUrl && <a href={row.jiraUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border px-2.5 text-[12px] font-medium hover:bg-muted">Open ↗</a>}
+        </div>
       </div>
 
       <div className="mt-4 border-t pt-3">
