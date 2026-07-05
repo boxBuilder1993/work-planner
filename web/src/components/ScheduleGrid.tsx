@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as planner from '../api/planner';
 import type { ScheduleRow, CalendarObj, Holiday } from '../api/planner';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,7 @@ function addDays(d: string, n: number) {
 /** Assignee × date schedule grid. rootId scopes the *display* to a subtree;
  *  dates are always the engine's portfolio-wide result. */
 export default function ScheduleGrid({ rootId }: { rootId?: string }) {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<ScheduleRow[]>([]);
   const [cal, setCal] = useState<CalendarObj | null>(null);
   const [holidays, setHolidays] = useState<Set<string>>(new Set());
@@ -121,13 +123,18 @@ export default function ScheduleGrid({ rootId }: { rootId?: string }) {
                           <span className="text-[11.5px] text-muted-foreground/70">weekend</span>
                         ) : (
                           tasks.map((t) => (
-                            <div key={t.taskId} className={cn('my-0.5 rounded-md border border-l-[3px] bg-muted px-2 py-1 text-[12px]', t.onCriticalPath ? 'border-l-destructive' : 'border-l-muted-foreground/40')}>
+                            <button
+                              key={t.taskId}
+                              onClick={() => navigate(`/projects/${t.taskId}`)}
+                              title="Open task"
+                              className={cn('my-0.5 block w-full rounded-md border border-l-[3px] bg-muted px-2 py-1 text-left text-[12px] transition-colors hover:bg-accent', t.onCriticalPath ? 'border-l-destructive' : 'border-l-muted-foreground/40')}
+                            >
                               <div className="flex items-baseline justify-between gap-2">
                                 <span className="font-medium">{t.title}</span>
                                 {t.estimateHours != null && <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground">{t.estimateHours}h</span>}
                               </div>
                               <div className="text-[10.5px] text-muted-foreground">{model.rootTitle(t.taskId)}</div>
-                            </div>
+                            </button>
                           ))
                         )}
                       </td>
