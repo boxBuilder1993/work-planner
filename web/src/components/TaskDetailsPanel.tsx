@@ -3,6 +3,7 @@ import { getTask, updateTask } from '../api/tasks';
 import { listComments, createComment, deleteComment } from '../api/comments';
 import type { TaskEntity, CommentEntity } from '../types';
 import { Textarea } from '@/components/ui/textarea';
+import Markdown from './Markdown';
 import { Trash2 } from 'lucide-react';
 
 function fmtWhen(ms: number): string {
@@ -11,10 +12,11 @@ function fmtWhen(ms: number): string {
 
 const sectionTitle = 'text-[13px] font-semibold uppercase tracking-wide text-muted-foreground';
 
-/** Editable description for a task. */
+/** A task's description: rendered as markdown, click to edit inline. */
 export function DescriptionSection({ taskId }: { taskId: string }) {
   const [task, setTask] = useState<TaskEntity | null>(null);
   const [desc, setDesc] = useState('');
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async () => {
     const t = await getTask(taskId);
@@ -25,20 +27,55 @@ export function DescriptionSection({ taskId }: { taskId: string }) {
   useEffect(() => { void load(); }, [load]);
 
   const save = async () => {
+    setEditing(false);
     if (!task || desc === (task.description ?? '')) return;
     setTask(await updateTask(taskId, { description: desc }));
   };
+  const cancel = () => { setDesc(task?.description ?? ''); setEditing(false); };
 
   return (
     <section>
-      <h2 className={`mb-2 ${sectionTitle}`}>Description</h2>
-      <Textarea
-        value={desc}
-        onChange={(e) => setDesc(e.target.value)}
-        onBlur={save}
-        placeholder="Add a description — context, scope, links…"
-        className="min-h-[110px] resize-y text-[14px] leading-relaxed"
-      />
+      <div className="mb-2 flex items-center gap-2">
+        <h2 className={sectionTitle}>Description</h2>
+        <a
+          href="https://www.markdownguide.org/basic-syntax/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11.5px] font-normal text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+          title="Markdown formatting reference (opens in a new tab)"
+        >
+          Markdown supported ↗
+        </a>
+      </div>
+      {editing ? (
+        <Textarea
+          autoFocus
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => { if (e.key === 'Escape') cancel(); }}
+          placeholder="Add a description — markdown supported…  (Esc to cancel)"
+          className="min-h-[110px] resize-y text-[14px] leading-relaxed"
+        />
+      ) : desc.trim() ? (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setEditing(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setEditing(true); } }}
+          title="Click to edit"
+          className="-mx-3 cursor-text rounded-lg border border-transparent px-3 py-2 text-[14px] leading-relaxed transition-colors hover:border-border"
+        >
+          <Markdown>{desc}</Markdown>
+        </div>
+      ) : (
+        <button
+          onClick={() => setEditing(true)}
+          className="w-full rounded-lg border border-dashed px-3 py-3 text-left text-[13px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+        >
+          Add a description — markdown supported…
+        </button>
+      )}
     </section>
   );
 }
