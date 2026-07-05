@@ -546,7 +546,7 @@ func (s *Store) ComputeSchedule(ctx context.Context, userID, startDate string) (
 			TaskID: r.id, Title: r.title, ParentID: r.parentID, AssigneeID: r.assigneeID,
 			EstimateHours: est, BufferHours: r.buffer, DependencyCount: len(blockedBy[r.id]), Priority: r.priority, Position: r.position, Status: r.status,
 			Start: sc.Start, End: sc.End, OnCriticalPath: sc.OnCriticalPath, DueDate: r.dueDate, JiraURL: r.jiraURL,
-			BlockedBy: blockedBy[r.id],
+			BlockedBy: blockedBy[r.id], Segments: toModelSegments(sc.Segments),
 		}
 		if r.assigneeID != nil {
 			if n, ok := names[*r.assigneeID]; ok {
@@ -564,6 +564,17 @@ func deref(f *float64) float64 {
 		return 0
 	}
 	return *f
+}
+
+func toModelSegments(segs []planner.DaySegment) []model.DaySegment {
+	if len(segs) == 0 {
+		return nil
+	}
+	out := make([]model.DaySegment, len(segs))
+	for i, s := range segs {
+		out[i] = model.DaySegment{Day: s.Day, Hours: s.Hours}
+	}
+	return out
 }
 
 // sortScheduleRows orders by start date (unscheduled last), then assignee name.

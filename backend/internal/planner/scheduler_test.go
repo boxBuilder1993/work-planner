@@ -254,6 +254,46 @@ func TestCrossProjectResourceContention(t *testing.T) {
 	}
 }
 
+func TestPerDaySegments(t *testing.T) {
+	// 20h @ 8h/day from Monday → Mon 8h, Tue 8h, Wed 4h (weekend not reached).
+	res := run(t, Input{
+		StartDate: "2026-07-06",
+		Tasks:     []Task{{ID: "a", AssigneeID: "p", EstimateHours: 20}},
+		Persons:   map[string]Person{"p": p8("p")},
+		Calendar:  Calendar{WeekendDays: 96},
+	})
+	got := res["a"].Segments
+	want := []DaySegment{{Day: "2026-07-06", Hours: 8}, {Day: "2026-07-07", Hours: 8}, {Day: "2026-07-08", Hours: 4}}
+	if len(got) != len(want) {
+		t.Fatalf("want %d segments, got %d: %+v", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("segment %d: want %+v, got %+v", i, want[i], got[i])
+		}
+	}
+}
+
+func TestSegmentsSkipWeekend(t *testing.T) {
+	// 16h from Friday → Fri 8h, (skip Sat/Sun), Mon 8h — no weekend segments.
+	res := run(t, Input{
+		StartDate: "2026-07-10", // Friday
+		Tasks:     []Task{{ID: "a", AssigneeID: "p", EstimateHours: 16}},
+		Persons:   map[string]Person{"p": p8("p")},
+		Calendar:  Calendar{WeekendDays: 96},
+	})
+	got := res["a"].Segments
+	want := []DaySegment{{Day: "2026-07-10", Hours: 8}, {Day: "2026-07-13", Hours: 8}}
+	if len(got) != len(want) {
+		t.Fatalf("want %d segments, got %d: %+v", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("segment %d: want %+v, got %+v", i, want[i], got[i])
+		}
+	}
+}
+
 func TestCycleRejected(t *testing.T) {
 	_, err := Schedule(Input{
 		StartDate: "2026-07-06",

@@ -131,4 +131,11 @@ type ScheduleRow struct {
 	BlockedBy       []string `json:"blockedBy"` // blocker task IDs
 	DueDate         *int64   `json:"dueDate"`   // epoch ms, optional
 	JiraURL         *string  `json:"jiraUrl"`   // free-form Jira link (props.jiraUrl)
+	Segments        []DaySegment `json:"segments"` // per-day hour allocation (leaves)
+}
+
+// DaySegment is the hours a task consumes on one working day (leaves only).
+type DaySegment struct {
+	Day   string  `json:"day"`
+	Hours float64 `json:"hours"`
 }

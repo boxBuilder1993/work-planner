@@ -68,11 +68,18 @@ type Input struct {
 	Calendar  Calendar
 }
 
+// DaySegment is the hours a task consumes on one working day (leaves only).
+type DaySegment struct {
+	Day   string  `json:"day"`   // YYYY-MM-DD
+	Hours float64 `json:"hours"` // hours placed on that day
+}
+
 // Scheduled is the computed result for one task.
 type Scheduled struct {
-	Start          string `json:"start"` // YYYY-MM-DD
-	End            string `json:"end"`   // YYYY-MM-DD
-	OnCriticalPath bool   `json:"onCriticalPath"`
+	Start          string       `json:"start"` // YYYY-MM-DD
+	End            string       `json:"end"`   // YYYY-MM-DD
+	OnCriticalPath bool         `json:"onCriticalPath"`
+	Segments       []DaySegment `json:"segments"` // per-day hour allocation (leaves)
 }
 
 // ─── Availability ────────────────────────────────────────────────────────────
@@ -149,20 +156,21 @@ func (in Input) advanceToCapacity(personID string, clk clock, earliest time.Time
 // `clk` but no earlier than `earliest` (a dependency-derived day). It packs
 // hour-by-hour across working days and returns the task's start/end dates plus
 // the person's advanced clock.
-func (in Input) place(personID string, clk clock, earliest time.Time, hours float64) (time.Time, time.Time, clock, error) {
+func (in Input) place(personID string, clk clock, earliest time.Time, hours float64) (time.Time, time.Time, clock, []DaySegment, error) {
 	clk, err := in.advanceToCapacity(personID, clk, earliest)
 	if err != nil {
-		return time.Time{}, time.Time{}, clock{}, err
+		return time.Time{}, time.Time{}, clock{}, nil, err
 	}
 	start := clk.day
 	if hours <= 1e-9 {
-		return start, start, clk, nil // zero-effort milestone: no capacity consumed
+		return start, start, clk, nil, nil // zero-effort milestone: no capacity consumed
 	}
 	remaining := hours
 	end := clk.day
+	var segs []DaySegment
 	for i := 0; ; i++ {
 		if i > maxScheduleDays {
-			return time.Time{}, time.Time{}, clock{}, fmt.Errorf("schedule did not converge for person %q", personID)
+			return time.Time{}, time.Time{}, clock{}, nil, fmt.Errorf("schedule did not converge for person %q", personID)
 		}
 		free := in.remainingToday(personID, clk)
 		if free > 1e-9 {
@@ -170,8 +178,9 @@ func (in Input) place(personID string, clk clock, earliest time.Time, hours floa
 			clk.used += take
 			remaining -= take
 			end = clk.day
+			segs = append(segs, DaySegment{Day: clk.day.Format(dateFmt), Hours: take})
 			if remaining <= 1e-9 {
-				return start, end, clk, nil
+				return start, end, clk, segs, nil
 			}
 		}
 		clk = clock{day: clk.day.AddDate(0, 0, 1)}
@@ -310,13 +319,13 @@ func (in Input) scheduleLeaves(
 				}
 			}
 		}
-		s, e, clk, err := in.place(t.AssigneeID, cursor[t.AssigneeID], earliest, t.EstimateHours)
+		s, e, clk, segs, err := in.place(t.AssigneeID, cursor[t.AssigneeID], earliest, t.EstimateHours)
 		if err != nil {
 			return err
 		}
 		startDate[t.ID], endDate[t.ID] = s, e
 		cursor[t.AssigneeID] = clk
-		res[t.ID] = Scheduled{Start: s.Format(dateFmt), End: e.Format(dateFmt)}
+		res[t.ID] = Scheduled{Start: s.Format(dateFmt), End: e.Format(dateFmt), Segments: segs}
 	}
 	return nil
 }
