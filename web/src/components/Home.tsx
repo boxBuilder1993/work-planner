@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as planner from '../api/planner';
 import type { ScheduleRow } from '../api/planner';
+import { createTask } from '../api/tasks';
 import { cn } from '@/lib/utils';
 
 type Health = 'on-track' | 'at-risk' | 'late' | 'unscheduled';
@@ -27,6 +28,22 @@ export default function Home() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const createProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = newTitle.trim();
+    if (!title || busy) return;
+    setBusy(true);
+    try {
+      const created = await createTask({ title });
+      navigate(`/projects/${created.id}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount
@@ -83,9 +100,28 @@ export default function Home() {
       <header className="flex items-center gap-3 border-b px-7 py-4">
         <h1 className="text-[19px] font-semibold tracking-tight">Projects</h1>
         <div className="flex-1" />
-        <button className="inline-flex h-[34px] items-center rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground">
-          + New project
-        </button>
+        {creating ? (
+          <form onSubmit={createProject} className="flex items-center gap-2">
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setCreating(false); setNewTitle(''); } }}
+              placeholder="Project name…"
+              className="h-[34px] w-56 rounded-md border bg-background px-2.5 text-[13px] outline-none focus:border-foreground"
+            />
+            <button type="submit" disabled={!newTitle.trim() || busy} className="inline-flex h-[34px] items-center rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground disabled:opacity-50">
+              Create
+            </button>
+            <button type="button" onClick={() => { setCreating(false); setNewTitle(''); }} className="inline-flex h-[34px] items-center rounded-md border px-3 text-[13px] font-medium hover:bg-muted">
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <button onClick={() => setCreating(true)} className="inline-flex h-[34px] items-center rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground">
+            + New project
+          </button>
+        )}
       </header>
 
       <div className="p-7">
