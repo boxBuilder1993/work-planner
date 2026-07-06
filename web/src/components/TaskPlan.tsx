@@ -13,12 +13,14 @@ import { ChevronRight } from 'lucide-react';
  * a separate tab.
  */
 export default function TaskPlan({ taskId }: { taskId: string }) {
+  // The sub-task tree is a wide table, so let it use the full width; keep the
+  // description/comments/properties at a readable column width.
   return (
-    <div className="max-w-4xl space-y-9">
-      <TaskProperties key={taskId} taskId={taskId} />
-      <DescriptionSection taskId={taskId} />
+    <div className="space-y-9">
+      <div className="max-w-4xl"><TaskProperties key={taskId} taskId={taskId} /></div>
+      <div className="max-w-4xl"><DescriptionSection taskId={taskId} /></div>
       <SubtasksSection taskId={taskId} />
-      <CommentsSection taskId={taskId} />
+      <div className="max-w-4xl"><CommentsSection taskId={taskId} /></div>
     </div>
   );
 }
