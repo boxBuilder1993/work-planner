@@ -31,12 +31,11 @@
 .toggle { background: none; border: none; cursor: pointer; color: var(--on-surface-secondary); width: 22px; flex-shrink: 0; padding: 0; font-size: var(--font-size-lg); line-height: 1; }
 .toggle:hover { color: var(--on-surface); }
 .toggleSpacer { display: inline-block; width: 22px; flex-shrink: 0; }
-/* Title cell: toggle + title (wraps/clamps) + badge/actions, cleanly aligned. */
-.titleRow { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.titleText {
-  flex: 1; min-width: 0; word-break: break-word;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
+/* Title cell: [toggle] [ full title on line 1, options on line 2 ]. */
+.titleRow { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+.titleCol { flex: 1; min-width: 0; }
+.titleFull { display: block; word-break: break-word; line-height: 1.35; }
+.metaRow { display: flex; align-items: center; gap: 4px; min-height: 20px; }
 .taskLink { cursor: pointer; }
 .taskLink:hover { color: var(--primary); text-decoration: underline; }
 .draftRow { background: var(--primary-light); }

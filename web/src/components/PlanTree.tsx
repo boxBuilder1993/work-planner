@@ -208,23 +208,27 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
               ) : (
                 <span className={styles.toggleSpacer} />
               )}
-              {renaming?.id === r.taskId ? (
-                <input autoFocus className={styles.txt} style={{ flex: 1, minWidth: 0 }} value={renaming.title}
-                  onChange={(e) => setRenaming({ id: r.taskId, title: e.target.value })}
-                  onBlur={() => void saveRename()}
-                  onKeyDown={(e) => { if (e.key === 'Enter') void saveRename(); if (e.key === 'Escape') setRenaming(null); }} />
-              ) : (
-                <span className={`${styles.taskLink} ${styles.titleText} ${done ? styles.done : ''}`}
-                  onClick={() => navigate(`/projects/${r.taskId}`)}
-                  onDoubleClick={() => setRenaming({ id: r.taskId, title: r.title })}
-                  title={r.title}>{r.title}</span>
-              )}
-              {r.dependencyCount > 0 && <span className={styles.depBadge} title={`blocked by ${r.dependencyCount}`}>⛓{r.dependencyCount}</span>}
-              <span className={styles.rowActions}>
-                <button className={styles.iconBtn} title="Add subtask" onClick={() => startDraft(r.taskId)}>＋</button>
-                <button className={styles.iconBtn} title="Add sibling" onClick={() => startDraft(r.parentId)}>↳</button>
-                <button className={styles.iconBtn} title="Dependencies" onClick={() => openDeps(r.taskId)}>⛓</button>
-              </span>
+              <div className={styles.titleCol}>
+                {renaming?.id === r.taskId ? (
+                  <input autoFocus className={styles.txt} style={{ width: '100%' }} value={renaming.title}
+                    onChange={(e) => setRenaming({ id: r.taskId, title: e.target.value })}
+                    onBlur={() => void saveRename()}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void saveRename(); if (e.key === 'Escape') setRenaming(null); }} />
+                ) : (
+                  <span className={`${styles.taskLink} ${styles.titleFull} ${done ? styles.done : ''}`}
+                    onClick={() => navigate(`/projects/${r.taskId}`)}
+                    onDoubleClick={() => setRenaming({ id: r.taskId, title: r.title })}
+                    title="click: open · double-click: rename">{r.title}</span>
+                )}
+                <div className={styles.metaRow}>
+                  {r.dependencyCount > 0 && <span className={styles.depBadge} title={`blocked by ${r.dependencyCount}`}>⛓{r.dependencyCount}</span>}
+                  <span className={styles.rowActions}>
+                    <button className={styles.iconBtn} title="Add subtask" onClick={() => startDraft(r.taskId)}>＋</button>
+                    <button className={styles.iconBtn} title="Add sibling" onClick={() => startDraft(r.parentId)}>↳</button>
+                    <button className={styles.iconBtn} title="Dependencies" onClick={() => openDeps(r.taskId)}>⛓</button>
+                  </span>
+                </div>
+              </div>
             </div>
           </td>
           <td>
