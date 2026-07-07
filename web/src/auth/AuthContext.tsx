@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { requestLocalSignIn } from './LocalAuth';
 import { exchangeGoogleToken } from './GoogleAuth';
+import { loginWithPassword as apiLogin, registerWithPassword as apiRegister } from './PasswordAuth';
 
 interface AuthState {
   token: string | null;
@@ -20,6 +21,8 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   signIn: (email: string, name: string) => Promise<void>;
   signInWithGoogle: (idToken: string) => Promise<void>;
+  loginWithPassword: (email: string, password: string) => Promise<void>;
+  registerWithPassword: (email: string, name: string, password: string) => Promise<void>;
   signOut: () => void;
   getToken: () => string;
 }
@@ -122,6 +125,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loginWithPassword = useCallback(async (email: string, password: string) => {
+    setState((s) => ({ ...s, isLoading: true, error: null }));
+    try {
+      const { token, user } = await apiLogin(email, password);
+      saveSession(token, { name: user.name, email: user.email });
+      setState({ token, userName: user.name, userEmail: user.email, isSignedIn: true, isLoading: false, error: null });
+    } catch (err) {
+      setState((s) => ({ ...s, isLoading: false, error: err instanceof Error ? err.message : 'Login failed' }));
+    }
+  }, []);
+
+  const registerWithPassword = useCallback(async (email: string, name: string, password: string) => {
+    setState((s) => ({ ...s, isLoading: true, error: null }));
+    try {
+      const { token, user } = await apiRegister(email, name, password);
+      saveSession(token, { name: user.name, email: user.email });
+      setState({ token, userName: user.name, userEmail: user.email, isSignedIn: true, isLoading: false, error: null });
+    } catch (err) {
+      setState((s) => ({ ...s, isLoading: false, error: err instanceof Error ? err.message : 'Registration failed' }));
+    }
+  }, []);
+
   const signOut = useCallback(() => {
     clearSession();
     setState({
@@ -140,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [state.token]);
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signInWithGoogle, signOut, getToken }}>
+    <AuthContext.Provider value={{ ...state, signIn, signInWithGoogle, loginWithPassword, registerWithPassword, signOut, getToken }}>
       {children}
     </AuthContext.Provider>
   );

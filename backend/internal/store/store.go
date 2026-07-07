@@ -22,12 +22,19 @@ func New(pool *pgxpool.Pool) *Store {
 
 func (s *Store) UpsertUser(ctx context.Context, u *model.User) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO users (id, email, name, google_refresh_token, created_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users (id, email, name, google_refresh_token, password_hash, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (email) DO UPDATE SET
 			name = EXCLUDED.name,
-			google_refresh_token = COALESCE(EXCLUDED.google_refresh_token, users.google_refresh_token)
-	`, u.ID, u.Email, u.Name, u.GoogleRefreshToken, u.CreatedAt)
+			google_refresh_token = COALESCE(EXCLUDED.google_refresh_token, users.google_refresh_token),
+			password_hash = COALESCE(EXCLUDED.password_hash, users.password_hash)
+	`, u.ID, u.Email, u.Name, u.GoogleRefreshToken, u.PasswordHash, u.CreatedAt)
+	return err
+}
+
+// SetUserPassword stores a bcrypt hash on a user (set/change password).
+func (s *Store) SetUserPassword(ctx context.Context, userID, hash string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE users SET password_hash = $1 WHERE id = $2`, hash, userID)
 	return err
 }
 
@@ -74,9 +81,9 @@ func (s *Store) UserExists(ctx context.Context, userID string) (bool, error) {
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	var u model.User
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, email, name, google_refresh_token, created_at
+		SELECT id, email, name, google_refresh_token, password_hash, created_at
 		FROM users WHERE email = $1
-	`, email).Scan(&u.ID, &u.Email, &u.Name, &u.GoogleRefreshToken, &u.CreatedAt)
+	`, email).Scan(&u.ID, &u.Email, &u.Name, &u.GoogleRefreshToken, &u.PasswordHash, &u.CreatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
