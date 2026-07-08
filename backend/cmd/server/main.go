@@ -88,6 +88,8 @@ func main() {
 	// Public routes.
 	mux.HandleFunc("/auth/local", authHandler.HandleLocalAuth)
 	mux.HandleFunc("/auth/google", authHandler.HandleGoogleAuth)
+	mux.HandleFunc("/auth/register", authHandler.HandleRegister)
+	mux.HandleFunc("/auth/login", authHandler.HandleLogin)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := pool.Ping(r.Context()); err != nil {
@@ -173,6 +175,7 @@ func main() {
 		"/api/internal/calendar", "/api/internal/calendar/",
 		"/api/internal/holidays/", "/api/internal/time-off/",
 		"/api/internal/dependencies/", "/api/internal/schedule",
+		"/api/internal/users/",
 	} {
 		internalMux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {
 			internalHandler.ServeHTTP(w, r)
@@ -183,6 +186,8 @@ func main() {
 	authMw := middleware.AuthMiddleware(a, internalAPIKey)
 	mux.Handle("/api/internal/", authMw(handler.RequireInternal(internalMux)))
 	mux.Handle("/api/", authMw(protectedMux))
+	// Set/change password requires an authenticated session.
+	mux.Handle("/auth/password", authMw(http.HandlerFunc(authHandler.HandleSetPassword)))
 
 	// Apply global middleware.
 	var rootHandler http.Handler = mux

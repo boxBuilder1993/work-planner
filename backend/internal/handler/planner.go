@@ -105,6 +105,21 @@ func (h *InternalHandler) DeletePerson(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
+// DeleteUser removes a user account (internal tooling / test cleanup).
+func (h *InternalHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id := extractPathParam(r.URL.Path, 3)
+	ok, err := h.store.DeleteUser(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete user")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id})
+}
+
 // ─── Time off ────────────────────────────────────────────────────────────────
 
 func (h *InternalHandler) CreateTimeOff(w http.ResponseWriter, r *http.Request) {

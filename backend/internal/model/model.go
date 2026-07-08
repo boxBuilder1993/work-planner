@@ -142,6 +142,7 @@ type User struct {
 	Email              string  `json:"email"`
 	Name               string  `json:"name"`
 	GoogleRefreshToken *string `json:"-"`
+	PasswordHash       *string `json:"-"` // bcrypt; nil = no password set
 	CreatedAt          int64   `json:"createdAt"`
 }
 
@@ -155,6 +156,21 @@ type AuthGoogleRequest struct {
 type AuthLocalRequest struct {
 	Email string `json:"email"`
 	Name  string `json:"name"`
+}
+
+type AuthRegisterRequest struct {
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+type AuthLoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type SetPasswordRequest struct {
+	Password string `json:"password"`
 }
 
 type AuthResponse struct {
