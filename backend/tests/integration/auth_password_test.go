@@ -20,9 +20,12 @@ func TestPasswordAuth(t *testing.T) {
 	if st != 200 {
 		t.Fatalf("register: want 200 got %d (%s)", st, body)
 	}
-	if reg := decodeJSON[authResp](t, body); reg.Token == "" {
+	reg := decodeJSON[authResp](t, body)
+	if reg.Token == "" {
 		t.Errorf("register should return a token")
 	}
+	// Clean up created users so we don't break tests that assume a single user.
+	t.Cleanup(func() { do(t, "DELETE", "/api/internal/users/"+reg.User.ID, nil) })
 
 	t.Run("login_ok", func(t *testing.T) {
 		if s, _ := doNoAuth(t, "POST", "/auth/login", map[string]any{"email": email, "password": pw}); s != 200 {
@@ -60,6 +63,7 @@ func TestPasswordAuth(t *testing.T) {
 			t.Fatalf("local auth: want 200 got %d (%s)", s, lb)
 		}
 		la := decodeJSON[authResp](t, lb)
+		t.Cleanup(func() { do(t, "DELETE", "/api/internal/users/"+la.User.ID, nil) })
 
 		if s, _ := doNoAuth(t, "POST", "/auth/login", map[string]any{"email": lemail, "password": "brand-new-pass"}); s != 401 {
 			t.Errorf("passwordless login should 401, got %d", s)

@@ -175,6 +175,7 @@ func main() {
 		"/api/internal/calendar", "/api/internal/calendar/",
 		"/api/internal/holidays/", "/api/internal/time-off/",
 		"/api/internal/dependencies/", "/api/internal/schedule",
+		"/api/internal/users/",
 	} {
 		internalMux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {
 			internalHandler.ServeHTTP(w, r)

@@ -90,6 +90,13 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*model.User, 
 	return &u, err
 }
 
+// DeleteUser removes a user row (used by internal tooling / test cleanup).
+// Fails if the user still owns tasks (tasks.user_id has no cascade).
+func (s *Store) DeleteUser(ctx context.Context, id string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	return tag.RowsAffected() > 0, err
+}
+
 // ─── Tasks ──────────────────────────────────────────────────────────────────
 
 func (s *Store) CreateTask(ctx context.Context, t *model.Task) error {

@@ -970,6 +970,8 @@ func (h *InternalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.UpdatePerson(w, r)
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/people/") && strings.Count(path, "/") == 4:
 		h.DeletePerson(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/users/") && strings.Count(path, "/") == 4:
+		h.DeleteUser(w, r)
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/internal/time-off/"):
 		h.DeleteTimeOff(w, r)
 
