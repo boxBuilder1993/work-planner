@@ -223,6 +223,7 @@ export default function PlanTree({ rootId }: { rootId?: string }) {
                 <div className={styles.metaRow}>
                   {r.dependencyCount > 0 && <span className={styles.depBadge} title={`blocked by ${r.dependencyCount}`}>⛓{r.dependencyCount}</span>}
                   <span className={styles.rowActions}>
+                    <button className={styles.iconBtn} title="Rename" onClick={() => setRenaming({ id: r.taskId, title: r.title })}>✎</button>
                     <button className={styles.iconBtn} title="Add subtask" onClick={() => startDraft(r.taskId)}>＋</button>
                     <button className={styles.iconBtn} title="Add sibling" onClick={() => startDraft(r.parentId)}>↳</button>
                     <button className={styles.iconBtn} title="Dependencies" onClick={() => openDeps(r.taskId)}>⛓</button>
